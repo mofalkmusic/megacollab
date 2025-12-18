@@ -42,11 +42,24 @@ export const timelineWidth = computed(() => TOTAL_BEATS * pxPerBeat.value)
 export const { pixelRatio } = useDevicePixelRatio()
 
 export const altKeyPressed = shallowRef(false)
+export const controlKeyPressed = shallowRef(false)
+export const zKeyPressed = shallowRef(false)
 
 useEventListener(window, 'keydown', (event) => {
 	if (event.key === 'Alt') {
 		altKeyPressed.value = true
 		event.preventDefault()
+		return
+	}
+
+	if (event.key === 'Control') {
+		controlKeyPressed.value = true
+		return
+	}
+
+	if (event.key === 'z') {
+		zKeyPressed.value = true
+		return
 	}
 })
 
@@ -54,5 +67,16 @@ useEventListener(window, 'keyup', (event) => {
 	if (event.key === 'Alt') {
 		altKeyPressed.value = false
 		event.preventDefault()
+		return
+	}
+
+	if (event.key === 'Control') {
+		controlKeyPressed.value = false
+		return
+	}
+
+	if (event.key === 'z') {
+		zKeyPressed.value = false
+		return
 	}
 })

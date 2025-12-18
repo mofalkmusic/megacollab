@@ -17,6 +17,7 @@ import { extname, join } from 'path'
 
 import { DEV_FILE_FOLDER, MAX_UPLOAD_FILE_SIZE_BYTES } from './constants'
 import { store } from './store'
+import { history } from './history'
 import { nanoid } from 'nanoid'
 import { type AudioFileBase, type Clip, type ServerTrack } from '~/schema'
 import { EVENTS } from '~/events'
@@ -235,6 +236,13 @@ io.on('connection', async (socket) => {
 			})
 
 			socket.broadcast.emit('clip:create', clip)
+
+			history.push({
+				type: 'CLIP_CREATE',
+				payload: clip,
+				inverse: { id: clip.id },
+				userId: user.id,
+			})
 		})
 
 		socket.on('get:clip:delete', async (data, callback) => {
@@ -261,10 +269,19 @@ io.on('connection', async (socket) => {
 			})
 
 			socket.broadcast.emit('clip:delete', clip)
+
+			history.push({
+				type: 'CLIP_DELETE',
+				payload: { id: clip.id },
+				inverse: clip,
+				userId: user.id,
+			})
 		})
 
 		socket.on('get:clip:update', async (data, callback) => {
 			const { id, changes } = data
+
+			const oldClip = await db.getClipSafe(id)
 
 			const clip = await db.updateClipSafe(id, changes)
 
@@ -285,6 +302,19 @@ io.on('connection', async (socket) => {
 			})
 
 			socket.broadcast.emit('clip:update', clip)
+
+			if (oldClip) {
+				const oldValues: any = {}
+				for (const key of Object.keys(changes)) {
+					oldValues[key] = (oldClip as any)[key]
+				}
+				history.push({
+					type: 'CLIP_UPDATE',
+					payload: { id, changes },
+					inverse: { id, oldValues },
+					userId: user.id,
+				})
+			}
 		})
 
 		socket.on('get:update:username', async (data, callback) => {
@@ -338,6 +368,26 @@ io.on('connection', async (socket) => {
 			})
 
 			// todo: when implementing foreign cursors, broadcast this change aswell!
+		})
+
+		socket.on('get:undo', async (_, callback) => {
+			// todo: dont like the as any, maybe i can find a way to type this differently :D
+			// Cast to any required due to TS limitation with correlated generic types in Socket.IO emit
+			const result = await history.undo(user.id, (event, data) =>
+				io.emit(event as any, data),
+			)
+
+			if (result.success) {
+				callback({ success: true, data: null })
+			} else {
+				callback({
+					success: false,
+					error: {
+						status: 'CONFLICT_ERROR',
+						message: result.error || 'Undo operation failed due to a conflict.',
+					},
+				})
+			}
 		})
 
 		socket.emit('server:ready', {

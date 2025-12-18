@@ -132,6 +132,10 @@ export const EVENTS = Object.freeze({
 				username: z.string(),
 			}),
 		}),
+		'get:undo': defineRequest({
+			req: z.null(),
+			res: z.null(),
+		}),
 	},
 } as const satisfies EventDefinitions)
 

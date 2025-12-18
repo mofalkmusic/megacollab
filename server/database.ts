@@ -68,6 +68,7 @@ export const db = {
 	getTracksSafe,
 	createClipSafe,
 	getClipsSafe,
+	getClipSafe,
 	deleteClipSafe,
 	updateClipSafe,
 	updateExistingUsernameSafe,
@@ -170,6 +171,16 @@ async function getClipsSafe(): Promise<Clip[]> {
 	} catch (err) {
 		if (IN_DEV_MODE) print.db('error:', err)
 		return [] // todo: may want to actually provide an error to the client...
+	}
+}
+
+async function getClipSafe(id: string): Promise<Clip | null> {
+	try {
+		const rows = await queryFn<Clip>(`SELECT * FROM ${CLIPS_TABLE} WHERE id = $1`, [id])
+		return rows[0] || null
+	} catch (err) {
+		if (IN_DEV_MODE) print.db('error:', err)
+		return null
 	}
 }
 

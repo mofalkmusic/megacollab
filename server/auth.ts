@@ -4,6 +4,15 @@ import { type AppError, type User } from '~/schema'
 import { getRandomName } from './utils'
 import z from 'zod'
 
+/**
+ * Whether to randomize the dev user ID. This is useful for testing
+ * interactions between different clients in dev through separate tabs.
+ * 
+ * Has no effect in production.
+ */
+const RANDOMIZE_DEV_USER_ID: boolean = true
+
+
 export const SessionMinimumSchema = z.object({
 	user_id: z.string(),
 	username: z.string().nullable().optional(),
@@ -26,11 +35,17 @@ export const devUser: User = {
 	id: nanoid(),
 } as const
 
+
+
 export async function manageAuthentication(token: any, inDevMode: boolean): Promise<AuthResult> {
 	if (inDevMode) {
 		return {
 			success: true,
-			user: { ...devUser },
+			user: {
+				...devUser,
+				id: RANDOMIZE_DEV_USER_ID ? nanoid() : devUser.id,
+				display_name: RANDOMIZE_DEV_USER_ID ? getRandomName() : devUser.display_name,
+			},
 		}
 	}
 

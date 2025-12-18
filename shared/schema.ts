@@ -118,12 +118,17 @@ const ClientError = BaseError.extend({
 	message: z.enum(['INVALID_INPUT', 'RESPONSE_PARSE']),
 })
 
+const ConflictError = BaseError.extend({
+	status: z.literal('CONFLICT_ERROR'),
+})
+
 export const AppErrorSchema = z.discriminatedUnion('status', [
 	UnauthenticatedError,
 	ServerError,
 	BadRequestError,
 	ClientError,
 	UnauthorizedError,
+		ConflictError,
 ])
 
 export type AppError = z.infer<typeof AppErrorSchema>

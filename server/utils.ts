@@ -19,6 +19,8 @@ export const print = {
 	db: (...msg: unknown[]) => console.log(`${chalk.green.bold('[DB]')} ${String(msg.join(' '))}`),
 	server: (...msg: unknown[]) =>
 		console.log(`${chalk.yellow.bold('[SERVER]')} ${String(msg.join(' '))}`),
+	history: (...msg: unknown[]) =>
+		console.log(`${chalk.grey.bold('[HISTORY]')} ${String(msg.join(' '))}`),
 } as const
 
 type DevFileHandlerOptions = {
