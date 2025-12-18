@@ -133,4 +133,3 @@ export class ServiceError extends Error {
 		super(error.message)
 	}
 }
-

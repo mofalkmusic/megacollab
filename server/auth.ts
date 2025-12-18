@@ -13,7 +13,6 @@ export const SessionMinimumSchema = z.object({
 
 export type SessionMin = z.infer<typeof SessionMinimumSchema>
 
-
 const CLERK_SECRET = Bun.env['CLERK_SECRET_KEY']
 
 type AuthResult =
