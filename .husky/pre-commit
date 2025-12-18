@@ -1,0 +1,6 @@
+#!/bin/sh
+if [ -n "$CI" ]; then
+  exit 0
+fi
+bun run format
+bun run lint

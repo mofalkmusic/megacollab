@@ -22,7 +22,8 @@
 		"lint": "eslint . --fix --cache --cache-location node_modules/.cache/.eslintcache",
 		"format": "prettier --write --experimental-cli .",
 		"start": "ENV=production bun --bun dist_server/server.js",
-		"cleanup": "rm -rf dev.audiofiles dev.database dist dist_server"
+		"cleanup": "rm -rf dev.audiofiles dev.database dist dist_server",
+		"prepare": "husky"
 	},
 	"dependencies": {
 		"@breezystack/lamejs": "^1.2.7",
@@ -64,6 +65,7 @@
 		"@vue/tsconfig": "^0.8.1",
 		"eslint": "^9.39.1",
 		"eslint-plugin-vue": "~10.5.1",
+		"husky": "^9.1.7",
 		"jiti": "^2.6.1",
 		"npm-run-all2": "^8.0.4",
 		"prettier": "3.6.2",
