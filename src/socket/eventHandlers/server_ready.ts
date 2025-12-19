@@ -11,13 +11,11 @@ const { addToast } = useToast()
 export default defineSocketHandler({
 	event: 'server:ready',
 	handler: async ({
-		client: c,
 		user: u,
 		audiofiles: serverAudiofiles,
 		clips: serverClips,
 		tracks: serverTracks,
 	}) => {
-		client.value = c
 		user.value = u
 
 		_socketReady.value = true

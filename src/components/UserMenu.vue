@@ -6,7 +6,9 @@
 				<p style="grid-area: name">
 					{{ user?.display_name }}
 				</p>
-				<p class="small dim" style="line-height: 120%; grid-area: email">{{ user?.email }}</p>
+				<p class="small dim" style="line-height: 120%; grid-area: email">
+					{{ user?.provider_email }}
+				</p>
 			</button>
 
 			<div
@@ -106,14 +108,13 @@ import {
 } from 'lucide-vue-next'
 import { nextTick, shallowRef, useTemplateRef, watch } from 'vue'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
-import useClerkHelper from '@/composables/useClerkHelper'
 
-const { signOutUser } = useClerkHelper()
+// const { signOutUser } = useClerkHelper()
 const inDev = import.meta.env.MODE === 'development'
 
 function signout() {
 	if (inDev) return console.warn('Not signing out in dev mode')
-	signOutUser()
+	// signOutUser()
 }
 
 const isEditingUsername = shallowRef(false)

@@ -58,11 +58,28 @@ export type ClientTrack = z.output<typeof ClientTrackScema>
 
 // USER regards mostly the Clerk / authentication schemas & types
 
+// export const UserSchema = z.object({
+// 	id: z.string(),
+// 	email: z.email(),
+// 	created_at: z.iso.datetime(),
+// 	display_name: z.string(),
+// })
+
+// export type User = z.infer<typeof UserSchema>
+
 export const UserSchema = z.object({
 	id: z.string(),
-	email: z.email(),
-	created_at: z.iso.datetime(),
+	created_at: z.iso.datetime({ offset: true }),
 	display_name: z.string(),
+	provider: z.enum(['twitch', 'dev']),
+	provider_id: z.string(),
+	provider_email: z.string(),
+	color: z.string(),
+	roles: z
+		.array(z.enum(['regular', 'vip', 'mod', 'admin']))
+		.min(1)
+		.default(['regular']),
+	// not storing refresh keys and access keys for now...
 })
 
 export type User = z.infer<typeof UserSchema>
@@ -78,12 +95,7 @@ export const timelinePosSchema = z.object({
 export type TimelinePos = z.output<typeof timelinePosSchema>
 
 export const clientSchema = z.object({
-	color: z.string(),
 	postition: timelinePosSchema.nullable(),
-	roles: z
-		.array(z.enum(['regular', 'vip', 'mod', 'admin']))
-		.min(1)
-		.default(['regular']),
 })
 
 export type Client = z.output<typeof clientSchema>

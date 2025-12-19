@@ -3,7 +3,6 @@ import { PGlite } from '@electric-sql/pglite'
 import { join } from 'node:path'
 import {
 	type AudioFileBase,
-	type Client,
 	type ClientTrack,
 	type Clip,
 	type ServerTrack,
@@ -12,7 +11,17 @@ import {
 } from '~/schema'
 import { migrations } from './migrations'
 import { print, randomSafeHexColor } from './utils'
+import { nanoid } from 'nanoid'
 import { DEV_DATABASE_FOLDER } from './constants'
+import z from 'zod'
+
+const SessionSchema = z.object({
+	session_id: z.string(),
+	user_id: z.string(),
+	created_at: z.iso.datetime({ offset: true }),
+})
+
+export type Session = z.output<typeof SessionSchema>
 
 const IN_DEV_MODE = Bun.env['ENV'] === 'development'
 export type QueryHandler = <T = any>(query: string, params?: any[]) => Promise<T[]>
@@ -50,17 +59,15 @@ if (!IN_DEV_MODE) {
 	}
 }
 
-const USERS_TABLE = 'megacollab_users' as const
-const AUDIOFILES_TABLE = 'megacollab_audiofiles' as const
-const TRACKS_TABLE = 'megacollab_tracks' as const
-const CLIPS_TABLE = 'megacollab_clips' as const
-const MIGRATIONS_TABLE = 'megacollab_migrations' as const
-
-const DEFAULT_ROLES: Client['roles'] = ['regular']
+export const USERS_TABLE = 'megacollab_users' as const
+export const AUDIOFILES_TABLE = 'megacollab_audiofiles' as const
+export const TRACKS_TABLE = 'megacollab_tracks' as const
+export const CLIPS_TABLE = 'megacollab_clips' as const
+export const MIGRATIONS_TABLE = 'megacollab_migrations' as const
+export const SESSIONS_TABLE = 'megacollab_sessions' as const
 
 export const db = {
 	query: queryFn,
-	getFullClientByUser,
 	saveAudioFile,
 	migrateAndSeedDb,
 	getAudioFilesSafe,
@@ -72,6 +79,10 @@ export const db = {
 	deleteClipSafe,
 	updateClipSafe,
 	updateExistingUsernameSafe,
+	makeNewIfNotExistUserSafe,
+	saveSessionSafe,
+	getUserFromSessionIdSafe,
+	getOrCreateDevUser,
 }
 
 const audioFileCache = new Map<string, AudioFileBase>()
@@ -255,6 +266,77 @@ async function saveAudioFile(audioFile: AudioFileBase): Promise<AudioFileBase | 
 	}
 }
 
+async function makeNewIfNotExistUserSafe(user: Omit<User, 'created_at'>): Promise<User | null> {
+	try {
+		const { id, display_name, provider, provider_id, provider_email, roles, color } = user
+
+		const rows = await queryFn<User>(
+			`
+			INSERT INTO ${USERS_TABLE} (id, display_name, provider, provider_id, provider_email, roles, color) 
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			ON CONFLICT (provider, provider_id) DO UPDATE
+				SET
+					provider_email=EXCLUDED.provider_email
+			RETURNING *
+		`,
+			[id, display_name, provider, provider_id, provider_email, roles, color],
+		)
+
+		if (!rows.length) return null
+
+		const result = rows[0]!
+		return result
+	} catch (err) {
+		if (IN_DEV_MODE) print.db('error:', err)
+		return null
+	}
+}
+
+async function saveSessionSafe(session: Omit<Session, 'created_at'>): Promise<Session | null> {
+	try {
+		const { session_id, user_id } = session
+
+		const rows = await queryFn<Session>(
+			`
+			INSERT INTO ${SESSIONS_TABLE} (session_id, user_id) 
+			VALUES ($1, $2)
+			RETURNING *
+		`,
+			[session_id, user_id],
+		)
+
+		if (!rows.length) return null
+
+		const result = rows[0]!
+		return result
+	} catch (err) {
+		if (IN_DEV_MODE) print.db('error:', err)
+		return null
+	}
+}
+
+async function getUserFromSessionIdSafe(session_id: string): Promise<User | null> {
+	try {
+		const rows = await queryFn<User>(
+			`
+			SELECT u.* 
+			FROM ${SESSIONS_TABLE} AS s
+			JOIN ${USERS_TABLE} AS u ON s.user_id = u.id
+			WHERE s.session_id = $1 AND s.created_at > NOW() - INTERVAL '7 days'
+		`,
+			[session_id],
+		)
+
+		if (!rows.length) return null
+
+		const result = rows[0]!
+		return result
+	} catch (err) {
+		if (IN_DEV_MODE) print.db('error:', err)
+		return null
+	}
+}
+
 async function updateExistingUsernameSafe(
 	id: string,
 	username: string,
@@ -280,29 +362,29 @@ async function updateExistingUsernameSafe(
 	}
 }
 
-async function getFullClientByUser(user: User): Promise<(Client & User) | null> {
-	const { id, email, display_name } = user
+// async function getFullClientByUser(user: User): Promise<(Client & User) | null> {
+// 	const { id, email, display_name } = user
 
-	try {
-		const rows = await queryFn<Client & User>(
-			`
-			INSERT INTO ${USERS_TABLE} (id, email, display_name, color, roles)
-			VALUES ($1, $2, $3, $4, $5) 
-			ON CONFLICT (id) DO UPDATE SET email=EXCLUDED.email
-			RETURNING *
-		`,
-			[id, email, display_name, randomSafeHexColor(), DEFAULT_ROLES],
-		)
+// 	try {
+// 		const rows = await queryFn<Client & User>(
+// 			`
+// 			INSERT INTO ${USERS_TABLE} (id, email, display_name, color, roles)
+// 			VALUES ($1, $2, $3, $4, $5)
+// 			ON CONFLICT (id) DO UPDATE SET email=EXCLUDED.email
+// 			RETURNING *
+// 		`,
+// 			[id, email, display_name, randomSafeHexColor(), DEFAULT_ROLES],
+// 		)
 
-		if (!rows.length) return null
-		const result = rows[0]!
+// 		if (!rows.length) return null
+// 		const result = rows[0]!
 
-		return result
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return null
-	}
-}
+// 		return result
+// 	} catch (err) {
+// 		if (IN_DEV_MODE) print.db('error:', err)
+// 		return null
+// 	}
+// }
 
 async function migrateAndSeedDb() {
 	await queryFn(`
@@ -338,4 +420,36 @@ async function migrateAndSeedDb() {
 	}
 
 	if (count > 0) print.db(`Applied ${count} new migration${count > 1 ? 's' : ''}.`)
+}
+
+async function getOrCreateDevUser(): Promise<User | null> {
+	if (!IN_DEV_MODE) return null
+
+	try {
+		// Try to find the dev user first
+		const rows = await queryFn<User>(
+			`SELECT * FROM ${USERS_TABLE} WHERE provider_id = $1 AND provider = $2`,
+			['dev-user-id', 'dev'],
+		)
+
+		if (rows.length > 0) {
+			return rows[0]!
+		}
+
+		// Create if not exists
+		const newUser: Omit<User, 'created_at'> = {
+			id: nanoid(),
+			display_name: 'Dev User',
+			provider: 'dev',
+			provider_id: 'dev-user-id',
+			provider_email: 'dev@local.host',
+			roles: ['admin', 'regular'],
+			color: randomSafeHexColor(),
+		}
+
+		return await makeNewIfNotExistUserSafe(newUser)
+	} catch (err) {
+		print.db('error creating dev user:', err)
+		return null
+	}
 }
