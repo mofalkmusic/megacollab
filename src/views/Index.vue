@@ -202,7 +202,7 @@ const router = useRouter()
 
 const userButtonEl = useTemplateRef('userButton')
 const userMenuEl = useTemplateRef('userMenu')
-const isUserMenuOpen = shallowRef(true)
+const isUserMenuOpen = shallowRef(false)
 
 const { floatingStyles, update } = useFloating(userButtonEl, userMenuEl, {
 	placement: 'bottom-end',
