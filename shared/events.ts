@@ -61,7 +61,6 @@ export const EVENTS = Object.freeze({
 		'server:refresh': z.null(),
 		'server:ready': z.object({
 			user: UserSchema,
-			client: clientSchema,
 			clips: z.array(clipSchema),
 			audiofiles: z.array(audioFileBaseSchema),
 			tracks: z.array(ClientTrackScema),

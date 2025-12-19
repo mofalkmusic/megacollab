@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Index from '@/views/Index.vue'
-import useClerkHelper from '@/composables/useClerkHelper'
 
 declare module 'vue-router' {
 	interface RouteMeta {
@@ -27,15 +26,17 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to, from, next) => {
-	const inDev = import.meta.env.MODE === 'development'
+	return next()
+	const res = await fetch('/api/auth/verify', {
+		method: 'GET',
+		credentials: 'include',
+	})
 
-	if (inDev) return next()
+	let isAuthenticated: boolean = false
 
-	const { getUserId, getAuthToken } = useClerkHelper()
-	const userId = await getUserId()
-	const token = await getAuthToken()
-
-	const isAuthenticated = !!userId && !!token
+	if (res.ok) {
+		isAuthenticated = true
+	}
 
 	if ((to.meta.auth === 'auth' || to.meta.auth === 'admin') && !isAuthenticated) {
 		return next({ name: 'login' })

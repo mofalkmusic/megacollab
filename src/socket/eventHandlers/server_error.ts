@@ -1,8 +1,13 @@
 import { defineSocketHandler } from '@/socket/socket'
+import router from '@/router'
 
 export default defineSocketHandler({
 	event: 'server:error',
 	handler: (data) => {
-		console.dir(data, { depth: null })
+		if (data.status === 'UNAUTHORIZED') {
+			router.push('/login')
+		}
+
+		console.error('server:error emitted:', data)
 	},
 })

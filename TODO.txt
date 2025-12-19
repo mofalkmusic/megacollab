@@ -1,0 +1,9 @@
+make sure to also make it so that the ingest audiofiles prioritizes the files that have active clips for them on timeline
+
+
+<!-- <img alt="showcase" src="https://mofalk.com/megascreen.jpg"> -->
+in readme needs to be hosted on mega subdomain public assets :)
+
+
+make /login an actual page not just scaps :D
+its 8am right now, pulled an all nighter, cant do it now sadly!

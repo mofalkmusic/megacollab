@@ -1,12 +1,12 @@
 import { Hono } from 'hono'
-import { clerkMiddleware, getAuth } from '@hono/clerk-auth'
+import { getSignedCookie, setSignedCookie } from 'hono/cookie'
 import { cors } from 'hono/cors'
 import { serveStatic } from 'hono/bun'
 import { print, randomSafeHexColor, setupDevelopmentFileHandlerRoutes } from './utils'
+import { OAuthStateManager, resolveConnectionUser } from './auth'
 import { Server as SocketIOServer } from 'socket.io'
 import { Server as BunEngine } from '@socket.io/bun-engine'
 import { db } from './database'
-import { manageAuthentication } from './auth'
 import {
 	validateIncomingEvents,
 	type ClientToServerEvents,
@@ -19,16 +19,20 @@ import { DEV_FILE_FOLDER, MAX_UPLOAD_FILE_SIZE_BYTES } from './constants'
 import { store } from './store'
 import { history } from './history'
 import { nanoid } from 'nanoid'
-import { type AudioFileBase, type Clip, type ServerTrack } from '~/schema'
+import { type AudioFileBase, type Clip, type ServerTrack, type User } from '~/schema'
 import { EVENTS } from '~/events'
 import { audioMimeTypes, BACKEND_PORT } from '~/constants'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
+import z from 'zod'
 
 // const BACKEND_PORT = Bun.env['VITE_APP_DEV_SERVER_PORT'] ?? '5000'
-const CLERK_SECRET = Bun.env['CLERK_SECRET_KEY']
-const CLERK_PUBLIC = Bun.env['VITE_APP_CLERK_PUBLISHABLE_KEY']
 const IN_DEV_MODE = Bun.env['ENV'] === 'development'
 const PROD_FOLDER = Bun.env['PROD_FOLDER']
+const TWITCH_CLIENT_ID = Bun.env['TWITCH_CLIENT_ID']
+const TWITCH_CLIENT_SECRET = Bun.env['TWITCH_CLIENT_SECRET']
+const TWITCH_REDIRECT_URI = Bun.env['TWITCH_REDIRECT_URI']
+const COOKIE_NAME = 'MEGACOLLAB_SESSION_ID' as const
+const COOKIE_SIGNING_SECRET = Bun.env['COOKIE_SIGNING_SECRET']
 
 await db.migrateAndSeedDb()
 
@@ -38,26 +42,14 @@ const engine = new BunEngine()
 
 io.bind(engine)
 
-// Event register at ../shared/events.ts
 io.on('connection', async (socket) => {
 	try {
-		const token = socket.handshake.auth['token']
-		const { success, error, user: userAuth } = await manageAuthentication(token, IN_DEV_MODE)
-
-		if (!success) {
-			socket.emit('server:error', error)
-			socket.disconnect()
-			return
-		}
-
-		socket.data.userId = userAuth.id
-
-		const user = await db.getFullClientByUser(userAuth)
+		const user = await resolveConnectionUser(socket)
 
 		if (!user) {
 			socket.emit('server:error', {
-				status: 'SERVER_ERROR',
-				message: 'Oops, database error... Please try reconnecting.',
+				status: 'UNAUTHORIZED',
+				message: 'Authentication failed',
 			})
 			socket.disconnect()
 			return
@@ -390,7 +382,6 @@ io.on('connection', async (socket) => {
 
 		socket.emit('server:ready', {
 			user,
-			client: { color: '#666666ff', postition: null, roles: ['regular'] },
 			audiofiles: await db.getAudioFilesSafe(),
 			clips: await db.getClipsSafe(),
 			tracks: await db.getTracksSafe(),
@@ -411,11 +402,19 @@ io.on('connection', async (socket) => {
 // Hono app
 const app = new Hono()
 
-// todo: check
 app.use(
 	'/*',
 	cors({
-		origin: (origin) => origin, // Allow any origin in dev, or specific ones
+		origin: (origin) => {
+			const allowed = [
+				'https://mega.mofalk.com',
+				'http://localhost:5173',
+				'http://127.0.0.1:5173',
+				`http://localhost:${BACKEND_PORT}`,
+				`http://127.0.0.1:${BACKEND_PORT}`,
+			]
+			return allowed.includes(origin) ? origin : allowed[0]
+		},
 		allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 		allowHeaders: ['Content-Type', 'Authorization', 'Upgrade'],
 		exposeHeaders: ['Content-Length'],
@@ -429,10 +428,6 @@ app.use(
 	},
 )
 
-if (!IN_DEV_MODE) {
-	app.use('*', clerkMiddleware({ secretKey: CLERK_SECRET, publishableKey: CLERK_PUBLIC }))
-}
-
 if (IN_DEV_MODE) {
 	// Ensure dev.audiofiles dir
 	const devFilesDir = join(import.meta.dir, '..', DEV_FILE_FOLDER)
@@ -441,16 +436,186 @@ if (IN_DEV_MODE) {
 
 app.get('/api/hello', (c) => c.json({ hello: 'world' }))
 
+app.get('/api/auth/twitch/url', (c) => {
+	if (IN_DEV_MODE) {
+		return c.json({ error: 'Dev mode not supported' }, 400)
+	}
+
+	const state = nanoid()
+	const scope = 'user:read:email'
+
+	const url = new URL('https://id.twitch.tv/oauth2/authorize')
+	url.searchParams.set('client_id', TWITCH_CLIENT_ID || '')
+	url.searchParams.set('redirect_uri', TWITCH_REDIRECT_URI || '')
+	url.searchParams.set('response_type', 'code')
+	url.searchParams.set('scope', scope)
+	url.searchParams.set('state', state)
+
+	oAuthStates.set(state, {
+		expiresAtMs: Date.now() + 15 * 60 * 1000,
+	})
+
+	return c.json({ url: url.toString() }, 200)
+})
+
 app.get('/api/auth/verify', async (c) => {
-	const auth = getAuth(c)
-	if (!auth?.userId) return c.text('Unauthorized', 401)
-	return c.json({ user: auth.userId, sessionId: auth.sessionId })
+	if (IN_DEV_MODE) return c.text('Authorized', 200)
+
+	const sessionId = await getSignedCookie(c, COOKIE_SIGNING_SECRET, COOKIE_NAME)
+
+	if (!sessionId) {
+		return c.text('Unauthorized', 401)
+	}
+
+	const user = await db.getUserFromSessionIdSafe(sessionId)
+
+	if (!user) {
+		return c.text('Unauthorized', 401)
+	}
+
+	return c.text('Authorized', 200)
+})
+
+const oAuthStates = new OAuthStateManager()
+
+app.get('/api/auth/twitch/callback', async (c) => {
+	if (IN_DEV_MODE) {
+		return c.json({ error: 'Dev mode not supported' }, 400)
+	}
+
+	const SuccessReqSchema = z.object({
+		code: z.string(),
+		state: z.string(),
+		scope: z.string(),
+	})
+
+	const ErrorReqSchema = z.object({
+		error: z.string(),
+		error_description: z.string(),
+		state: z.string(),
+	})
+
+	const ReqSchema = z.union([SuccessReqSchema, ErrorReqSchema])
+
+	const result = ReqSchema.safeParse(c.req.query())
+
+	if (!result.success) {
+		return c.json({ error: 'Invalid request1', error_description: result.error.message }, 400)
+	}
+
+	if ('error' in result.data) {
+		// todo: send along the error for user feedback
+		return c.redirect('/login')
+	}
+
+	const { code, state } = result.data
+
+	const stateData = oAuthStates.get(state)
+
+	if (!stateData) {
+		return c.json({ error: 'Invalid state' }, 400)
+	}
+
+	if (Date.now() > stateData.expiresAtMs) {
+		return c.json({ error: 'State expired' }, 400)
+	}
+
+	oAuthStates.delete(state)
+
+	const tokenResponse = await fetch('https://id.twitch.tv/oauth2/token', {
+		method: 'POST',
+		body: new URLSearchParams({
+			client_id: TWITCH_CLIENT_ID || '',
+			client_secret: TWITCH_CLIENT_SECRET || '',
+			code,
+			grant_type: 'authorization_code',
+			redirect_uri: TWITCH_REDIRECT_URI || '',
+		}),
+	})
+
+	const tokenData = await tokenResponse.json()
+
+	const TokenResSchema = z.object({
+		access_token: z.string(),
+		refresh_token: z.string(),
+		scope: z.array(z.string()),
+		expires_in: z.number(),
+		token_type: z.string(),
+	})
+
+	const tokenResult = TokenResSchema.safeParse(tokenData)
+
+	if (!tokenResult.success) {
+		console.error(tokenResult.error)
+		return c.json({ error: 'Invalid request3', error_description: 'Invalid request' }, 400)
+	}
+
+	const { access_token } = tokenResult.data
+
+	const userRes = await fetch('https://api.twitch.tv/helix/users', {
+		headers: {
+			'Client-Id': TWITCH_CLIENT_ID || '',
+			Authorization: `Bearer ${access_token}`,
+		},
+	})
+
+	if (!userRes.ok) {
+		return c.json({ error: 'Invalid request4', error_description: 'Invalid request' }, 400)
+	}
+
+	const userResData = await userRes.json()
+
+	const userResSchema = z.object({
+		data: z.array(z.object({ id: z.string(), display_name: z.string(), email: z.string() })),
+	})
+
+	const userResResult = userResSchema.safeParse(userResData)
+
+	if (!userResResult.success) {
+		return c.json({ error: 'Invalid request5', error_description: 'Invalid request' }, 400)
+	}
+
+	const { data } = userResResult.data
+
+	if (!data.length) {
+		return c.json({ error: 'Invalid request6', error_description: 'Invalid request' }, 400)
+	}
+
+	const user = data[0]!
+
+	const newUser: Omit<User, 'created_at'> = {
+		id: nanoid(),
+		display_name: user.display_name,
+		provider: 'twitch',
+		provider_email: user.email,
+		provider_id: user.id,
+		roles: ['regular'],
+		color: randomSafeHexColor(),
+	}
+
+	const completeUser = await db.makeNewIfNotExistUserSafe(newUser)
+
+	if (!completeUser) {
+		// no it was a server error // todo: correct
+		return c.json({ error: 'Invalid request7', error_description: 'Invalid request' }, 400)
+	}
+
+	const sessionId = nanoid(64)
+
+	await db.saveSessionSafe({ session_id: sessionId, user_id: completeUser.id })
+
+	await setSignedCookie(c, COOKIE_NAME, sessionId, COOKIE_SIGNING_SECRET, {
+		httpOnly: true,
+		secure: !IN_DEV_MODE,
+		maxAge: 60 * 60 * 24 * 7,
+		sameSite: 'lax',
+	})
+
+	return c.redirect('/')
 })
 
 app.use('/*', serveStatic({ root: './dist' }))
 
-// 4. THE FALLBACK ROUTE
-// This must be the last route. If the request reaches here, it means:
 // - It's not an API route
 // - It's not a physical file (like /assets/logo.png)
 // So we serve the index.html and let Vue Router handle the URL.
