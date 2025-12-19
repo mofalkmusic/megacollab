@@ -62,13 +62,17 @@ body {
 	display: grid;
 	justify-items: start;
 	grid-template-columns:
-		[full-width-start breakout-left-start] minmax(var(--window-w-padding), 1fr)
-		[content-start breakout-right-start] min(
+		[full-width-start breakout-left-start] minmax(
+			var(--window-w-padding),
+			1fr
+		) [content-start breakout-right-start] min(
 			100% - calc(var(--window-w-padding) * 2),
 			var(--window-w-max-width)
 		)
-		[content-end breakout-left-end] minmax(var(--window-w-padding), 1fr)
-		[full-width-end breakout-right-end];
+		[content-end breakout-left-end] minmax(
+			var(--window-w-padding),
+			1fr
+		) [full-width-end breakout-right-end];
 }
 
 .custom-grid > * {
@@ -188,7 +192,7 @@ button * {
 	white-space: nowrap;
 }
 
-button {
+:where(.default-button) {
 	border: none;
 	border-radius: 0.5rem;
 	height: 3rem;
@@ -207,29 +211,29 @@ button {
 	outline: none;
 }
 
-button:disabled {
+.default-button:disabled {
 	cursor: default;
 }
 
-button:hover:not(:disabled) {
+:where(.default-button):hover:not(:disabled) {
 	background-color: color-mix(in lch, var(--border-primary), white 15%);
 	box-shadow: inset 0px 0px 0px 1px color-mix(in lch, transparent, white 25%);
 }
 
-button:focus-visible,
-button:focus,
-button:focus-within {
+:where(.default-button):focus-visible,
+:where(.default-button):focus,
+:where(.default-button):focus-within {
 	outline: none;
 	border: none;
 	border-radius: 0.5rem;
 }
 
-button.secondary {
+:where(.default-button).secondary {
 	background-color: transparent;
 	color: var(--text-color-secondary);
 }
 
-button.secondary:hover:not(:disabled) {
+:where(.default-button).secondary:hover:not(:disabled) {
 	background-color: color-mix(in lch, var(--border-primary), white 0%);
 	box-shadow: inset 0px 0px 0px 1px color-mix(in lch, transparent, white 5%);
 	color: var(--text-color-primary);
@@ -282,4 +286,43 @@ button.secondary:hover:not(:disabled) {
 	gap: 0;
 	margin-left: auto;
 	flex-wrap: nowrap;
+}
+
+.controls-panel-btn {
+	min-height: 4.5rem;
+	padding: 0;
+	aspect-ratio: 1/1;
+	border-radius: 0;
+	background-color: color-mix(in lch, var(--border-primary), var(--bg-color) 60%);
+	box-shadow: none;
+	border: none;
+	outline: none;
+	--_border: 1px solid var(--border-primary);
+	border-right: var(--_border);
+	border-left: var(--_border);
+
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 20;
+
+	cursor: pointer;
+
+	transition:
+		box-shadow 100ms,
+		background-color 150ms,
+		color 100ms;
+}
+
+.controls-panel-btn:hover:not(:disabled) {
+	background-color: color-mix(in lch, var(--border-primary), var(--bg-color) 15%);
+}
+
+.controls-panel-btn.playing {
+	z-index: 21;
+	/* --_border: 1px solid var(--active-playing-color); */
+	box-shadow:
+		0px 0px 40px -16px var(--active-playing-color),
+		inset 0px 0px 6px -2px var(--active-playing-color),
+		inset 0px 0px 18px -7px var(--active-playing-color);
 }

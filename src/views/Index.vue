@@ -2,34 +2,17 @@
 	<Loading v-if="socket.readyState.value !== 'READY'" />
 	<div v-else class="outmost-container">
 		<div class="controls" style="grid-area: controls">
-			<button @click="togglePlayState">
-				<Play
-					v-if="!isPlaying"
-					:size="16"
-					:stroke-width="2"
-					fill="currentColor"
-					style="color: var(--text-color-primary)"
-				/>
-				<Pause
-					v-else
-					:size="16"
-					:stroke-width="2"
-					fill="currentColor"
-					style="color: var(--active-playing-color)"
-				/>
+			<button @click="togglePlayState" class="controls-panel-btn" :class="{ playing: isPlaying }">
+				<Play v-if="!isPlaying" :size="16" style="color: var(--text-color-primary)" />
+				<Pause v-else :size="16" style="color: var(--active-playing-color)" />
 			</button>
-			<button @click="reset">
-				<Square
-					:size="16"
-					:stroke-width="2"
-					fill="currentColor"
-					style="color: var(--text-color-primary)"
-				/>
+			<button @click="reset" class="controls-panel-btn" style="border-left: none">
+				<Square :size="16" style="color: var(--text-color-primary)" />
 			</button>
 
 			<div style="flex-grow: 1"></div>
 
-			<button ref="userButton" class="open-user-menu-btn" @click="isUserMenuOpen = !isUserMenuOpen">
+			<button ref="userButton" class="controls-panel-btn" @click="isUserMenuOpen = !isUserMenuOpen">
 				<User :size="18" />
 			</button>
 
@@ -169,7 +152,7 @@ import type { Clip } from '~/schema'
 import ClipInstance from '@/components/ClipInstance.vue'
 import AddTrack from '@/components/tracks/AddTrack.vue'
 import { Play, Pause, Square, User, Undo2 } from 'lucide-vue-next'
-import { useFloating } from '@floating-ui/vue'
+import { offset, useFloating } from '@floating-ui/vue'
 import useClerkHelper from '@/composables/useClerkHelper'
 import { useRouter } from 'vue-router'
 import UserMenu from '@/components/UserMenu.vue'
@@ -208,10 +191,11 @@ const router = useRouter()
 
 const userButtonEl = useTemplateRef('userButton')
 const userMenuEl = useTemplateRef('userMenu')
-const isUserMenuOpen = shallowRef(false)
+const isUserMenuOpen = shallowRef(true)
 
 const { floatingStyles, update } = useFloating(userButtonEl, userMenuEl, {
 	placement: 'bottom-end',
+	middleware: [offset({ alignmentAxis: 20, mainAxis: 10 })],
 })
 
 useEventListener(window, 'resize', () => {
@@ -615,9 +599,7 @@ watch(
 <style scoped>
 .controls {
 	display: flex;
-	padding: 1rem;
-	gap: 1rem;
-
+	padding: 0;
 	border-bottom: 1px solid var(--border-primary);
 }
 

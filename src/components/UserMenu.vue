@@ -1,7 +1,7 @@
 <template>
 	<div class="user-menu-container">
 		<div v-if="!isEditingUsername" class="inner-menu-wrap">
-			<button class="user-menu-btn" @click="startEditingUsername">
+			<button class="default-button user-menu-btn" @click="startEditingUsername">
 				<UserPen class="dim" :size="22" style="grid-area: logo" />
 				<p style="grid-area: name">
 					{{ user?.display_name }}
@@ -17,7 +17,7 @@
 				"
 			></div>
 
-			<button class="menu-btn" @click="emits('onUndo')">
+			<button class="default-button menu-btn" @click="emits('onUndo')">
 				<Undo2 class="dim" :size="16" :stroke-width="2" />
 				<p>Undo</p>
 				<div class="shortcut-container mono">
@@ -33,11 +33,11 @@
 					padding-bottom: 0.5rem;
 				"
 			></div>
-			<button class="menu-btn">
+			<button class="default-button menu-btn">
 				<Settings2 class="dim" :size="16" :stroke-width="2" />
 				<p>Settings</p>
 			</button>
-			<button class="menu-btn" @click="signout">
+			<button class="default-button menu-btn" @click="signout">
 				<LogOut class="dim" :size="16" :stroke-width="2" />
 				<p>Sign Out</p>
 			</button>
@@ -63,10 +63,15 @@
 			<p class="small dim">You can change your username at any time.</p>
 			<p v-if="errorMessage" class="small" style="color: red">{{ errorMessage }}</p>
 			<div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem">
-				<button class="secondary" @click="cancelEditingUsername" :disabled="isUpdating">
+				<button
+					class="default-button secondary"
+					@click="cancelEditingUsername"
+					:disabled="isUpdating"
+				>
 					Cancel
 				</button>
 				<button
+					class="default-button"
 					ref="confirmBtn"
 					@click="confirmEditingUsername"
 					:disabled="isUpdating"
@@ -168,7 +173,6 @@ async function startEditingUsername() {
 	display: grid;
 	background-color: color-mix(in lch, var(--bg-color), white 10%);
 	border-radius: 0.75rem;
-	margin-top: 0.5rem;
 	border: 1px solid var(--border-primary);
 }
 
@@ -177,6 +181,7 @@ async function startEditingUsername() {
 	border-radius: inherit;
 	padding: 0.5rem;
 	max-width: 20rem;
+	box-shadow: 0px 0px 1rem 0rem var(--bg-color);
 }
 
 .user-menu-btn {

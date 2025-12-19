@@ -3,7 +3,7 @@
 		v-bind="$attrs"
 		@click="openFileDialog"
 		ref="uploadButton"
-		class="no-select upload-button"
+		class="no-select default-button upload-button"
 		:disabled="isUploading"
 		:class="{ progress: progressMap.size }"
 		:style="styles"
