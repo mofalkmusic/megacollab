@@ -26,7 +26,6 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to, from, next) => {
-	return next()
 	const res = await fetch('/api/auth/verify', {
 		method: 'GET',
 		credentials: 'include',
