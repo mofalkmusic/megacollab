@@ -7,8 +7,8 @@ type ActionType = 'CLIP_CREATE' | 'CLIP_DELETE' | 'CLIP_UPDATE'
 
 interface HistoryAction {
 	type: ActionType
-	payload: any
-	inverse: any
+	payload: any // todo: this is so lazy im sorry...
+	inverse: any // todo: this is so lazy im sorry...
 	timestamp: number
 	userId: string
 }

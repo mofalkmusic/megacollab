@@ -16,6 +16,23 @@
 					padding-bottom: 0.5rem;
 				"
 			></div>
+
+			<button class="menu-btn" @click="emits('onUndo')">
+				<Undo2 class="dim" :size="16" :stroke-width="2" />
+				<p>Undo</p>
+				<div class="shortcut-container mono">
+					<p class="kbd" :class="{ active: controlKeyPressed }">Ctrl</p>
+					<p class="kbd" :class="{ active: zKeyPressed }">Z</p>
+				</div>
+			</button>
+
+			<div
+				style="
+					border-top: 1px solid var(--border-primary);
+					margin-top: 0.5rem;
+					padding-bottom: 0.5rem;
+				"
+			></div>
 			<button class="menu-btn">
 				<Settings2 class="dim" :size="16" :stroke-width="2" />
 				<p>Settings</p>
@@ -65,8 +82,8 @@
 
 <script setup lang="ts">
 import { socket } from '@/socket/socket'
-import { user } from '@/state'
-import { UserPen, Settings2, LogOut, LoaderCircle } from 'lucide-vue-next'
+import { user, controlKeyPressed, zKeyPressed } from '@/state'
+import { UserPen, Settings2, LogOut, LoaderCircle, Undo2, History } from 'lucide-vue-next'
 import { nextTick, shallowRef, useTemplateRef, watch } from 'vue'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
 import useClerkHelper from '@/composables/useClerkHelper'
@@ -80,7 +97,7 @@ function signout() {
 }
 
 const isEditingUsername = shallowRef(false)
-const emits = defineEmits<{ (e: 'onUpdated'): void }>()
+const emits = defineEmits<{ (e: 'onUpdated'): void; (e: 'onUndo'): void }>()
 
 async function cancelEditingUsername() {
 	if (isUpdating.value) return

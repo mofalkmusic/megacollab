@@ -62,13 +62,17 @@ body {
 	display: grid;
 	justify-items: start;
 	grid-template-columns:
-		[full-width-start breakout-left-start] minmax(var(--window-w-padding), 1fr)
-		[content-start breakout-right-start] min(
+		[full-width-start breakout-left-start] minmax(
+			var(--window-w-padding),
+			1fr
+		) [content-start breakout-right-start] min(
 			100% - calc(var(--window-w-padding) * 2),
 			var(--window-w-max-width)
 		)
-		[content-end breakout-left-end] minmax(var(--window-w-padding), 1fr)
-		[full-width-end breakout-right-end];
+		[content-end breakout-left-end] minmax(
+			var(--window-w-padding),
+			1fr
+		) [full-width-end breakout-right-end];
 }
 
 .custom-grid > * {
@@ -247,4 +251,38 @@ button.secondary:hover:not(:disabled) {
 	to {
 		transform: rotate(360deg);
 	}
+}
+
+.kbd {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.1rem 0.5rem 0.1rem;
+	border-radius: 0.5rem;
+	box-shadow: 1px 1px 0px color-mix(in lch, var(--border-primary), black 84%);
+	border: 1px solid color-mix(in lch, var(--border-primary), white 10%);
+	background-color: color-mix(in lch, var(--border-primary), black 20%);
+	font-family: inherit;
+	font-size: 0.9em;
+	line-height: 1;
+	min-width: 1.8rem;
+	color: var(--text-color-secondary);
+	user-select: none;
+}
+
+.kbd + .kbd {
+	margin-left: 0.3rem;
+}
+
+.kbd.active {
+	background-color: color-mix(in lch, var(--border-primary), white 10%);
+	border: 1px solid color-mix(in lch, var(--border-primary), white 30%);
+	color: var(--text-color-primary);
+}
+
+.shortcut-container {
+	display: flex;
+	align-items: center;
+	gap: 0;
+	margin-left: auto;
 }

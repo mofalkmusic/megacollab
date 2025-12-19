@@ -26,14 +26,16 @@
 					style="color: var(--text-color-primary)"
 				/>
 			</button>
+
 			<input type="range" v-model="pxPerBeat" :min="minPxPerBeat" :max="maxPxPerBeat" />
 			<div style="flex-grow: 1"></div>
+
 			<button ref="userButton" class="open-user-menu-btn" @click="isUserMenuOpen = !isUserMenuOpen">
 				<User :size="18" />
 			</button>
 
 			<div v-if="isUserMenuOpen" ref="userMenu" style="z-index: 100" :style="floatingStyles">
-				<UserMenu @on-updated="update()" />
+				<UserMenu @on-updated="update()" @on-undo="tryUndo()" />
 			</div>
 		</div>
 
@@ -167,7 +169,7 @@ import {
 import type { Clip } from '~/schema'
 import ClipInstance from '@/components/ClipInstance.vue'
 import AddTrack from '@/components/tracks/AddTrack.vue'
-import { Play, Pause, Square, User } from 'lucide-vue-next'
+import { Play, Pause, Square, User, Undo2 } from 'lucide-vue-next'
 import { useFloating } from '@floating-ui/vue'
 import useClerkHelper from '@/composables/useClerkHelper'
 import { useRouter } from 'vue-router'
