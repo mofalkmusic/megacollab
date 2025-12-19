@@ -15,8 +15,8 @@ export async function resolveConnectionUser(socket: Socket): Promise<User | null
 			headers: { cookie: cookieHeader },
 		})
 
-		// @ts-expect-error Hono cookie helper expects Hono Context but works with { req: { raw: Request } } structure for basic reading
 		const sessionId = await getSignedCookie(
+			// @ts-expect-error Hono cookie helper expects Hono Context but works with { req: { raw: Request } } structure for basic reading
 			{ req: { raw: tempReq } },
 			COOKIE_SIGNING_SECRET,
 			COOKIE_NAME,
