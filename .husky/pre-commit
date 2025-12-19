@@ -3,9 +3,13 @@
 
 echo "Running pre-commit hooks (lint & format)..."
 
-# Use bun run to trigger the scripts defined in package.json
+# Runs on all files for now.
+# as project grows I've been told this needs to change to lint-changed
 bun run format || exit 1
 bun run lint || exit 1
+
+# restage changed by formatter
+git add -u
 
 echo "Pre-commit checks passed!"
 

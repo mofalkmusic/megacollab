@@ -128,7 +128,7 @@ export const AppErrorSchema = z.discriminatedUnion('status', [
 	BadRequestError,
 	ClientError,
 	UnauthorizedError,
-				ConflictError,
+	ConflictError,
 ])
 
 export type AppError = z.infer<typeof AppErrorSchema>
