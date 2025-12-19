@@ -108,11 +108,11 @@ import { nextTick, shallowRef, useTemplateRef, watch } from 'vue'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
 import useClerkHelper from '@/composables/useClerkHelper'
 
+const { signOutUser } = useClerkHelper()
 const inDev = import.meta.env.MODE === 'development'
 
 function signout() {
 	if (inDev) return console.warn('Not signing out in dev mode')
-	const { signOutUser } = useClerkHelper()
 	signOutUser()
 }
 

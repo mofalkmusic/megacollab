@@ -4,34 +4,34 @@ import { watch } from 'vue'
 const _template = 'megacollab_session' as const
 
 export default function useClerkHelper() {
-	const { isLoaded, userId, getToken, signOut } = useAuth()
+	function ensureLoaded(): Promise<ReturnType<typeof useAuth>> {
+		const auth = useAuth()
 
-	function ensureLoaded(): Promise<void> {
 		return new Promise((res) => {
-			if (isLoaded.value) return res()
+			if (auth.isLoaded.value) return res(auth)
 
-			const { stop } = watch(isLoaded, (loaded) => {
+			const { stop } = watch(auth.isLoaded, (loaded) => {
 				if (!loaded) return
 
 				stop()
-				res()
+				res(auth)
 			})
 		})
 	}
 
 	async function getAuthToken() {
-		await ensureLoaded()
-		return await getToken.value({ template: _template })
+		const auth = await ensureLoaded()
+		return await auth.getToken.value({ template: _template })
 	}
 
 	async function getUserId() {
-		await ensureLoaded()
-		return userId.value
+		const auth = await ensureLoaded()
+		return auth.userId.value
 	}
 
 	async function signOutUser() {
-		await ensureLoaded()
-		await signOut.value({ redirectUrl: '/login' })
+		const auth = await ensureLoaded()
+		await auth.signOut.value({ redirectUrl: '/login' })
 	}
 
 	return {

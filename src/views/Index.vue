@@ -121,7 +121,6 @@ import {
 	timelineWidth,
 	tracks,
 	maxPxPerBeat,
-	user,
 	controlKeyPressed,
 	zKeyPressed,
 } from '@/state'
@@ -153,7 +152,6 @@ import ClipInstance from '@/components/ClipInstance.vue'
 import AddTrack from '@/components/tracks/AddTrack.vue'
 import { Play, Pause, Square, User, Undo2 } from 'lucide-vue-next'
 import { offset, useFloating } from '@floating-ui/vue'
-import useClerkHelper from '@/composables/useClerkHelper'
 import { useRouter } from 'vue-router'
 import UserMenu from '@/components/UserMenu.vue'
 import { useToast } from '@/composables/useToast'
@@ -448,25 +446,8 @@ const scrollIndicatorY = computed(() => {
 	return { height: heightPercent, top }
 })
 
-// connects socket & handlers with correct auth token provided by clerk plugin.
-// in dev, no auth!
-
-const inDev = import.meta.env.MODE === 'development'
-
 onMounted(async () => {
-	if (inDev) {
-		await initializeSocket({ inDevMode: true })
-	} else {
-		const { getUserId, getAuthToken } = useClerkHelper()
-		const userId = await getUserId()
-		const token = await getAuthToken()
-
-		const isAuthenticated = !!userId && !!token
-
-		if (!isAuthenticated) return router.push('/login')
-
-		await initializeSocket({ auth_token: token })
-	}
+	await initializeSocket()
 })
 
 // --- DRAG FROM POOL LOGIC ---

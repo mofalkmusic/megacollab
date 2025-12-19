@@ -30,6 +30,7 @@ function print(type: 'log' | 'warn' | 'error', ...args: any[]) {
 
 import { useDebug } from '@/composables/useDebug'
 import router from '@/router'
+import useClerkHelper from '@/composables/useClerkHelper'
 useDebug(socketReadyState, { label: 'socket' })
 
 const socketInstance = io(websocketUrl, {
@@ -60,22 +61,25 @@ socketInstance.on('disconnect', (reason) => {
 	print('log', 'Disconnected:', reason)
 })
 
-export async function initializeSocket(opts: InitSocketParams) {
+export async function initializeSocket() {
 	await registerEventHandlers()
 
-	if (opts.inDevMode) {
+	if (inDev) {
 		socketInstance.connect()
 		return
 	}
 
-	if (!opts.auth_token) {
+	const { getUserId, getAuthToken } = useClerkHelper()
+	const userId = await getUserId()
+	const token = await getAuthToken()
+
+	if (!token) {
 		print('error', 'Error: No token provided in production mode')
-		// throw new Error('No token provided in production mode')
 		router.push('/login')
 		return
 	}
 
-	socketInstance.auth = { token: opts.auth_token }
+	socketInstance.auth = { token }
 	socketInstance.connect()
 }
 
