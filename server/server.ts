@@ -490,6 +490,12 @@ app.use(
 	},
 )
 
+app.use('/api/*', async (c, next) => {
+	const ip = c.req.header('x-forwarded-for') || 'unknown'
+	print.server('IP:', ip)
+	await next()
+})
+
 if (IN_DEV_MODE) {
 	// Ensure dev.audiofiles dir
 	const devFilesDir = join(import.meta.dir, '..', DEV_FILE_FOLDER)
