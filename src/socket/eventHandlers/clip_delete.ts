@@ -3,7 +3,7 @@ import { clips } from '@/state'
 
 export default defineSocketHandler({
 	event: 'clip:delete',
-	handler: ({ id }) => {
+	handler: (id) => {
 		clips.delete(id)
 	},
 })
