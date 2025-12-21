@@ -5,6 +5,7 @@ echo "Running pre-commit hooks (lint & format)..."
 
 # Runs on all files for now.
 # as project grows I've been told this needs to change to lint-changed
+bun run typecheck || exit 1
 bun run format || exit 1
 bun run lint || exit 1
 
