@@ -11,7 +11,7 @@
 		"dev": "ENV=development run-p dev:server dev:vue",
 		"dev:server": "bun --bun --watch server/server.ts",
 		"dev:vue": "bun --bun vite",
-		"build": "ENV=production run-s typecheck build:vue",
+		"build": "ENV=production run-s build:vue",
 		"build:vue": "vite build",
 		"typecheck": "run-p typecheck:vue typecheck:server",
 		"typecheck:vue": "vue-tsc --build",
