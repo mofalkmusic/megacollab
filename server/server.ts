@@ -520,13 +520,14 @@ app.get('/api/auth/discord/callback', handleDiscordOAuthCallback)
 app.get('/api/auth/twitch/url', getTwitchOAuthUrl)
 app.get('/api/auth/twitch/callback', handleTwitchOAuthCallback)
 
-app.use('/*', serveStatic({ root: './dist' }))
+const DIST_DIR = join(import.meta.dir, '..', 'dist')
+app.use('/*', serveStatic({ root: DIST_DIR }))
 
 // - It's not an API route
 // - It's not a physical file (like /assets/logo.png)
 // So we serve the index.html and let Vue Router handle the URL.
 app.get('/*', async (c) => {
-	return c.html(await Bun.file('./dist/index.html').text())
+	return c.html(await Bun.file(join(DIST_DIR, 'index.html')).text())
 })
 
 const { websocket } = engine.handler()
