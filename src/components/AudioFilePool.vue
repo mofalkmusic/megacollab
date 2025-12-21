@@ -15,6 +15,7 @@
 			<div v-for="audioFile in sortedAudioFiles" :key="audioFile.id">
 				<ClipInstance
 					:audiofile="audioFile"
+					:deletable="audioFile.deletable"
 					:custom-width-px="AUDIO_POOL_WIDTH"
 					:style="{ height: '7rem' }"
 				/>
