@@ -1,14 +1,8 @@
 {
-	"extends": "@vue/tsconfig/tsconfig.dom.json",
+	"extends": ["@vue/tsconfig/tsconfig.dom.json", "./tsconfig.base.json"],
 	"include": ["env.d.ts", "src/**/*", "src/**/*.vue", "shared/**/*"],
 	"exclude": ["src/**/__tests__/*", "server/**/*"],
 	"compilerOptions": {
-		"tsBuildInfoFile": "./node_modules/.tmp/tsconfig.vue.tsbuildinfo",
-		"incremental": true,
-		"paths": {
-			"@/*": ["./src/*"],
-			"~/*": ["./shared/*"]
-		},
-		"baseUrl": "."
+		"tsBuildInfoFile": "./node_modules/.tmp/tsconfig.vue.tsbuildinfo"
 	}
 }

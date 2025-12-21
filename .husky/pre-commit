@@ -1,16 +1,9 @@
-#!/bin/sh
-. "$(dirname "$0")/_/husky.sh"
-
-echo "Running pre-commit hooks (lint & format)..."
+echo "Running pre-commit checks"
 
 # Runs on all files for now.
 # as project grows I've been told this needs to change to lint-changed
-bun run typecheck || exit 1
-bun run format || exit 1
-bun run lint || exit 1
+bun run typecheck || { echo "Typecheck failed"; exit 1; }
+# Use bunx to execute the lint-staged binary directly, similar to npx
+bunx lint-staged || { echo "Lint-staged failed"; exit 1; }
 
-# restage changed by formatter
-git add -u
-
-echo "Pre-commit checks passed!"
-
+echo "Pre-commit checks passed"

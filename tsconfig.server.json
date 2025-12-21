@@ -1,4 +1,5 @@
 {
+	"extends": "./tsconfig.base.json",
 	"compilerOptions": {
 		"lib": ["ESNext"],
 		"types": ["bun"],
@@ -21,12 +22,8 @@
 		"noPropertyAccessFromIndexSignature": true,
 		"sourceMap": false,
 		"noImplicitAny": true,
-		"incremental": true,
 		"rootDir": "./",
-		"tsBuildInfoFile": "./node_modules/.tmp/tsconfig.server.tsbuildinfo",
-		"paths": {
-			"~/*": ["./shared/*"]
-		}
+		"tsBuildInfoFile": "./node_modules/.tmp/tsconfig.server.tsbuildinfo"
 	},
 	"include": ["./server/**/*", "./shared/**/*"],
 	"exclude": ["src"]
