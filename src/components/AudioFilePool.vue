@@ -5,7 +5,7 @@
 				<UploadButton />
 			</div>
 
-			<div style="display: flex; gap: 1rem">
+			<div style="display: flex; gap: 1rem" class="dim small">
 				<p>Total Files: {{ audiofiles.size }}</p>
 				<p>Total Clips: {{ clips.size }}</p>
 			</div>
@@ -174,7 +174,8 @@ const sortedAudioFiles = computed(() => {
 .options-and-controls {
 	width: 100%;
 	display: flex;
-	justify-content: space-between;
+	justify-content: flex-start;
+	gap: 2rem;
 	align-items: center;
 }
 

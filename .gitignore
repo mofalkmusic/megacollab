@@ -2,6 +2,7 @@
 /dist
 /dist_server
 .env
+.vscode
 
 /dev.database
 dev.database

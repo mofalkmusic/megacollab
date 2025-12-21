@@ -1,6 +1,6 @@
 <template>
 	<div
-		v-memo="[wrapperStyles, waveformsDrawn, canvasStyles, props.audiofile.file_name]"
+		v-memo="[wrapperStyles, waveformsDrawn, canvasStyles, props.audiofile.file_name, isHovered]"
 		ref="clipWrapper"
 		class="outmostClipWrapper"
 		:style="wrapperStyles"
@@ -23,22 +23,23 @@
 
 		<!-- RIGHT HANDLE -->
 		<div v-if="!withinAudioPool" ref="rightHandle" class="resizehandle right"></div>
+
+		<button
+			v-if="withinAudioPool && isHovered"
+			class="trash-button"
+			@click="deleteAudioFile"
+			@pointerdown.stop
+		>
+			<Trash2 :size="13" />
+		</button>
 	</div>
 </template>
 
 <script setup lang="ts">
-import {
-	computed,
-	onMounted,
-	ref,
-	shallowRef,
-	useTemplateRef,
-	watchEffect,
-	type CSSProperties,
-} from 'vue'
+import { computed, onMounted, ref, shallowRef, useTemplateRef, type CSSProperties } from 'vue'
 import { TOTAL_BEATS, altKeyPressed, clips, dragFromPoolState, pixelRatio } from '@/state'
 import type { Clip } from '~/schema'
-import { useElementBounding, useEventListener, watchThrottled } from '@vueuse/core'
+import { useElementBounding, useEventListener, watchThrottled, useElementHover } from '@vueuse/core'
 import { formatHex, interpolate, parse, wcagLuminance } from 'culori'
 import {
 	beats_to_px,
@@ -49,6 +50,10 @@ import {
 } from '@/utils/mathUtils'
 import { socket } from '@/socket/socket'
 import type { AudioFile } from '@/types'
+import { Trash2 } from 'lucide-vue-next'
+import { deleteAudio } from '@/socket/eventHandlers/audiofile_delete'
+import { useToast } from '@/composables/useToast'
+const { addToast } = useToast()
 
 const wrapperEl = useTemplateRef('clipWrapper')
 const leftHandleEl = useTemplateRef('leftHandle')
@@ -56,6 +61,7 @@ const rightHandleEl = useTemplateRef('rightHandle')
 
 const canvasEl = useTemplateRef('canvas')
 const { width: canvasWidth, height: canvasHeight } = useElementBounding(canvasEl)
+const isHovered = useElementHover(wrapperEl)
 
 type ClipProps = {
 	audiofile: AudioFile
@@ -75,6 +81,27 @@ async function rip() {
 }
 
 const withinAudioPool = computed(() => !props.clip && typeof props.customWidthPx === 'number')
+
+async function deleteAudioFile() {
+	if (!props.audiofile) return
+
+	const res = await socket.emitWithAck('get:audiofile:delete', { id: props.audiofile.id })
+
+	if (res.success) {
+		await deleteAudio(res.data.audio_file.id, res.data.deleted_clips)
+	} else {
+		addToast({
+			type: 'acknowledgement_request',
+			icon: 'warning',
+			message: `Failed to delete audio file: ${props.audiofile.file_name}`,
+			title: 'Error',
+			priority: 'medium',
+			onConfirm: {
+				label: 'Understood',
+			},
+		})
+	}
+}
 
 const initialClipState = computed(() => {
 	if (!props.audiofile) throw new Error(`No audio file prop provided`)
@@ -614,6 +641,7 @@ function getWaveform(
 	box-sizing: border-box;
 	display: grid;
 	grid-template-rows: auto 1fr;
+	grid-template-areas: 'header' 'canvas';
 	/* border-radius: 3px; */
 	border-radius: 0.5rem;
 	position: relative;
@@ -622,6 +650,7 @@ function getWaveform(
 }
 
 .clipHeader {
+	grid-area: header;
 	border-top-left-radius: inherit;
 	border-top-right-radius: inherit;
 	overflow: hidden;
@@ -638,6 +667,7 @@ function getWaveform(
 }
 
 .outerClipCanvasWrap {
+	grid-area: canvas;
 	width: 100%;
 	height: 100%;
 	display: flex;
@@ -698,5 +728,37 @@ canvas {
 	100% {
 		background-position: -100% 0;
 	}
+}
+
+.trash-button {
+	grid-area: canvas;
+	right: 0;
+	top: 0;
+	position: relative;
+	z-index: 1;
+
+	height: 2.1rem;
+	width: 2.1rem;
+
+	aspect-ratio: 1/1;
+
+	justify-self: flex-end;
+	align-self: flex-end;
+
+	display: flex;
+	align-items: center;
+	justify-content: center;
+
+	padding: 0;
+
+	margin-bottom: 0.2rem;
+	margin-right: 0.2rem;
+
+	cursor: pointer;
+
+	border: none;
+	border-radius: 0.4rem;
+
+	background-color: color-mix(in lch, transparent, black 60%);
 }
 </style>

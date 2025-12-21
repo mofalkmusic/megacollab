@@ -66,10 +66,13 @@ export const EVENTS = Object.freeze({
 		}),
 		'server:error': AppErrorSchema,
 		'audiofile:create': audioFileBaseSchema,
-		'audiofile:delete': audioFileBaseSchema.pick({ id: true }),
+		'audiofile:delete': z.object({
+			audio_file: audioFileBaseSchema.pick({ id: true }),
+			deleted_clips: z.array(clipSchema.shape['id']),
+		}),
 		'clip:create': clipSchema,
 		'clip:update': clipSchema,
-		'clip:delete': clipSchema.pick({ id: true }),
+		'clip:delete': clipSchema.shape['id'],
 		'track:create': ClientTrackScema,
 	},
 	CLIENT_REQUESTS: {
@@ -133,6 +136,13 @@ export const EVENTS = Object.freeze({
 		'get:undo': defineRequest({
 			req: z.null(),
 			res: z.null(),
+		}),
+		'get:audiofile:delete': defineRequest({
+			req: audioFileBaseSchema.pick({ id: true }),
+			res: z.object({
+				audio_file: audioFileBaseSchema.pick({ id: true }),
+				deleted_clips: z.array(clipSchema.shape['id']),
+			}),
 		}),
 	},
 } as const satisfies EventDefinitions)

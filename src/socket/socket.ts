@@ -13,6 +13,7 @@ import {
 	type ServerEmitPayload,
 } from '~/events'
 import { BACKEND_PORT } from '~/constants'
+import { useDebug } from '@/composables/useDebug'
 
 const inDev = import.meta.env.MODE === 'development'
 const websocketUrl = inDev ? `http://localhost:${BACKEND_PORT}` : ''
@@ -28,9 +29,6 @@ function print(type: 'log' | 'warn' | 'error', ...args: any[]) {
 	console[type](kleur.cyan('[WEBSOCKET]'), ...args)
 }
 
-import { useDebug } from '@/composables/useDebug'
-import router from '@/router'
-
 useDebug(socketReadyState, { label: 'socket' })
 
 const socketInstance = io(websocketUrl, {
@@ -42,6 +40,11 @@ const socketInstance = io(websocketUrl, {
 	secure: !inDev,
 	multiplex: true,
 	forceNew: false,
+	reconnection: true,
+	reconnectionAttempts: 6,
+	reconnectionDelay: 1000,
+	reconnectionDelayMax: 6000,
+	randomizationFactor: 0.7,
 })
 
 export const socket = {
@@ -59,6 +62,14 @@ socketInstance.on('disconnect', (reason) => {
 	_socketConnected.value = false
 	_socketReady.value = false
 	print('log', 'Disconnected:', reason)
+
+	// if (reason === 'io server disconnect') {
+	// 	print('log', 'Server-side disconnect detected. Dont manually reconnect, this only happens when the server is restarted or the connection is lost for some reason.')
+	// }
+})
+
+socketInstance.on('reconnect', (attempt) => {
+	print('log', `Reconnected successfully after ${attempt} attempts`)
 })
 
 export async function initializeSocket() {

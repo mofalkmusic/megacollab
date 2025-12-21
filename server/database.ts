@@ -83,6 +83,7 @@ export const db = {
 	saveSessionSafe,
 	getUserFromSessionIdSafe,
 	getOrCreateDevUser,
+	deleteAudioFileSafe,
 }
 
 const audioFileCache = new Map<string, AudioFileBase>()
@@ -450,6 +451,39 @@ async function getOrCreateDevUser(): Promise<User | null> {
 		return await makeNewIfNotExistUserSafe(newUser)
 	} catch (err) {
 		print.db('error creating dev user:', err)
+		return null
+	}
+}
+
+async function deleteAudioFileSafe(
+	id: string,
+): Promise<{ deleted_clips: Clip['id'][]; deleted_file: AudioFileBase } | null> {
+	try {
+		const rows = await queryFn<AudioFileBase & { deleted_clip_ids: Clip['id'][] | null }>(
+			`
+			WITH deleted_clips AS (
+				DELETE FROM ${CLIPS_TABLE}
+				WHERE audio_file_id = $1
+				RETURNING id
+			)
+			DELETE FROM ${AUDIOFILES_TABLE}
+			WHERE id = $1
+			RETURNING *, (SELECT array_agg(id) FROM deleted_clips) AS deleted_clip_ids
+			`,
+			[id],
+		)
+
+		if (!rows.length) return null
+		const row = rows[0]!
+
+		const { deleted_clip_ids, ...fileData } = row
+
+		return {
+			deleted_clips: deleted_clip_ids || [],
+			deleted_file: fileData,
+		}
+	} catch (err) {
+		if (IN_DEV_MODE) print.db('error:', err)
 		return null
 	}
 }

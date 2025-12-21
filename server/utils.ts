@@ -2,9 +2,21 @@ import chalk from 'chalk'
 import { formatHex } from 'culori'
 import { Hono } from 'hono'
 
-import { join } from 'node:path'
+import { extname, join } from 'node:path'
 import { mkdir } from 'node:fs/promises'
 import { DEV_FILE_SERVE_URL } from './constants'
+
+const PROD_FOLDER = Bun.env['PROD_FOLDER']
+const IN_DEV_MODE = Bun.env['ENV'] === 'development'
+
+/**
+ * @param filename - should be sanitized already
+ */
+export function generateStorageKey(filename: string, userId: string, fileId: string) {
+	const ext = extname(filename)
+	const folder = IN_DEV_MODE ? '' : `${PROD_FOLDER}/`
+	return `${folder}${filename}_${userId}_${fileId}${ext}`
+}
 
 export function randomSafeHexColor(): string {
 	const h = Math.random() * 360

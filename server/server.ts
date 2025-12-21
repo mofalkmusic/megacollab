@@ -2,7 +2,12 @@ import { Hono } from 'hono'
 import { getSignedCookie, setSignedCookie } from 'hono/cookie'
 import { cors } from 'hono/cors'
 import { serveStatic } from 'hono/bun'
-import { print, randomSafeHexColor, setupDevelopmentFileHandlerRoutes } from './utils'
+import {
+	print,
+	randomSafeHexColor,
+	setupDevelopmentFileHandlerRoutes,
+	generateStorageKey,
+} from './utils'
 import { OAuthStateManager, resolveConnectionUser } from './auth'
 import { Server as SocketIOServer } from 'socket.io'
 import { Server as BunEngine } from '@socket.io/bun-engine'
@@ -13,8 +18,7 @@ import {
 	type ServerToClientEvents,
 	type SocketData,
 } from './socket'
-import { extname, join } from 'path'
-
+import { join } from 'path'
 import { DEV_FILE_FOLDER, MAX_UPLOAD_FILE_SIZE_BYTES } from './constants'
 import { store } from './store'
 import { history } from './history'
@@ -27,7 +31,6 @@ import z from 'zod'
 
 // const BACKEND_PORT = Bun.env['VITE_APP_DEV_SERVER_PORT'] ?? '5000'
 const IN_DEV_MODE = Bun.env['ENV'] === 'development'
-const PROD_FOLDER = Bun.env['PROD_FOLDER']
 const TWITCH_CLIENT_ID = Bun.env['TWITCH_CLIENT_ID']
 const TWITCH_CLIENT_SECRET = Bun.env['TWITCH_CLIENT_SECRET']
 const TWITCH_REDIRECT_URI = Bun.env['TWITCH_REDIRECT_URI']
@@ -39,9 +42,6 @@ if (!COOKIE_SIGNING_SECRET) {
 	throw new Error('COOKIE_SIGNING_SECRET is not set')
 }
 
-console.log(COOKIE_SIGNING_SECRET)
-console.log('[DEBUG COOKIE_SIGNING_SECRET]', COOKIE_SIGNING_SECRET)
-console.log('[DEBUG TYPE]', typeof COOKIE_SIGNING_SECRET)
 await db.migrateAndSeedDb()
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -94,13 +94,10 @@ io.on('connection', async (socket) => {
 				return
 			}
 
-			const fileExt = extname(filename)
 			const file_id = nanoid()
 			const cleanFileName = sanitizeLetterUnderscoreOnly(filename)
 
-			const folder = IN_DEV_MODE ? '' : `${PROD_FOLDER}/`
-
-			const file_key = `${folder}${cleanFileName}_${user.id}_${file_id}${fileExt}`
+			const file_key = generateStorageKey(cleanFileName, user.id, file_id)
 
 			const url = store.getUploadUrl(file_key)
 
@@ -268,7 +265,7 @@ io.on('connection', async (socket) => {
 				},
 			})
 
-			socket.broadcast.emit('clip:delete', clip)
+			socket.broadcast.emit('clip:delete', clip.id)
 
 			history.push({
 				type: 'CLIP_DELETE',
@@ -386,6 +383,45 @@ io.on('connection', async (socket) => {
 					},
 				})
 			}
+		})
+
+		socket.on('get:audiofile:delete', async (data, callback) => {
+			const { id } = data
+
+			const result = await db.deleteAudioFileSafe(id)
+
+			if (!result) {
+				callback({
+					success: false,
+					error: {
+						status: 'SERVER_ERROR',
+						message: 'Oops, something unexpected went wrong. Please try reconnecting.',
+					},
+				})
+				return
+			}
+
+			const { deleted_clips, deleted_file } = result
+
+			callback({
+				success: true,
+				data: {
+					audio_file: { id },
+					deleted_clips: deleted_clips,
+				},
+			})
+
+			socket.broadcast.emit('audiofile:delete', {
+				audio_file: { id },
+				deleted_clips: deleted_clips,
+			})
+
+			const key = generateStorageKey(
+				deleted_file.file_name,
+				deleted_file.creator_user_id,
+				deleted_file.id,
+			)
+			await store.deleteIfExists(key)
 		})
 
 		socket.emit('server:ready', {
