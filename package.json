@@ -11,8 +11,8 @@
 		"dev": "ENV=development run-p dev:server dev:vue",
 		"dev:server": "bun --bun --watch server/server.ts",
 		"dev:vue": "bun --bun vite",
-		"build": "bun run typecheck && ENV=production vite build",
-		"typecheck": "run-p typecheck:vue typecheck:server",
+		"build": "bun run typecheck && ENV=production vite build ",
+		"typecheck": "run-p typecheck:server typecheck:vue",
 		"typecheck:vue": "vue-tsc --build",
 		"typecheck:server": "tsc --noEmit -p tsconfig.server.json",
 		"lint": "eslint . --fix --cache --cache-location node_modules/.cache/.eslintcache",
@@ -42,8 +42,8 @@
 		"socket.io": "^4.8.1",
 		"socket.io-client": "^4.8.1",
 		"unique-names-generator": "^4.7.1",
-		"vue": "^3.5.25",
-		"vue-router": "^4.6.3",
+		"vue": "^3.5.26",
+		"vue-router": "^4.6.4",
 		"zod": "^4.1.13"
 	},
 	"devDependencies": {
@@ -60,11 +60,21 @@
 		"eslint-plugin-vue": "~10.5.1",
 		"husky": "^9.1.7",
 		"jiti": "^2.6.1",
+		"lint-staged": "^16.2.7",
 		"npm-run-all2": "^8.0.4",
 		"prettier": "3.6.2",
 		"typescript": "~5.9.0",
 		"vite": "npm:rolldown-vite@latest",
 		"vite-plugin-vue-devtools": "^8.0.5",
-		"vue-tsc": "^3.1.5"
+		"vue-tsc": "^3.2.0"
+	},
+	"lint-staged": {
+		"*.{js,ts,vue}": [
+			"eslint",
+			"prettier --write"
+		],
+		"*.{json,md,html,css}": [
+			"prettier --write"
+		]
 	}
 }

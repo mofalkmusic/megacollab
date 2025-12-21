@@ -1,0 +1,10 @@
+{
+	"compilerOptions": {
+		"incremental": true,
+		"baseUrl": ".",
+		"paths": {
+			"@/*": ["src/*"],
+			"~/*": ["shared/*"]
+		}
+	}
+}
