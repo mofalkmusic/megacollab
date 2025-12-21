@@ -107,14 +107,19 @@ import {
 	MessageSquareShare,
 } from 'lucide-vue-next'
 import { nextTick, shallowRef, useTemplateRef, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
 
-// const { signOutUser } = useClerkHelper()
+const router = useRouter()
 const inDev = import.meta.env.MODE === 'development'
 
 function signout() {
-	if (inDev) return console.warn('Not signing out in dev mode')
-	// signOutUser()
+	if (inDev) {
+		router.push('/login')
+		return
+	}
+
+	window.location.href = '/api/auth/signout'
 }
 
 const isEditingUsername = shallowRef(false)
@@ -242,26 +247,6 @@ async function startEditingUsername() {
 .menu-btn:hover {
 	background-color: color-mix(in lch, transparent, white 15%);
 	box-shadow: none;
-}
-
-.textInput {
-	min-width: 0;
-	max-width: 100%;
-	height: 3rem;
-	border-radius: 0.5rem;
-	border: none;
-	padding: 0 1rem;
-	background-color: color-mix(in lch, var(--border-primary), black 0%);
-}
-
-.textInput:disabled {
-	color: var(--text-color-secondary);
-	background-color: color-mix(in lch, var(--border-primary), black 10%);
-}
-
-.textInput:focus-visible:not(:disabled) {
-	outline: none;
-	box-shadow: 0px 0px 0px 1px color-mix(in lch, var(--border-primary), white 30%);
 }
 
 .rangeInput {

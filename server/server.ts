@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { getSignedCookie, setSignedCookie } from 'hono/cookie'
+import { getSignedCookie } from 'hono/cookie'
 import { cors } from 'hono/cors'
 import { serveStatic } from 'hono/bun'
 import {
@@ -8,7 +8,16 @@ import {
 	setupDevelopmentFileHandlerRoutes,
 	generateStorageKey,
 } from './utils'
-import { OAuthStateManager, resolveConnectionUser } from './auth'
+import {
+	COOKIE_NAME,
+	getDiscordOAuthUrl,
+	getTwitchOAuthUrl,
+	handleDiscordOAuthCallback,
+	handleTwitchOAuthCallback,
+	resolveConnectionUser,
+	COOKIE_SIGNING_SECRET,
+	getSignOut,
+} from './auth'
 import { Server as SocketIOServer } from 'socket.io'
 import { Server as BunEngine } from '@socket.io/bun-engine'
 import { db } from './database'
@@ -23,24 +32,12 @@ import { DEV_FILE_FOLDER, MAX_UPLOAD_FILE_SIZE_BYTES } from './constants'
 import { store } from './store'
 import { history } from './history'
 import { nanoid } from 'nanoid'
-import { type AudioFileBase, type Clip, type ServerTrack, type User } from '~/schema'
+import { type AudioFileBase, type Clip, type ServerTrack } from '~/schema'
 import { EVENTS } from '~/events'
 import { audioMimeTypes, BACKEND_PORT } from '~/constants'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
-import z from 'zod'
 
-// const BACKEND_PORT = Bun.env['VITE_APP_DEV_SERVER_PORT'] ?? '5000'
 const IN_DEV_MODE = Bun.env['ENV'] === 'development'
-const TWITCH_CLIENT_ID = Bun.env['TWITCH_CLIENT_ID']
-const TWITCH_CLIENT_SECRET = Bun.env['TWITCH_CLIENT_SECRET']
-const TWITCH_REDIRECT_URI = Bun.env['TWITCH_REDIRECT_URI']
-const COOKIE_NAME = 'MEGACOLLAB_SESSION_ID' as const
-const COOKIE_SIGNING_SECRET =
-	Bun.env['COOKIE_SIGNING_SECRET'] || (IN_DEV_MODE ? 'default_dev' : undefined)
-
-if (!COOKIE_SIGNING_SECRET) {
-	throw new Error('COOKIE_SIGNING_SECRET is not set')
-}
 
 await db.migrateAndSeedDb()
 
@@ -431,7 +428,7 @@ io.on('connection', async (socket) => {
 			tracks: await db.getTracksSafe(),
 		})
 
-		if (IN_DEV_MODE) esureAllEventsHandled(socket.eventNames())
+		if (IN_DEV_MODE) ensureAllEventsHandled(socket.eventNames())
 	} catch (err) {
 		print.server(err)
 		socket.emit('server:error', {
@@ -478,30 +475,6 @@ if (IN_DEV_MODE) {
 	await setupDevelopmentFileHandlerRoutes({ app, devFilesDir })
 }
 
-app.get('/api/hello', (c) => c.json({ hello: 'world' }))
-
-app.get('/api/auth/twitch/url', (c) => {
-	if (IN_DEV_MODE) {
-		return c.json({ error: 'Dev mode not supported' }, 400)
-	}
-
-	const state = nanoid()
-	const scope = 'user:read:email'
-
-	const url = new URL('https://id.twitch.tv/oauth2/authorize')
-	url.searchParams.set('client_id', TWITCH_CLIENT_ID || '')
-	url.searchParams.set('redirect_uri', TWITCH_REDIRECT_URI || '')
-	url.searchParams.set('response_type', 'code')
-	url.searchParams.set('scope', scope)
-	url.searchParams.set('state', state)
-
-	oAuthStates.set(state, {
-		expiresAtMs: Date.now() + 15 * 60 * 1000,
-	})
-
-	return c.json({ url: url.toString() }, 200)
-})
-
 app.get('/api/auth/verify', async (c) => {
 	if (IN_DEV_MODE) return c.text('Authorized', 200)
 
@@ -519,144 +492,12 @@ app.get('/api/auth/verify', async (c) => {
 
 	return c.text('Authorized', 200)
 })
+app.get('/api/auth/signout', getSignOut)
 
-const oAuthStates = new OAuthStateManager()
-
-app.get('/api/auth/twitch/callback', async (c) => {
-	if (IN_DEV_MODE) {
-		return c.json({ error: 'Dev mode not supported' }, 400)
-	}
-
-	const SuccessReqSchema = z.object({
-		code: z.string(),
-		state: z.string(),
-		scope: z.string(),
-	})
-
-	const ErrorReqSchema = z.object({
-		error: z.string(),
-		error_description: z.string(),
-		state: z.string(),
-	})
-
-	const ReqSchema = z.union([SuccessReqSchema, ErrorReqSchema])
-
-	const result = ReqSchema.safeParse(c.req.query())
-
-	if (!result.success) {
-		return c.json({ error: 'Invalid request1', error_description: result.error.message }, 400)
-	}
-
-	if ('error' in result.data) {
-		// todo: send along the error for user feedback
-		return c.redirect('/login')
-	}
-
-	const { code, state } = result.data
-
-	const stateData = oAuthStates.get(state)
-
-	if (!stateData) {
-		return c.json({ error: 'Invalid state' }, 400)
-	}
-
-	if (Date.now() > stateData.expiresAtMs) {
-		return c.json({ error: 'State expired' }, 400)
-	}
-
-	oAuthStates.delete(state)
-
-	const tokenResponse = await fetch('https://id.twitch.tv/oauth2/token', {
-		method: 'POST',
-		body: new URLSearchParams({
-			client_id: TWITCH_CLIENT_ID || '',
-			client_secret: TWITCH_CLIENT_SECRET || '',
-			code,
-			grant_type: 'authorization_code',
-			redirect_uri: TWITCH_REDIRECT_URI || '',
-		}),
-	})
-
-	const tokenData = await tokenResponse.json()
-
-	const TokenResSchema = z.object({
-		access_token: z.string(),
-		refresh_token: z.string(),
-		scope: z.array(z.string()),
-		expires_in: z.number(),
-		token_type: z.string(),
-	})
-
-	const tokenResult = TokenResSchema.safeParse(tokenData)
-
-	if (!tokenResult.success) {
-		console.error(tokenResult.error)
-		return c.json({ error: 'Invalid request3', error_description: 'Invalid request' }, 400)
-	}
-
-	const { access_token } = tokenResult.data
-
-	const userRes = await fetch('https://api.twitch.tv/helix/users', {
-		headers: {
-			'Client-Id': TWITCH_CLIENT_ID || '',
-			Authorization: `Bearer ${access_token}`,
-		},
-	})
-
-	if (!userRes.ok) {
-		return c.json({ error: 'Invalid request4', error_description: 'Invalid request' }, 400)
-	}
-
-	const userResData = await userRes.json()
-
-	const userResSchema = z.object({
-		data: z.array(z.object({ id: z.string(), display_name: z.string(), email: z.string() })),
-	})
-
-	const userResResult = userResSchema.safeParse(userResData)
-
-	if (!userResResult.success) {
-		return c.json({ error: 'Invalid request5', error_description: 'Invalid request' }, 400)
-	}
-
-	const { data } = userResResult.data
-
-	if (!data.length) {
-		return c.json({ error: 'Invalid request6', error_description: 'Invalid request' }, 400)
-	}
-
-	const user = data[0]!
-
-	const newUser: Omit<User, 'created_at'> = {
-		id: nanoid(),
-		display_name: user.display_name,
-		provider: 'twitch',
-		provider_email: user.email,
-		provider_id: user.id,
-		roles: ['regular'],
-		color: randomSafeHexColor(),
-	}
-
-	const completeUser = await db.makeNewIfNotExistUserSafe(newUser)
-
-	if (!completeUser) {
-		// no it was a server error // todo: correct
-		return c.json({ error: 'Invalid request7', error_description: 'Invalid request' }, 400)
-	}
-
-	const sessionId = nanoid(64)
-
-	await db.saveSessionSafe({ session_id: sessionId, user_id: completeUser.id })
-
-	await setSignedCookie(c, COOKIE_NAME, sessionId, COOKIE_SIGNING_SECRET, {
-		httpOnly: true,
-		secure: !IN_DEV_MODE,
-		maxAge: 60 * 60 * 24 * 7,
-		sameSite: 'lax',
-	})
-
-	return c.redirect('/')
-})
+app.get('/api/auth/discord/url', getDiscordOAuthUrl)
+app.get('/api/auth/discord/callback', handleDiscordOAuthCallback)
+app.get('/api/auth/twitch/url', getTwitchOAuthUrl)
+app.get('/api/auth/twitch/callback', handleTwitchOAuthCallback)
 
 app.use('/*', serveStatic({ root: './dist' }))
 
@@ -700,7 +541,7 @@ type UploadSocketMeta = {
 
 const pendingSocketUploads = new Map<string, UploadSocketMeta>()
 
-function esureAllEventsHandled(eventNames: (string | symbol)[]) {
+function ensureAllEventsHandled(eventNames: (string | symbol)[]) {
 	const requiredEvents = [
 		...Object.keys(EVENTS.CLIENT_EMITS),
 		...Object.keys(EVENTS.CLIENT_REQUESTS),

@@ -84,6 +84,7 @@ export const db = {
 	getUserFromSessionIdSafe,
 	getOrCreateDevUser,
 	deleteAudioFileSafe,
+	deleteSessionSafe,
 }
 
 const audioFileCache = new Map<string, AudioFileBase>()
@@ -304,6 +305,24 @@ async function saveSessionSafe(session: Omit<Session, 'created_at'>): Promise<Se
 			RETURNING *
 		`,
 			[session_id, user_id],
+		)
+
+		if (!rows.length) return null
+
+		const result = rows[0]!
+		return result
+	} catch (err) {
+		if (IN_DEV_MODE) print.db('error:', err)
+		return null
+	}
+}
+
+async function deleteSessionSafe(session_id: string): Promise<Session | null> {
+	try {
+		const rows = await queryFn<Session>(
+			`
+			DELETE FROM ${SESSIONS_TABLE} WHERE session_id = $1 RETURNING *`,
+			[session_id],
 		)
 
 		if (!rows.length) return null

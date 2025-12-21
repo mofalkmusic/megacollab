@@ -71,7 +71,7 @@ export const UserSchema = z.object({
 	id: z.string(),
 	created_at: z.iso.datetime({ offset: true }),
 	display_name: z.string(),
-	provider: z.enum(['twitch', 'dev']),
+	provider: z.enum(['twitch', 'discord', 'dev']),
 	provider_id: z.string(),
 	provider_email: z.string(),
 	color: z.string(),

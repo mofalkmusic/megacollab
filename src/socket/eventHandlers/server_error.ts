@@ -1,5 +1,7 @@
 import { defineSocketHandler } from '@/socket/socket'
-import router from '@/router'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 export default defineSocketHandler({
 	event: 'server:error',

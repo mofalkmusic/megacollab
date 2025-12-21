@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Index from '@/views/Index.vue'
+import Login from '@/views/Login.vue'
 
 declare module 'vue-router' {
 	interface RouteMeta {
@@ -19,13 +20,17 @@ const router = createRouter({
 		{
 			path: '/login',
 			name: 'login',
-			component: () => import('@/views/Login.vue'),
+			component: Login,
 			meta: { auth: 'none' },
 		},
 	],
 })
 
 router.beforeEach(async (to, from, next) => {
+	if (import.meta.env.MODE === 'development') {
+		return next()
+	}
+
 	const res = await fetch('/api/auth/verify', {
 		method: 'GET',
 		credentials: 'include',
