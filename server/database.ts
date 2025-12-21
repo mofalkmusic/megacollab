@@ -71,6 +71,7 @@ export const db = {
 	saveAudioFile,
 	migrateAndSeedDb,
 	getAudioFilesSafe,
+	getAudioFileSafe,
 	createTrackSafe,
 	getTracksSafe,
 	createClipSafe,
@@ -95,6 +96,18 @@ async function getAudioFilesSafe(): Promise<AudioFileBase[]> {
 	} catch (err) {
 		if (IN_DEV_MODE) print.db('error:', err)
 		return [] // todo: may want to actually provide an error to the client...
+	}
+}
+
+async function getAudioFileSafe(id: string): Promise<AudioFileBase | null> {
+	try {
+		const rows = await queryFn<AudioFileBase>(`SELECT * FROM ${AUDIOFILES_TABLE} WHERE id = $1`, [
+			id,
+		])
+		return rows[0] || null
+	} catch (err) {
+		if (IN_DEV_MODE) print.db('error:', err)
+		return null
 	}
 }
 

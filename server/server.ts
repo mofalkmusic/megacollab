@@ -385,6 +385,22 @@ io.on('connection', async (socket) => {
 		socket.on('get:audiofile:delete', async (data, callback) => {
 			const { id } = data
 
+			// check wether or not this user is actually the creator of the audio file.
+			// otherwise dont allow!!
+
+			const audioFile = await db.getAudioFileSafe(id)
+
+			if (!audioFile || audioFile.creator_user_id !== user.id) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are not authorized to delete this audio file.',
+					},
+				})
+				return
+			}
+
 			const result = await db.deleteAudioFileSafe(id)
 
 			if (!result) {

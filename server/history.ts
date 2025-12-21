@@ -58,12 +58,12 @@ class HistoryManager {
 			let processed = false
 			switch (action.type) {
 				case 'CLIP_CREATE': {
-					const clipId = action.payload.id
+					const clipId = action.payload.id // omg i hate that this is any... fix todo
 					const current = await db.getClipSafe(clipId)
 
 					if (current) {
 						await db.deleteClipSafe(clipId)
-						socketBroadcast('clip:delete', { id: clipId })
+						socketBroadcast('clip:delete', clipId)
 						processed = true
 					} else {
 						return { success: false, error: 'Clip was already deleted by someone else.' }

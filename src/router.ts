@@ -2,6 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Index from '@/views/Index.vue'
 import Login from '@/views/Login.vue'
 
+const inDev = import.meta.env.MODE === 'development'
+
 declare module 'vue-router' {
 	interface RouteMeta {
 		auth: 'auth' | 'none' | 'admin'
@@ -27,7 +29,7 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to, from, next) => {
-	if (import.meta.env.MODE === 'development') {
+	if (inDev) {
 		return next()
 	}
 

@@ -104,11 +104,11 @@ const { files, isOverDropZone } = useDropZone(dropZoneEl, {
 })
 
 const sortedAudioFiles = computed(() => {
-	const owned: AudioFile[] = []
-	const foreign: AudioFile[] = []
+	const owned: (AudioFile & { deletable: boolean })[] = []
+	const foreign: (AudioFile & { deletable: boolean })[] = []
 	for (const f of audiofiles.values()) {
-		if (f.creator_user_id === user.value?.id) owned.push(f)
-		else foreign.push(f)
+		if (f.creator_user_id === user.value?.id) owned.push({ ...f, deletable: true })
+		else foreign.push({ ...f, deletable: false })
 	}
 	const byDate = (a: AudioFile, b: AudioFile) =>
 		new Date(b.created_at).getTime() - new Date(a.created_at).getTime()

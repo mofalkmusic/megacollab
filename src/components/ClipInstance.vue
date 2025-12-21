@@ -25,7 +25,7 @@
 		<div v-if="!withinAudioPool" ref="rightHandle" class="resizehandle right"></div>
 
 		<button
-			v-if="withinAudioPool && isHovered"
+			v-if="withinAudioPool && isHovered && props.deletable === true"
 			class="trash-button"
 			@click="deleteAudioFile"
 			@pointerdown.stop
@@ -67,6 +67,7 @@ type ClipProps = {
 	audiofile: AudioFile
 	clip?: Clip
 	customWidthPx?: number
+	deletable?: boolean
 }
 
 const props = defineProps<ClipProps>()
