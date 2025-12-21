@@ -1,13 +1,8 @@
 /node_modules
 /dist
-/dist_server
 .env
-.vscode
 
-/dev.database
 dev.database
-
-/dev.audiofiles
 dev.audiofiles
 
 # Cache files
