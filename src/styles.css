@@ -62,13 +62,17 @@ body {
 	display: grid;
 	justify-items: start;
 	grid-template-columns:
-		[full-width-start breakout-left-start] minmax(var(--window-w-padding), 1fr)
-		[content-start breakout-right-start] min(
+		[full-width-start breakout-left-start] minmax(
+			var(--window-w-padding),
+			1fr
+		) [content-start breakout-right-start] min(
 			100% - calc(var(--window-w-padding) * 2),
 			var(--window-w-max-width)
 		)
-		[content-end breakout-left-end] minmax(var(--window-w-padding), 1fr)
-		[full-width-end breakout-right-end];
+		[content-end breakout-left-end] minmax(
+			var(--window-w-padding),
+			1fr
+		) [full-width-end breakout-right-end];
 }
 
 .custom-grid > * {
@@ -341,4 +345,11 @@ button * {
 .textInput:focus-visible:not(:disabled) {
 	outline: none;
 	box-shadow: 0px 0px 0px 1px color-mix(in lch, var(--border-primary), white 30%);
+}
+
+.right-mouse-down .track,
+.right-mouse-down .outmostClipWrapper {
+	cursor:
+		url('/cursor_delete2.png') 7 1,
+		auto !important;
 }

@@ -59,6 +59,14 @@ useEventListener(window, 'pointerup', (event) => {
 	}
 })
 
+watchEffect(() => {
+	if (rightMouseButtonPressed.value) {
+		document.body.classList.add('right-mouse-down')
+	} else {
+		document.body.classList.remove('right-mouse-down')
+	}
+})
+
 useEventListener(window, 'keydown', (event) => {
 	if (event.key === 'Alt') {
 		altKeyPressed.value = true
