@@ -95,12 +95,22 @@ export const migrations: Migration[] = [
                     created_at TIMESTAMPTZ DEFAULT NOW()
                 )`)
 
-			await queryFn(`
+			            await queryFn(`
                 CREATE TABLE IF NOT EXISTS ${SESSIONS_TABLE} (
                     session_id TEXT PRIMARY KEY,
                     user_id TEXT NOT NULL REFERENCES ${USERS_TABLE}(id) ON DELETE CASCADE ON UPDATE CASCADE,
                     created_at TIMESTAMPTZ DEFAULT NOW()
                 )`)
-		},
-	},
+        },
+    },
+    {
+        id: 2,
+        name: 'add_gain_to_clips',
+        func: async (queryFn) => {
+            await queryFn(`
+                ALTER TABLE ${CLIPS_TABLE} 
+                ADD COLUMN gain DOUBLE PRECISION NOT NULL DEFAULT 1.0
+            `)
+        },
+    },
 ]

@@ -18,10 +18,8 @@
 			<canvas ref="canvas" :style="canvasStyles"></canvas>
 		</div>
 
-		<!-- LEFT HANDLE -->
 		<div v-if="!withinAudioPool" ref="leftHandle" class="resizehandle"></div>
 
-		<!-- RIGHT HANDLE -->
 		<div v-if="!withinAudioPool" ref="rightHandle" class="resizehandle right"></div>
 
 		<button
@@ -32,11 +30,18 @@
 		>
 			<Trash2 :size="13" />
 		</button>
+
+		<div
+			v-if="!withinAudioPool"
+			ref="volumeHandle"
+			class="volume-handle"
+			@pointerdown.prevent.stop="startVolumeDrag"
+		></div>
 	</div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef, useTemplateRef, type CSSProperties } from 'vue'
+import { computed, onMounted, ref, shallowRef, useTemplateRef, type CSSProperties, watch } from 'vue'
 import {
 	TOTAL_BEATS,
 	altKeyPressed,
@@ -65,6 +70,7 @@ const { addToast } = useToast()
 const wrapperEl = useTemplateRef('clipWrapper')
 const leftHandleEl = useTemplateRef('leftHandle')
 const rightHandleEl = useTemplateRef('rightHandle')
+const volumeHandleEl = useTemplateRef('volumeHandle')
 
 const canvasEl = useTemplateRef('canvas')
 const { width: canvasWidth, height: canvasHeight } = useElementBounding(canvasEl)
@@ -123,7 +129,6 @@ const initialClipState = computed(() => {
 	if (typeof props.customWidthPx !== 'number')
 		throw new Error('customWidthPx must be a number if clip is not provided')
 
-	// mock clip for audio pool
 	return {
 		start_beat: 0,
 		end_beat: px_to_beats(props.customWidthPx),
@@ -131,7 +136,6 @@ const initialClipState = computed(() => {
 	}
 })
 
-// Unified state that switches to drag preview values when active
 const displayState = computed(() => {
 	if (dragSession.value) {
 		return {
@@ -190,8 +194,6 @@ const dragSession = ref<{
 	verticalOffsetPx: number
 	sourceTrackRect?: DOMRect
 } | null>(null)
-
-// functionality for timeline clips
 
 onMounted(() => {
 	if (withinAudioPool.value) {
@@ -262,7 +264,6 @@ onMounted(() => {
 
 				e.preventDefault()
 
-				// --- HORIZONTAL ---
 				const dxPx = e.clientX - sesh.startX
 				let deltaBeats = px_to_beats(dxPx)
 
@@ -273,24 +274,20 @@ onMounted(() => {
 				const currentDuration = sesh.origEndBeat - sesh.origStartBeat
 				let newStart = sesh.origStartBeat + deltaBeats
 
-				// Clamp start to 0
 				newStart = Math.max(0, newStart)
 
 				let newEnd = newStart + currentDuration
 
-				// Crop end to TOTAL_BEATS
 				newEnd = Math.min(newEnd, TOTAL_BEATS)
 
 				sesh.previewStartBeat = newStart
 				sesh.previewEndBeat = newEnd
 
-				// --- VERTICAL ---
 				const els = document.elementsFromPoint(e.clientX, e.clientY)
 				const trackEl = els.find((el) => el.classList.contains('track')) as HTMLElement | undefined
 
 				if (trackEl && sesh.sourceTrackRect) {
 					const targetRect = trackEl.getBoundingClientRect()
-					// Snap visual to track top difference
 					const snapY = targetRect.top - sesh.sourceTrackRect.top
 
 					sesh.verticalOffsetPx = snapY
@@ -306,7 +303,6 @@ onMounted(() => {
 				const sesh = dragSession.value
 				if (!sesh || !props.clip) return
 
-				// Commit changes
 				const clip = clips.get(props.clip.id)
 				if (!clip) return
 
@@ -327,9 +323,16 @@ onMounted(() => {
 					return
 				}
 
+				const db = gainDb.value;
+				const linear = dbToLinear(db);
+
 				const res = await socket.emitWithAck('get:clip:update', {
 					id: clip.id,
-					changes,
+					changes: {
+        				gain_db: db,
+        				gain: linear, // just to make sure xd
+						...changes,
+					},
 				})
 
 				if (res.success) {
@@ -370,7 +373,7 @@ onMounted(() => {
 				previewOffsetSec: initialClipState.value.offset_seconds,
 				startY: event.clientY,
 				currentY: event.clientY,
-				previewTrackId: props.clip!.track_id, // We know clip exists if not withinAudioPool
+				previewTrackId: props.clip!.track_id,
 				verticalOffsetPx: 0,
 			}
 
@@ -391,34 +394,21 @@ onMounted(() => {
 					deltaBeats = quantize_beats(deltaBeats)
 				}
 
-				// this can only ever be left handle per definition
-
 				if (sesh.side !== 'left') throw Error('HOW?')
 
 				const minLength = 0.3
 				let newStart = sesh.origStartBeat + deltaBeats
 
-				// timeline
 				newStart = Math.max(0, newStart)
 
 				if (sesh.origEndBeat - newStart < minLength) {
 					newStart = sesh.origEndBeat - minLength
 				}
 
-				// Offset follows crop
-				// If we move start right (positive delta), we truncate the beginning, so offset INCREASES
-				// If we move start left (negative delta), we reveal earlier audio, so offset DECREASES
 				let newOffset = sesh.origOffsetSec + beats_to_sec(newStart - sesh.origStartBeat)
 
-				// Clamp offset at 0 (cannot reveal before start of file)
 				if (newOffset < 0) {
 					newOffset = 0
-					// Recalculate start based on clamped offset
-					// newOffset = origOffset + (newStart - origStart)*btosec
-					// 0 = origOffset + (newStart - origStart)*btosec
-					// -origOffset = (newStart - origStart)*btosec
-					// -origOffset/btosec = newStart - origStart
-					// newStart = origStart - sec_to_beats(origOffset)
 					newStart = sesh.origStartBeat - sec_to_beats(sesh.origOffsetSec)
 				}
 
@@ -525,7 +515,6 @@ onMounted(() => {
 
 				newEnd = Math.min(newEnd, maxEndFromFile)
 
-				// Timeline bound
 				newEnd = Math.min(newEnd, TOTAL_BEATS)
 
 				sesh.previewEndBeat = newEnd
@@ -589,14 +578,9 @@ const canvasStyles = computed((): CSSProperties => {
 		}
 	}
 
-	// Full Waveform Strategy
-
-	// Total Duration of file convert to width
 	const totalDurationBeats = sec_to_beats(props.audiofile.duration)
 	const totalWidthPx = beats_to_px(totalDurationBeats)
 
-	// Offset Shift
-	// If offset is 10s, we want to visually shift the waveform -10s left so the visible part starts at 10s
 	const offsetBeats = sec_to_beats(displayState.value.offset_seconds)
 	const leftPx = -1 * beats_to_px(offsetBeats)
 
@@ -609,6 +593,99 @@ const canvasStyles = computed((): CSSProperties => {
 })
 
 const waveformsDrawn = shallowRef<boolean>(false)
+
+const MIN_DB = -64
+const MAX_DB = 0
+
+function dbToLinear(db: number) {
+	return Math.pow(10, db / 20)
+}
+function linearToDb(linear: number) {
+	if (linear <= 0) return MIN_DB
+	const d = 20 * Math.log10(linear)
+	return Math.max(MIN_DB, Math.min(MAX_DB, d))
+}
+
+const gainDb = ref<number>(0)
+
+watch(
+	() => props.clip?.gain_db,
+	(val) => {
+		if (val !== undefined && val !== null) {
+			gainDb.value = Math.max(MIN_DB, Math.min(MAX_DB, val))
+		}
+	},
+	{ immediate: true },
+)
+
+watch(
+	() => props.clip?.gain,
+	(val) => {
+		if (val !== undefined && val !== null) {
+			gainDb.value = linearToDb(val)
+		}
+	},
+	{ immediate: true },
+)
+
+function startVolumeDrag(event: PointerEvent) {
+	const el = volumeHandleEl.value || (event.currentTarget as HTMLElement)
+	if (!el) return
+
+	const startY = event.clientY
+	const startDb = gainDb.value
+
+	el.setPointerCapture?.(event.pointerId)
+
+	const sensitivity = 2
+
+	const onMove = (e: PointerEvent) => {
+		const delta = startY - e.clientY
+		let newDb = startDb + delta / sensitivity
+		newDb = Math.max(MIN_DB, Math.min(MAX_DB, newDb))
+		gainDb.value = newDb
+		drawWaveform()
+	}
+
+	const onUp = async (e: PointerEvent) => {
+		el.releasePointerCapture?.(e.pointerId)
+		window.removeEventListener('pointermove', onMove)
+		window.removeEventListener('pointerup', onUp)
+
+		const db = gainDb.value
+		const linear = dbToLinear(db)
+
+		if (!props.clip) return
+
+		const clip = clips.get(props.clip.id)
+		if (!clip) return
+
+		if (clip.id.startsWith('__temp__')) {
+			clip.gain = linear
+			clip.gain_db = db
+			return
+		}
+
+		const res = await socket.emitWithAck('get:clip:update', {
+			id: clip.id,
+			changes: {
+				gain_db: db,
+				gain: linear,
+			},
+		})
+
+		if (res.success) {
+			clip.gain = res.data['gain'] ?? linear
+			clip.gain_db = res.data['gain_db'] ?? db
+		} else {
+			clip.gain = linear
+			clip.gain_db = db
+		}
+	}
+
+	window.addEventListener('pointermove', onMove)
+	window.addEventListener('pointerup', onUp)
+}
 
 async function drawWaveform() {
 	if (!canvasEl.value || !props.audiofile) return
@@ -632,8 +709,13 @@ async function drawWaveform() {
 	ctx.save()
 	ctx.scale(pr, pr)
 
-	// Since we are stretching LODs, we want to disable smoothing to keep it crisp
 	ctx.imageSmoothingEnabled = false
+
+	const linearGain = dbToLinear(gainDb.value)
+	const centerY = canvasHeight.value / 2
+	ctx.translate(0, centerY)
+	ctx.scale(1, Math.max(0.0001, linearGain))
+	ctx.translate(0, -centerY)
 
 	const bitmap = getWaveform(props.audiofile, canvasWidth.value, props.audiofile.duration)
 
@@ -643,7 +725,6 @@ async function drawWaveform() {
 
 		ctx.globalCompositeOperation = 'source-in'
 
-		// Mix with black (0.2 = 20% black)
 		const mixed = interpolate([props.audiofile.color, '#000000'])(0.2)
 		ctx.fillStyle = formatHex(mixed) ?? props.audiofile.color
 		ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
@@ -661,6 +742,7 @@ watchThrottled(
 		() => props.audiofile.waveforms,
 		() => props.audiofile.color,
 		pixelRatio,
+		gainDb,
 	],
 	() => {
 		drawWaveform()
@@ -694,7 +776,6 @@ function getWaveform(
 	display: grid;
 	grid-template-rows: auto 1fr;
 	grid-template-areas: 'header' 'canvas';
-	/* border-radius: 3px; */
 	border-radius: 0.5rem;
 	position: relative;
 	z-index: 1;
@@ -733,7 +814,6 @@ function getWaveform(
 }
 
 canvas {
-	/* width: 100%; */
 	height: 100%;
 	display: block;
 	will-change: transform;
@@ -747,12 +827,11 @@ canvas {
 	top: 0;
 	width: min(1rem, 30%);
 	cursor: w-resize;
-	/* border: 1px solid #ff0000; */
 	z-index: 5;
 }
 
 .resizehandle:active {
-	cursor: ew-resize !important;
+	cursor: ew-resize;
 }
 
 .resizehandle.right {
@@ -812,5 +891,19 @@ canvas {
 	border-radius: 0.4rem;
 
 	background-color: color-mix(in lch, transparent, black 60%);
+}
+
+.volume-handle {
+	position: absolute;
+	bottom: 4px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: white;
+	cursor: ns-resize;
+	z-index: 6;
+	box-shadow: 0 0 0 1px rgba(0,0,0,0.08);
 }
 </style>

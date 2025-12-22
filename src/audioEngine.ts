@@ -4,9 +4,6 @@ import { useIntervalFn, useRafFn, watchThrottled } from '@vueuse/core'
 import { clips, TOTAL_BEATS, audioBuffers } from '@/state'
 import type { Clip, ServerTrack } from '~/schema'
 
-// this is very hacked together, some ai stuff here aswell :D
-// gotta clean this up when i get the time
-
 const inDev = import.meta.env.MODE === 'development'
 
 export const audioContext = new AudioContext()
@@ -17,19 +14,18 @@ const trackGainNodes = new Map<string, GainNode>()
 
 const SCHEDULER_LOOP_INRERVAL_MS = 25 as const
 
-// Playback State
 export const isPlaying = shallowRef(false)
-const playbackStartTime = shallowRef(0) // The timestamp in the AudioContext (hardware clock) when you hit "Play".
-const startOffset = shallowRef(0) // The position in the Song (e.g., 10 seconds in) where the Playhead was located when you hit "Play".
+const playbackStartTime = shallowRef(0)
+const startOffset = shallowRef(0)
 export const currentTime = shallowRef(0)
 const playId = shallowRef<symbol>(Symbol())
 
 const nextScheduleTime = shallowRef(0)
-const activeSources = new Map<string, { source: AudioBufferSourceNode; hash: string }>()
-const scheduledClipIds = new Set<string>() // kept for loop lookahead optimization if needed, but might be redundant with activeSources check
+type ActiveWrapper = { source: AudioBufferSourceNode; hash: string; gainNode?: GainNode }
+const activeSources = new Map<string, ActiveWrapper>()
+const scheduledClipIds = new Set<string>()
 export const restingPositionSec = shallowRef(0)
 
-// Loop State
 const loopStartBeat = shallowRef<number | null>(null)
 const loopEndBeat = shallowRef<number | null>(null)
 
@@ -41,7 +37,7 @@ export const loopRangeBeats = computed(() => {
 })
 
 function getClipHash(clip: Clip): string {
-	return `${clip.start_beat}:${clip.end_beat}:${clip.offset_seconds}:${clip.audio_file_id}:${clip.track_id}:${clip.gain_db}`
+	return `${clip.start_beat}:${clip.end_beat}:${clip.offset_seconds}:${clip.audio_file_id}:${clip.track_id}`
 }
 
 function stopSource(sourceWrapper: { source: AudioBufferSourceNode }) {
@@ -52,37 +48,31 @@ function stopSource(sourceWrapper: { source: AudioBufferSourceNode }) {
 	}
 }
 
+function dbToLinear(db: number) {
+	return Math.pow(10, db / 20)
+}
+
 function reconcileActiveSources() {
 	if (!isPlaying.value) return
 
 	for (const [clipId, wrapper] of activeSources.entries()) {
 		const clip = clips.get(clipId)
 
-		// Clip deleted
 		if (!clip) {
 			stopSource(wrapper)
 			activeSources.delete(clipId)
 			continue
 		}
 
-		// Clip changed (hash mismatch)
 		const currentHash = getClipHash(clip)
 		if (currentHash !== wrapper.hash) {
 			stopSource(wrapper)
 			activeSources.delete(clipId)
-			// It will be re-scheduled in the next step if valid
 		}
 	}
 
 	const elapsedSeconds = audioContext.currentTime - playbackStartTime.value
 	const currentSongTime = startOffset.value + elapsedSeconds
-
-	// We look a bit ahead to catch clips starting very soon, but mostly for "now"
-	// use a small lookahead for immediate reaction, schedulerLoop handles the future.
-	// For immediate user interaction (drag/drop), we want to start NOW if we are "in" the clip.
-
-	// Check all clips to see if they should be playing NOW and aren't.
-	// This looks O(N) but N is small (number of clips).
 
 	for (const clip of clips.values()) {
 		if (activeSources.has(clip.id)) continue
@@ -90,17 +80,11 @@ function reconcileActiveSources() {
 		const clipStartSeconds = beats_to_sec(clip.start_beat)
 		const clipEndSeconds = beats_to_sec(clip.end_beat)
 
-		// Check availability
 		const buffer = audioBuffers.get(clip.audio_file_id)
 		const trackGainNode = trackGainNodes.get(clip.track_id)
 		if (!buffer || !trackGainNode) continue
 
-		// If the clip is "playing right now":
-		// start <= current < end
 		if (currentSongTime >= clipStartSeconds && currentSongTime < clipEndSeconds) {
-			// Schedule it!
-			// We need to calculate correct offset.
-
 			scheduleClipSource(clip, clipStartSeconds)
 		}
 	}
@@ -143,7 +127,7 @@ export function registerTrack(trackId: ServerTrack['id']) {
 	const gainNode = audioContext.createGain()
 	gainNode.connect(masterGain)
 
-	gainNode.gain.value = 1 // todo: implement when actually getting to gain stuff
+	gainNode.gain.value = 1
 	trackGainNodes.set(trackId, gainNode)
 }
 
@@ -173,7 +157,6 @@ const schedulerLoop = useIntervalFn(
 		for (const clip of clips.values()) {
 			if (activeSources.has(clip.id)) continue
 
-			// todo: more efficient lookahead
 			const clipStartSeconds = beats_to_sec(clip.start_beat)
 
 			if (clipStartSeconds > songTimeSeconds && clipStartSeconds <= lookAheadLimitSec) {
@@ -182,8 +165,6 @@ const schedulerLoop = useIntervalFn(
 		}
 
 		nextScheduleTime.value = lookAheadLimitSec
-
-		// todo: implement single loop logic
 
 		if (songTimeSeconds > fullDurationSeconds.value) {
 			seek(0)
@@ -202,50 +183,47 @@ function scheduleClipSource(clip: Clip, whenAbsoluteSeconds: number) {
 	if (!buffer || !trackGainNode) return
 
 	const source = audioContext.createBufferSource()
-
 	source.buffer = buffer
-	source.connect(trackGainNode)
+
+	const clipGainNode = audioContext.createGain();
+	let linear = 1; // ts (slang for this) prioritiestize clip.gain over clip.gain_db 
+	if (typeof clip.gain === 'number') {
+		linear = clip.gain;
+	} else if (typeof clip.gain_db === 'number') {
+		linear = dbToLinear(clip.gain_db);
+	}
+	clipGainNode.gain.value = linear
+
+	source.connect(clipGainNode)
+	clipGainNode.connect(trackGainNode)
 
 	const whenToPlay = playbackStartTime.value + (whenAbsoluteSeconds - startOffset.value)
-	// IMPORTANT: start() time parameter is in AudioContext time.
-	// whenAbsoluteSeconds is Song time.
-
 	let offsetSeconds = 0
 	let playAt = whenToPlay
 
 	const now = audioContext.currentTime
 
 	if (playAt < now) {
-		// It should have started in the past.
-		// Calculate how far into the clip we are.
-		// whenAbsoluteSeconds is where the clip starts in song time.
-		// whenToPlay is that song-start-time mapped to context time.
-
 		const timeMissed = now - playAt
 		offsetSeconds = timeMissed
 		playAt = now
 	}
 
-	// Add clip's own internal offset (trimming)
 	const finalOffset = clip.offset_seconds + offsetSeconds
 	const durationSeconds = beats_to_sec(clip.end_beat - clip.start_beat) - offsetSeconds
 
-	if (durationSeconds <= 0) return // playing end of clip?
+	if (durationSeconds <= 0) return
 
 	source.start(playAt, finalOffset, durationSeconds)
 
 	const hash = getClipHash(clip)
-	const wrapper = { source, hash }
+	const wrapper: ActiveWrapper = { source, hash, gainNode: clipGainNode }
 	activeSources.set(clip.id, wrapper)
 
 	const sessionId = playId.value
 
 	source.onended = () => {
 		if (playId.value !== sessionId) return
-
-		// Only delete if THIS wrapper is the one currently stored
-		// This prevents race condition where immediate rescheduling (synchronous)
-		// is wiped out by the async onended of the previous source
 		const active = activeSources.get(clip.id)
 		if (active && active.source === source) {
 			activeSources.delete(clip.id)
@@ -258,13 +236,9 @@ function scheduleInitialClips(startTimeSeconds: number) {
 		const clipStartSeconds = beats_to_sec(clip.start_beat)
 		const clipEndSeconds = beats_to_sec(clip.end_beat)
 
-		// 1. Starts in future?
-		if (clipStartSeconds > startTimeSeconds) continue // schedulerLoop will pick it up
-
-		// 2. Ended in past?
+		if (clipStartSeconds > startTimeSeconds) continue
 		if (clipEndSeconds < startTimeSeconds) continue
 
-		// 3. Overlaps current moment!
 		scheduleClipSource(clip, clipStartSeconds)
 	}
 }
@@ -312,7 +286,6 @@ export function seek(newTimeSeconds: number, opts?: { setAsRest?: boolean }) {
 	const defaults = { setAsRest: false }
 	const options = { ...defaults, ...opts }
 
-	// todo: make sure that after loop end, is clipped somehow not to play after the  loop pos kinda
 	const targetSeconds = Math.max(0, newTimeSeconds)
 
 	if (options.setAsRest) {
@@ -349,8 +322,22 @@ export function reset() {
 	playheadPx.value = 0
 	playheadSec.value = 0
 
-	// reset loops
-
 	schedulerLoop.pause()
 	uiRAFLoop.pause()
 }
+
+watchThrottled(
+	clips,
+	() => {
+		for (const [clipId, wrapper] of activeSources.entries()) {
+			const clip = clips.get(clipId)
+			if (!clip || !wrapper.gainNode) continue
+			const targetLinear = typeof clip.gain === 'number' ? clip.gain : (typeof clip.gain_db === 'number' ? dbToLinear(clip.gain_db) : 1)
+			const current = wrapper.gainNode.gain.value
+			if (Math.abs(current - targetLinear) > 0.0001) {
+				wrapper.gainNode.gain.setTargetAtTime(targetLinear, audioContext.currentTime, 0.01)
+			}
+		}
+	},
+	{ throttle: 50 },
+)
