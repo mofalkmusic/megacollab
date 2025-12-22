@@ -16,16 +16,18 @@ export type AudioFileBase = z.output<typeof audioFileBaseSchema>
 
 // CLIPS
 
+// schema.ts
 export const clipSchema = z.object({
-	id: z.string(),
-	track_id: z.string(), // foreign key
-	audio_file_id: z.string(), // foreign key
-	creator_user_id: z.string(), // foreign key
-	start_beat: z.number(),
-	end_beat: z.number(),
-	offset_seconds: z.number(),
-	gain_db: z.number(),
-	created_at: z.iso.datetime({ offset: true }),
+    id: z.string(),
+    track_id: z.string(),
+    audio_file_id: z.string(),
+    creator_user_id: z.string(),
+    start_beat: z.number(),
+    end_beat: z.number(),
+    offset_seconds: z.number(),
+    gain_db: z.number(),
+    gain: z.number(), // for the ball gain thingy 
+    created_at: z.iso.datetime({ offset: true }),
 })
 
 export type Clip = z.output<typeof clipSchema>
