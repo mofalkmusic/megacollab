@@ -16,7 +16,7 @@
 				<User :size="18" />
 			</button>
 
-			<div v-if="!isUserMenuOpen" ref="userMenu" style="z-index: 100" :style="floatingStyles">
+			<div v-if="isUserMenuOpen" ref="userMenu" style="z-index: 100" :style="floatingStyles">
 				<UserMenu @on-updated="update()" @on-undo="tryUndo()" @on-send-chat="sendChat()" />
 			</div>
 		</div>
