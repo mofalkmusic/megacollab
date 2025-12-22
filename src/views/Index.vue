@@ -16,7 +16,7 @@
 				<User :size="18" />
 			</button>
 
-			<div v-if="isUserMenuOpen" ref="userMenu" style="z-index: 100" :style="floatingStyles">
+			<div v-if="!isUserMenuOpen" ref="userMenu" style="z-index: 100" :style="floatingStyles">
 				<UserMenu @on-updated="update()" @on-undo="tryUndo()" @on-send-chat="sendChat()" />
 			</div>
 		</div>
@@ -27,7 +27,7 @@
 			<TrackControls />
 			<div class="all-tracks-wrapper" ref="tracksWrapper" :style="{ width: `${timelineWidth}px` }">
 				<TimelineHeader />
-				<TrackInstance v-for="[id, track] in tracks" :key="id" :track="track" />
+				<TrackInstance v-for="[id, track] in sortedTracks" :key="id" :track="track" />
 
 				<ClipInstance
 					v-if="ghostClip && ghostAudioFile && ghostDragState.track_id"
@@ -161,6 +161,10 @@ import { useToast } from '@/composables/useToast'
 import GlobalLoadingIndicator from '@/components/GlobalLoadingIndicator.vue'
 import { nanoid } from 'nanoid'
 const { addToast } = useToast()
+
+const sortedTracks = computed(() => {
+	return [...tracks.entries()].sort((a, b) => a[1].order_index - b[1].order_index)
+})
 
 // todo
 function sendChat() {

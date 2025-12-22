@@ -7,6 +7,7 @@ import {
 	timelinePosSchema,
 	type AppError,
 	updateClipSchema,
+	updateTrackSchema,
 	ClientTrackScema,
 } from './schema'
 
@@ -74,6 +75,11 @@ export const EVENTS = Object.freeze({
 		'clip:update': clipSchema,
 		'clip:delete': clipSchema.shape['id'],
 		'track:create': ClientTrackScema,
+		'track:delete': z.object({
+			track_id: ClientTrackScema.shape['id'],
+			deleted_clips: z.array(clipSchema.shape['id']),
+		}),
+		'track:update': ClientTrackScema,
 	},
 	CLIENT_REQUESTS: {
 		'get:ping': defineRequest({
@@ -103,6 +109,13 @@ export const EVENTS = Object.freeze({
 		}),
 		'get:track:create': defineRequest({
 			req: z.null(),
+			res: ClientTrackScema,
+		}),
+		'get:track:update': defineRequest({
+			req: z.object({
+				id: ClientTrackScema.shape['id'],
+				changes: updateTrackSchema,
+			}),
 			res: ClientTrackScema,
 		}),
 		'get:clip:create': defineRequest({
@@ -143,6 +156,13 @@ export const EVENTS = Object.freeze({
 			req: audioFileBaseSchema.pick({ id: true }),
 			res: z.object({
 				audio_file: audioFileBaseSchema.pick({ id: true }),
+				deleted_clips: z.array(clipSchema.shape['id']),
+			}),
+		}),
+		'get:track:delete': defineRequest({
+			req: ClientTrackScema.pick({ id: true }),
+			res: z.object({
+				track_id: ClientTrackScema.shape['id'],
 				deleted_clips: z.array(clipSchema.shape['id']),
 			}),
 		}),

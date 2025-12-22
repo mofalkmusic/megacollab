@@ -1,5 +1,5 @@
 import { computed, shallowRef, watch } from 'vue'
-import { beats_to_sec, quantize_beats } from '@/utils/mathUtils'
+import { beats_to_sec, quantize_beats, dbToGain } from '@/utils/mathUtils'
 import { useIntervalFn, useRafFn, watchThrottled } from '@vueuse/core'
 import { clips, TOTAL_BEATS, audioBuffers } from '@/state'
 import type { Clip, ServerTrack } from '~/schema'
@@ -14,8 +14,10 @@ const masterGain = audioContext.createGain()
 masterGain.connect(audioContext.destination)
 
 const trackGainNodes = new Map<string, GainNode>()
+const trackAnalysers = new Map<string, AnalyserNode>()
 
 const SCHEDULER_LOOP_INRERVAL_MS = 25 as const
+const FFT_SIZE_VOLUMES = 256 as const
 
 // Playback State
 export const isPlaying = shallowRef(false)
@@ -137,14 +139,29 @@ export function clearLoop() {
 	loopEndBeat.value = null
 }
 
-export function registerTrack(trackId: ServerTrack['id']) {
+export function registerTrack(trackId: ServerTrack['id'], initialGainDb: number = 0) {
 	if (trackGainNodes.has(trackId)) return
 
 	const gainNode = audioContext.createGain()
 	gainNode.connect(masterGain)
 
-	gainNode.gain.value = 1 // todo: implement when actually getting to gain stuff
+	gainNode.gain.value = dbToGain(initialGainDb)
 	trackGainNodes.set(trackId, gainNode)
+
+	// sidechained vol analyser
+	const analyser = audioContext.createAnalyser()
+	analyser.fftSize = FFT_SIZE_VOLUMES
+	gainNode.connect(analyser) // connect post-gain
+	trackAnalysers.set(trackId, analyser)
+}
+
+export function setTrackGain(trackId: ServerTrack['id'], gainDb: number) {
+	const gainNode = trackGainNodes.get(trackId)
+	if (!gainNode) return
+
+	// ramp to prevent clicks
+	const now = audioContext.currentTime
+	gainNode.gain.setTargetAtTime(dbToGain(gainDb), now, 0.02)
 }
 
 export function unregisterTrack(trackId: ServerTrack['id']) {
@@ -153,6 +170,34 @@ export function unregisterTrack(trackId: ServerTrack['id']) {
 
 	gainNode.disconnect()
 	trackGainNodes.delete(trackId)
+
+	const analyser = trackAnalysers.get(trackId)
+	if (analyser) {
+		analyser.disconnect()
+		trackAnalysers.delete(trackId)
+	}
+}
+
+const floatBuffer = new Float32Array(FFT_SIZE_VOLUMES)
+
+export function getTrackVolume(trackId: ServerTrack['id']): number {
+	const analyser = trackAnalysers.get(trackId)
+	if (!analyser) return 0
+
+	analyser.getFloatTimeDomainData(floatBuffer)
+
+	// find peak amplitude
+	let max = 0
+	let rms = 0
+	for (let i = 0; i < floatBuffer.length; i++) {
+		const val = floatBuffer[i] ?? 0
+		if (Math.abs(val) > max) max = Math.abs(val)
+		rms += val * val
+	}
+
+	rms = Math.sqrt(rms / floatBuffer.length)
+
+	return max
 }
 
 const uiRAFLoop = useRafFn(

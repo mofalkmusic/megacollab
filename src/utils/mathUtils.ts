@@ -25,3 +25,7 @@ export function quantize_beats(beats: number, opts?: { ceil?: boolean }) {
 	}
 	return Math.ceil(beats)
 }
+
+export function dbToGain(db: number) {
+	return Math.pow(10, db / 20)
+}

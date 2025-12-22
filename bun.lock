@@ -9,6 +9,7 @@
         "@electric-sql/pglite": "^0.3.14",
         "@floating-ui/vue": "^1.1.9",
         "@socket.io/bun-engine": "^0.1.0",
+        "@vueuse/components": "^14.1.0",
         "@vueuse/core": "^14.1.0",
         "chalk": "^5.6.2",
         "cookie": "^1.1.1",
@@ -309,6 +310,8 @@
     "@vue/shared": ["@vue/shared@3.5.26", "", {}, "sha512-7Z6/y3uFI5PRoKeorTOSXKcDj0MSasfNNltcslbFrPpcw6aXRUALq4IfJlaTRspiWIUOEZbrpM+iQGmCOiWe4A=="],
 
     "@vue/tsconfig": ["@vue/tsconfig@0.8.1", "", { "peerDependencies": { "typescript": "5.x", "vue": "^3.4.0" }, "optionalPeers": ["typescript", "vue"] }, "sha512-aK7feIWPXFSUhsCP9PFqPyFOcz4ENkb8hZ2pneL6m2UjCkccvaOhC/5KCKluuBufvp2KzkbdA2W2pk20vLzu3g=="],
+
+    "@vueuse/components": ["@vueuse/components@14.1.0", "", { "dependencies": { "@vueuse/core": "14.1.0", "@vueuse/shared": "14.1.0" }, "peerDependencies": { "vue": "^3.5.0" } }, "sha512-SDRJUAv3H7/PMh+KkYpq0d5KMzpKOfqx4qcV4xyN4mZOLPw8NkiWu+yDcfXwI8h1uCqhRNz2cdeaLa+IuaehFw=="],
 
     "@vueuse/core": ["@vueuse/core@14.1.0", "", { "dependencies": { "@types/web-bluetooth": "^0.0.21", "@vueuse/metadata": "14.1.0", "@vueuse/shared": "14.1.0" }, "peerDependencies": { "vue": "^3.5.0" } }, "sha512-rgBinKs07hAYyPF834mDTigH7BtPqvZ3Pryuzt1SD/lg5wEcWqvwzXXYGEDb2/cP0Sj5zSvHl3WkmMELr5kfWw=="],
 

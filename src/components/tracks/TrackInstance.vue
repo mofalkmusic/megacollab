@@ -46,13 +46,8 @@ const props = defineProps<{
 	track: ServerTrack
 }>()
 
-onMounted(() => {
-	registerTrack(props.track.id)
-})
-
-onUnmounted(() => {
-	unregisterTrack(props.track.id)
-})
+onMounted(() => registerTrack(props.track.id, props.track.gain_db))
+onUnmounted(() => unregisterTrack(props.track.id))
 
 const trackStyle = computed(() => {
 	const lineColor = 'var(--_minor-line-color)'

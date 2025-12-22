@@ -1,5 +1,5 @@
 import { computed, reactive, ref, shallowRef, watch, watchEffect } from 'vue'
-import { type Client, type Clip, type ServerTrack, type User } from '~/schema'
+import { type Client, type ClientTrack, type Clip, type ServerTrack, type User } from '~/schema'
 import { useDebug, type DebugEntry } from '@/composables/useDebug'
 import type { Toast } from '@/composables/useToast'
 import { useDevicePixelRatio, useEventListener, useIntervalFn, useTimeoutFn } from '@vueuse/core'
@@ -10,7 +10,7 @@ export const client = ref<Client | null>(null)
 
 export const clips = reactive<Map<string, Clip>>(new Map())
 
-export const tracks = reactive<Map<string, ServerTrack>>(new Map())
+export const tracks = reactive<Map<string, ClientTrack>>(new Map())
 
 export const audiofiles = reactive<Map<string, AudioFile>>(new Map())
 export const audioBuffers = reactive(new Map<string, AudioBuffer>())

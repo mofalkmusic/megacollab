@@ -66,7 +66,7 @@ describe('RateLimiter', () => {
 		limiter.dispose()
 	})
 
-	// Security & Edge Cases
+	// Edge Cases
 	test('handles invalid inputs gracefully', () => {
 		const limiter = new RateLimiter(1000, 5)
 
@@ -92,7 +92,8 @@ describe('RateLimiter', () => {
 		}
 
 		const end = performance.now()
-		// Should be reasonably fast (e.g., < 100ms)
+
+		// Should be reasonably fast
 		expect(end - start).toBeLessThan(100)
 
 		limiter.dispose()

@@ -213,6 +213,43 @@ io.on('connection', async (socket) => {
 			socket.broadcast.emit('track:create', track)
 		})
 
+		socket.on('get:track:update', async (data, callback) => {
+			const { id, changes } = data
+
+			const t = await db.getTrackSafe(id)
+
+			if (!t || t.belongs_to_user_id != null || t.belongs_to_user_id !== user.id) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are not authorized to update this track.',
+					},
+				})
+				return
+			}
+
+			const track = await db.updateTrackSafe(id, changes)
+
+			if (!track) {
+				callback({
+					success: false,
+					error: {
+						status: 'SERVER_ERROR',
+						message: 'Oops, something unexpected went wrong. Please try reconnecting.',
+					},
+				})
+				return
+			}
+
+			callback({
+				success: true,
+				data: track,
+			})
+
+			socket.broadcast.emit('track:update', track)
+		})
+
 		socket.on('get:clip:create', async (data, callback) => {
 			const { start_beat, end_beat, audio_file_id, track_id, offset_seconds, gain_db } = data
 
@@ -549,8 +586,6 @@ app.get('/api/auth/twitch/callback', handleTwitchOAuthCallback)
 
 const DIST_DIR = join(import.meta.dir, '..', 'dist')
 app.use('/*', serveStatic({ root: DIST_DIR }))
-
-console.log('DIST_DIR:', DIST_DIR, 'import.meta.dir:', import.meta.dir)
 
 // - It's not an API route
 // - It's not a physical file (like /assets/logo.png)
