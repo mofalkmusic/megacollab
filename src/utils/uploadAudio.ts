@@ -70,7 +70,7 @@ export async function optimisticAudioCreateUpload(
 					success: true,
 					id: existing.id,
 					duration: existing.duration,
-					uploadPromise: Promise.resolve(),
+					uploadPromise: activeUploads.get(existing.id) || Promise.resolve(),
 				}
 			} else {
 				return { success: false, reason: 'File already exists' }
@@ -135,8 +135,8 @@ export async function optimisticAudioCreateUpload(
 		// but we get early return with optimistic audiofile
 		const uploadPromise = backgroundUpload()
 
-		activeUploads.add(uploadPromise)
-		uploadPromise.finally(() => activeUploads.delete(uploadPromise))
+		activeUploads.set(file_id, uploadPromise)
+		uploadPromise.finally(() => activeUploads.delete(file_id))
 
 		return { success: true, id: file_id, duration, uploadPromise }
 	} catch (err) {

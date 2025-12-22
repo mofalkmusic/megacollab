@@ -21,7 +21,7 @@ export const globalProgresses = reactive(
 	new Map<string, { progress: number; expiresAt: number; label?: string }>(),
 )
 
-export const activeUploads = new Set<Promise<any>>()
+export const activeUploads = new Map<string, Promise<any>>()
 
 export const dragFromPoolState = shallowRef<{
 	audioFileId: string

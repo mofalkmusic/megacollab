@@ -1,4 +1,4 @@
-import { defineSocketHandler } from '@/socket/socket'
+import { defineSocketHandler, _socketError } from '@/socket/socket'
 import router from '@/router'
 
 export default defineSocketHandler({
@@ -8,6 +8,10 @@ export default defineSocketHandler({
 			router.push('/login')
 		}
 
-		console.error('server:error emitted:', data)
+		if (data.status === 'RATE_LIMIT_EXCEEDED') {
+			_socketError.value = data
+		}
+
+		console.error('server:error received:', data)
 	},
 })

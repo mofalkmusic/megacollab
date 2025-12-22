@@ -11,6 +11,7 @@ import {
 	type ServerEmitPayload,
 	type ServerAckSchape,
 } from '~/events'
+// import { RateLimiter } from './ratelimiter'
 
 const IN_DEV_MODE = Bun.env['ENV'] === 'development'
 
@@ -33,6 +34,10 @@ export type SocketData = {
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents, {}, SocketData>
+
+// todo: limit the socket events that actually are hard to compute!
+// not used for HIGH VOLUME EVENTS THAT DONT HIT THE DB (eg. ping, position update etc..)
+// const socketRateLimiter = new RateLimiter(60 * 1000, 1000) // 1 minute, 1000 requests
 
 /**
  * Socket.io custom-event only middleware

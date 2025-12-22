@@ -12,6 +12,7 @@ import {
 	type ServerEmitKeys,
 	type ServerEmitPayload,
 } from '~/events'
+import type { AppError } from '~/schema'
 import { BACKEND_PORT } from '~/constants'
 import { useDebug } from '@/composables/useDebug'
 
@@ -20,6 +21,7 @@ const websocketUrl = inDev ? `http://localhost:${BACKEND_PORT}` : ''
 
 const _socketConnected = shallowRef<boolean>(false)
 export const _socketReady = shallowRef<boolean>(false)
+export const _socketError = shallowRef<AppError | null>(null)
 
 const socketReadyState = computed<'NOT_CONNECTED' | 'INITIALIZING' | 'READY'>(() => {
 	return !_socketConnected.value ? 'NOT_CONNECTED' : !_socketReady.value ? 'INITIALIZING' : 'READY'
@@ -51,10 +53,13 @@ export const socket = {
 	emit: safeEmit,
 	emitWithAck: safeEmitWithAck,
 	readyState: socketReadyState,
+	error: _socketError,
+	connect: () => socketInstance.connect(),
 }
 
 socketInstance.on('connect', () => {
 	_socketConnected.value = true
+	_socketError.value = null
 	print('log', 'Connected', socketInstance.id?.slice(-6))
 })
 

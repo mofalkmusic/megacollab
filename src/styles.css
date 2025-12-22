@@ -62,17 +62,13 @@ body {
 	display: grid;
 	justify-items: start;
 	grid-template-columns:
-		[full-width-start breakout-left-start] minmax(
-			var(--window-w-padding),
-			1fr
-		) [content-start breakout-right-start] min(
+		[full-width-start breakout-left-start] minmax(var(--window-w-padding), 1fr)
+		[content-start breakout-right-start] min(
 			100% - calc(var(--window-w-padding) * 2),
 			var(--window-w-max-width)
 		)
-		[content-end breakout-left-end] minmax(
-			var(--window-w-padding),
-			1fr
-		) [full-width-end breakout-right-end];
+		[content-end breakout-left-end] minmax(var(--window-w-padding), 1fr)
+		[full-width-end breakout-right-end];
 }
 
 .custom-grid > * {

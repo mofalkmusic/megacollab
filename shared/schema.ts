@@ -134,6 +134,11 @@ const ConflictError = BaseError.extend({
 	status: z.literal('CONFLICT_ERROR'),
 })
 
+const RateLimitExceededError = BaseError.extend({
+	status: z.literal('RATE_LIMIT_EXCEEDED'),
+	tryAgainAtMs: z.number(),
+})
+
 export const AppErrorSchema = z.discriminatedUnion('status', [
 	UnauthenticatedError,
 	ServerError,
@@ -141,6 +146,7 @@ export const AppErrorSchema = z.discriminatedUnion('status', [
 	ClientError,
 	UnauthorizedError,
 	ConflictError,
+	RateLimitExceededError,
 ])
 
 export type AppError = z.infer<typeof AppErrorSchema>

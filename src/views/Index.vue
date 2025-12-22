@@ -125,6 +125,7 @@ import {
 	maxPxPerBeat,
 	controlKeyPressed,
 	zKeyPressed,
+	activeUploads,
 } from '@/state'
 import TrackInstance from '@/components/tracks/TrackInstance.vue'
 import {
@@ -147,7 +148,7 @@ import {
 	dragFromPoolState,
 	pxTrackHeight,
 	TOTAL_BEATS,
-	minPxPerBeat,
+	user,
 } from '@/state'
 import type { Clip } from '~/schema'
 import ClipInstance from '@/components/ClipInstance.vue'
@@ -158,6 +159,7 @@ import { useRouter } from 'vue-router'
 import UserMenu from '@/components/UserMenu.vue'
 import { useToast } from '@/composables/useToast'
 import GlobalLoadingIndicator from '@/components/GlobalLoadingIndicator.vue'
+import { nanoid } from 'nanoid'
 const { addToast } = useToast()
 
 // todo
@@ -569,18 +571,56 @@ watch(
 
 			dragFromPoolState.value = null // Clear state immediately
 
-			if (state.track_id && source) {
-				// Commit
-				const res = await socket.emitWithAck('get:clip:create', {
-					audio_file_id: source.audioFileId,
+			if (state.track_id && source && user.value) {
+				// optimistic clip
+				const tempId = `__temp__${nanoid()}`
+				const tempClip: Clip = {
+					id: tempId,
 					track_id: state.track_id,
+					audio_file_id: source.audioFileId,
+					creator_user_id: user.value.id,
 					start_beat: state.start_beat,
 					end_beat: state.end_beat,
-				})
+					offset_seconds: 0,
+					gain_db: 0,
+					created_at: new Date().toISOString(),
+				}
 
-				if (res.success) {
-					const clip = res.data
-					clips.set(clip.id, clip)
+				clips.set(tempId, tempClip)
+
+				try {
+					const uploadPromise = activeUploads.get(source.audioFileId)
+
+					if (uploadPromise) {
+						await uploadPromise
+					}
+
+					const currentClip = clips.get(tempId)
+					if (!currentClip) return // Clip was deleted by user while uploading
+
+					// Commit using the CURRENT position of the optimistic clip
+					const res = await socket.emitWithAck('get:clip:create', {
+						audio_file_id: source.audioFileId,
+						track_id: currentClip.track_id,
+						start_beat: currentClip.start_beat,
+						end_beat: currentClip.end_beat,
+						offset_seconds: currentClip.offset_seconds,
+						gain_db: currentClip.gain_db,
+					})
+
+					if (res.success) {
+						const clip = res.data
+						clips.delete(tempId) // Remove the temporary optimistic clip
+						clips.set(clip.id, clip)
+					} else {
+						// todo: add toast
+						console.error('failed to create clip:', res.error)
+						clips.delete(tempId)
+					}
+				} catch (err) {
+					// todo: add toast
+					console.error(err)
+					clips.delete(tempId)
 				}
 			}
 		}

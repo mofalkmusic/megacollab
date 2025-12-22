@@ -36,6 +36,7 @@ import { type AudioFileBase, type ClientTrack, type Clip, type ServerTrack } fro
 import { EVENTS } from '~/events'
 import { audioMimeTypes, BACKEND_PORT } from '~/constants'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
+import { RateLimiter } from './ratelimiter'
 
 const IN_DEV_MODE = Bun.env['ENV'] === 'development'
 
@@ -43,12 +44,22 @@ await db.migrateAndSeedDb()
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents, {}, SocketData>()
-const engine = new BunEngine()
 
+const engine = new BunEngine()
 io.bind(engine)
 
 io.on('connection', async (socket) => {
 	try {
+		if (socket.request.headers['x-mega-is-rate-limited'] === 'true') {
+			socket.emit('server:error', {
+				status: 'RATE_LIMIT_EXCEEDED',
+				tryAgainAtMs: Number(socket.request.headers['x-mega-rate-limit-reset']),
+				message: 'Rate limit exceeded',
+			})
+			socket.disconnect()
+			return
+		}
+
 		const user = await resolveConnectionUser(socket)
 
 		if (!user) {
@@ -463,6 +474,8 @@ io.on('connection', async (socket) => {
 
 // Hono app
 const app = new Hono()
+const apiRateLimiter = new RateLimiter(60 * 1000, 45) // 1 minute, 30 requests
+const wsHandshakeRateLimiter = new RateLimiter(60 * 1000, 15) // 1 minute, 15 requests
 
 app.use(
 	'/*',
@@ -471,9 +484,7 @@ app.use(
 			const allowed = [
 				'https://mega.mofalk.com',
 				'http://localhost:5173',
-				'http://127.0.0.1:5173',
 				`http://localhost:${BACKEND_PORT}`,
-				`http://127.0.0.1:${BACKEND_PORT}`,
 			]
 			return allowed.includes(origin) ? origin : allowed[0]
 		},
@@ -489,6 +500,22 @@ app.use(
 		return next()
 	},
 )
+
+// rate limit api auth & upload requests
+app.use('/api/*', async (c, next) => {
+	const ip = c.req.header('x-forwarded-for') || 'unknown_fallback'
+
+	const [allowed, remaining, resetTimeMs] = apiRateLimiter.allow(ip)
+
+	c.header('Retry-After', (resetTimeMs - Date.now()).toString())
+	c.header('X-RateLimit-Remaining', remaining.toString())
+
+	if (allowed) {
+		return await next()
+	}
+
+	return c.text('Rate limit exceeded', 429)
+})
 
 if (IN_DEV_MODE) {
 	// Ensure dev.audiofiles dir
@@ -539,9 +566,19 @@ Bun.serve({
 	idleTimeout: 30,
 	fetch(req, server) {
 		const url = new URL(req.url)
+
 		if (url.pathname === '/ws/') {
+			const ip =
+				server.requestIP(req)?.address || req.headers.get('x-forwarded-for') || 'unknown_fallback'
+			const [allowed, remaining, resetTimeMs] = wsHandshakeRateLimiter.allow(ip)
+
+			req.headers.set('x-mega-rate-limit-remaining', remaining.toString())
+			req.headers.set('x-mega-is-rate-limited', allowed ? 'false' : 'true')
+			req.headers.set('x-mega-rate-limit-reset', resetTimeMs.toString())
+
 			return engine.handleRequest(req, server)
 		}
+
 		return app.fetch(req, server)
 	},
 	websocket,
