@@ -214,7 +214,7 @@ io.on('connection', async (socket) => {
 		})
 
 		socket.on('get:clip:create', async (data, callback) => {
-			const { start_beat, end_beat, audio_file_id, track_id, offset_seconds, gain_db } = data
+			const { start_beat, end_beat, audio_file_id, track_id, offset_seconds, gain_db, gain } = data
 
 			const newClip: Omit<Clip, 'created_at'> = {
 				id: nanoid(),
@@ -222,6 +222,7 @@ io.on('connection', async (socket) => {
 				start_beat,
 				end_beat,
 				audio_file_id,
+				gain: gain ?? 1.0,
 				gain_db: gain_db ?? 0,
 				offset_seconds: offset_seconds ?? 0,
 				track_id,
