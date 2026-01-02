@@ -83,11 +83,19 @@ function startVolumeDrag(e: PointerEvent, trackId: string, top: number, height: 
 	if (!track) return // todo: toast, track has already been deleted
 	const initialGain = track.gain
 
+	const SENSITIVITY = 0.2
+
 	const range = 2
 	const min = 0
 
-	function update(e: PointerEvent) {
-		const relativeY = Math.max(0, Math.min(1, 1 - (e.clientY - top) / height))
+	const startY = e.clientY
+	let currentClientY = e.clientY
+	const startRelativeY = Math.max(0, Math.min(1, 1 - (e.clientY - top) / height))
+
+	function update(clientY: number) {
+		const deltaY = startY - clientY
+		const relativeDelta = (deltaY / height) * SENSITIVITY
+		const relativeY = Math.max(0, Math.min(1, startRelativeY + relativeDelta))
 
 		let gain: number = min + relativeY * range
 
@@ -105,16 +113,15 @@ function startVolumeDrag(e: PointerEvent, trackId: string, top: number, height: 
 	}
 
 	// Initial click update
-	update(e)
+	update(currentClientY)
 
 	function onMove(e: PointerEvent) {
-		update(e)
+		currentClientY = e.clientY
+		update(currentClientY)
 	}
 
-	const { stop: stopKeys } = watch([altKeyPressed, controlKeyPressed], (alt, crtl) => {
-		if (alt || crtl) {
-			update(e)
-		}
+	const { stop: stopKeys } = watch([altKeyPressed, controlKeyPressed], () => {
+		update(currentClientY)
 	})
 
 	async function onEnd() {

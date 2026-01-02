@@ -1,4 +1,5 @@
-import { defineSocketHandler, _socketError } from '@/socket/socket'
+import { defineSocketHandler } from '@/socket/socket'
+import { _socketError } from '@/socket/socket'
 import router from '@/router'
 
 export default defineSocketHandler({

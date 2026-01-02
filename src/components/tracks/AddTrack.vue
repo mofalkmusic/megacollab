@@ -16,7 +16,6 @@
 import { Plus } from 'lucide-vue-next'
 import { socket } from '@/socket/socket'
 import { tracks, dragFromPoolState } from '@/state'
-import { nextTick } from 'vue'
 import type { ClientTrack } from '~/schema'
 
 const emits = defineEmits<{ (e: 'onTrackAdded', track: ClientTrack): void }>()

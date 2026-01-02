@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client'
-import { computed, shallowRef, watchEffect } from 'vue'
+import { computed, shallowRef } from 'vue'
 import kleur from 'kleur'
 import z from 'zod'
 import {
@@ -36,7 +36,7 @@ useDebug(socketReadyState, { label: 'socket' })
 const socketInstance = io(websocketUrl, {
 	path: '/ws/',
 	autoConnect: false,
-	withCredentials: false,
+	withCredentials: true,
 	ackTimeout: 4000,
 	transports: ['websocket'],
 	secure: !inDev,
@@ -187,20 +187,11 @@ async function registerEventHandlers() {
 	}
 }
 
-export function defineSocketHandler<S extends ServerEmitKeys>(config: SocketEventHandler<S>) {
-	return config
-}
-
-if (import.meta.hot) {
-	import.meta.hot.accept(async () => {
-		print('log', 'Hot Module Replacement')
-		socketInstance.disconnect()
-		// hmr needs to bubble to consumer
-		import.meta.hot?.invalidate()
-	})
-}
-
-type SocketEventHandler<K extends ServerEmitKeys> = {
+export type SocketEventHandler<K extends ServerEmitKeys> = {
 	event: K
 	handler: (data: ServerEmitPayload<K>) => void | Promise<void>
+}
+
+export function defineSocketHandler<S extends ServerEmitKeys>(config: SocketEventHandler<S>) {
+	return config
 }

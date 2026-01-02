@@ -43,7 +43,7 @@ import {
 	clips,
 	dragFromPoolState,
 	pixelRatio,
-	rightMouseButtonPressed,
+	rightMouseButtonPressedOnTimeline,
 } from '@/state'
 import type { Clip } from '~/schema'
 import { useElementBounding, useEventListener, watchThrottled, useElementHover } from '@vueuse/core'
@@ -569,7 +569,7 @@ onMounted(() => {
 	)
 
 	useEventListener(wrapperEl, 'pointerenter', () => {
-		if (rightMouseButtonPressed.value) {
+		if (rightMouseButtonPressedOnTimeline.value) {
 			rip()
 		}
 	})
@@ -726,7 +726,7 @@ function getWaveform(
 	align-items: center;
 	justify-content: flex-start;
 	overflow: hidden;
-	background-color: color-mix(in lch, black 30%, transparent);
+	background-color: color-mix(in lch, var(--_color, black) 13%, transparent);
 	position: relative;
 	filter: none;
 	box-sizing: border-box;

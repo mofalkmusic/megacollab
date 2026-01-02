@@ -6,6 +6,7 @@ import type { Context } from 'hono'
 import z from 'zod'
 import { nanoid } from 'nanoid'
 import { randomSafeHexColor } from './utils'
+import { sanitizeLetterUnderscoreOnly } from '~/utils'
 
 const IN_DEV_MODE = Bun.env['ENV'] === 'development'
 const ALLOW_AUTH_IN_DEV_MODE = false
@@ -296,7 +297,7 @@ export async function handleTwitchOAuthCallback(c: Context) {
 
 		const newUser: Omit<User, 'created_at'> = {
 			id: nanoid(),
-			display_name: user.display_name,
+			display_name: sanitizeLetterUnderscoreOnly(user.display_name),
 			provider: 'twitch',
 			provider_email: user.email,
 			provider_id: user.id,
@@ -443,7 +444,7 @@ export async function handleDiscordOAuthCallback(c: Context) {
 
 		const newUser: Omit<User, 'created_at'> = {
 			id: nanoid(),
-			display_name: userData.username,
+			display_name: sanitizeLetterUnderscoreOnly(userData.username),
 			provider: 'discord',
 			provider_email: userData.email,
 			provider_id: userData.id,

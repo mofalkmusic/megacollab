@@ -115,8 +115,6 @@ import {
 	LoaderCircle,
 	Undo2,
 	MessageSquareShare,
-	ZoomIn,
-	ZoomOut,
 	Bug,
 	ExternalLink,
 } from 'lucide-vue-next'
@@ -124,6 +122,7 @@ import { nextTick, shallowRef, useTemplateRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
 import { vElementHover } from '@vueuse/components'
+import { isPlaying, reset } from '@/audioEngine'
 
 const isBugButtonHovered = shallowRef(false)
 function onBugHover(hovered: boolean) {
@@ -134,6 +133,10 @@ const router = useRouter()
 const inDev = import.meta.env.MODE === 'development'
 
 function signout() {
+	if (isPlaying.value) {
+		reset()
+	}
+
 	if (inDev) {
 		router.push('/login')
 		return

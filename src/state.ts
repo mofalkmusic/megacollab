@@ -48,22 +48,22 @@ export const altKeyPressed = shallowRef(false)
 export const controlKeyPressed = shallowRef(false)
 export const zKeyPressed = shallowRef(false)
 export const tKeyPressed = shallowRef(false)
-export const rightMouseButtonPressed = shallowRef(false)
+export const rightMouseButtonPressedOnTimeline = shallowRef(false)
 
 useEventListener(window, 'pointerdown', (event) => {
 	if (event.button === 2) {
-		rightMouseButtonPressed.value = true
+		rightMouseButtonPressedOnTimeline.value = true
 	}
 })
 
 useEventListener(window, 'pointerup', (event) => {
 	if (event.button === 2) {
-		rightMouseButtonPressed.value = false
+		rightMouseButtonPressedOnTimeline.value = false
 	}
 })
 
 watchEffect(() => {
-	if (rightMouseButtonPressed.value) {
+	if (rightMouseButtonPressedOnTimeline.value) {
 		document.body.classList.add('right-mouse-down')
 	} else {
 		document.body.classList.remove('right-mouse-down')

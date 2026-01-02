@@ -1,5 +1,6 @@
-import { _socketReady, defineSocketHandler } from '@/socket/socket'
-import { audiofiles, client, clips, tracks, user } from '@/state'
+import { defineSocketHandler } from '@/socket/socket'
+import { _socketReady } from '@/socket/socket'
+import { audiofiles, clips, tracks, user } from '@/state'
 import { ingestNewAudioFileMetadata } from '@/utils/preProcessAudio'
 import { pruneAudioCache } from '@/utils/workerPool'
 import { useToast } from '@/composables/useToast'
