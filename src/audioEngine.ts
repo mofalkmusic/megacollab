@@ -1,5 +1,5 @@
 import { computed, shallowRef, watch } from 'vue'
-import { beats_to_sec, quantize_beats, dbToGain } from '@/utils/mathUtils'
+import { beats_to_sec, quantize_beats } from '@/utils/mathUtils'
 import { useIntervalFn, useRafFn, watchThrottled } from '@vueuse/core'
 import { clips, TOTAL_BEATS, audioBuffers } from '@/state'
 import type { Clip, ServerTrack } from '~/schema'
@@ -27,7 +27,10 @@ export const currentTime = shallowRef(0)
 const playId = shallowRef<symbol>(Symbol())
 
 const nextScheduleTime = shallowRef(0)
-const activeSources = new Map<string, { source: AudioBufferSourceNode; hash: string }>()
+const activeSources = new Map<
+	string,
+	{ source: AudioBufferSourceNode; gainNode: GainNode; hash: string }
+>()
 const scheduledClipIds = new Set<string>() // kept for loop lookahead optimization if needed, but might be redundant with activeSources check
 export const restingPositionSec = shallowRef(0)
 
@@ -43,12 +46,14 @@ export const loopRangeBeats = computed(() => {
 })
 
 function getClipHash(clip: Clip): string {
-	return `${clip.start_beat}:${clip.end_beat}:${clip.offset_seconds}:${clip.audio_file_id}:${clip.track_id}:${clip.gain_db}`
+	return `${clip.start_beat}:${clip.end_beat}:${clip.offset_seconds}:${clip.audio_file_id}:${clip.track_id}:${clip.gain}`
 }
 
-function stopSource(sourceWrapper: { source: AudioBufferSourceNode }) {
+function stopSource(sourceWrapper: { source: AudioBufferSourceNode; gainNode: GainNode }) {
 	try {
 		sourceWrapper.source.stop()
+		sourceWrapper.source.disconnect()
+		sourceWrapper.gainNode.disconnect()
 	} catch (e) {
 		if (inDev) console.error(e)
 	}
@@ -139,13 +144,13 @@ export function clearLoop() {
 	loopEndBeat.value = null
 }
 
-export function registerTrack(trackId: ServerTrack['id'], initialGainDb: number = 0) {
+export function registerTrack(trackId: ServerTrack['id'], initialGain: number = 1) {
 	if (trackGainNodes.has(trackId)) return
 
 	const gainNode = audioContext.createGain()
 	gainNode.connect(masterGain)
 
-	gainNode.gain.value = dbToGain(initialGainDb)
+	gainNode.gain.value = initialGain
 	trackGainNodes.set(trackId, gainNode)
 
 	// sidechained vol analyser
@@ -155,13 +160,13 @@ export function registerTrack(trackId: ServerTrack['id'], initialGainDb: number 
 	trackAnalysers.set(trackId, analyser)
 }
 
-export function setTrackGain(trackId: ServerTrack['id'], gainDb: number) {
+export function setTrackGain(trackId: ServerTrack['id'], gain: number) {
 	const gainNode = trackGainNodes.get(trackId)
 	if (!gainNode) return
 
 	// ramp to prevent clicks
 	const now = audioContext.currentTime
-	gainNode.gain.setTargetAtTime(dbToGain(gainDb), now, 0.02)
+	gainNode.gain.setTargetAtTime(gain, now, 0.02)
 }
 
 export function unregisterTrack(trackId: ServerTrack['id']) {
@@ -247,9 +252,13 @@ function scheduleClipSource(clip: Clip, whenAbsoluteSeconds: number) {
 	if (!buffer || !trackGainNode) return
 
 	const source = audioContext.createBufferSource()
+	const clipGainNode = audioContext.createGain()
+
+	clipGainNode.gain.value = clip.gain
 
 	source.buffer = buffer
-	source.connect(trackGainNode)
+	source.connect(clipGainNode)
+	clipGainNode.connect(trackGainNode)
 
 	const whenToPlay = playbackStartTime.value + (whenAbsoluteSeconds - startOffset.value)
 	// IMPORTANT: start() time parameter is in AudioContext time.
@@ -280,7 +289,7 @@ function scheduleClipSource(clip: Clip, whenAbsoluteSeconds: number) {
 	source.start(playAt, finalOffset, durationSeconds)
 
 	const hash = getClipHash(clip)
-	const wrapper = { source, hash }
+	const wrapper = { source, gainNode: clipGainNode, hash }
 	activeSources.set(clip.id, wrapper)
 
 	const sessionId = playId.value
@@ -294,6 +303,7 @@ function scheduleClipSource(clip: Clip, whenAbsoluteSeconds: number) {
 		const active = activeSources.get(clip.id)
 		if (active && active.source === source) {
 			activeSources.delete(clip.id)
+			clipGainNode.disconnect()
 		}
 	}
 }

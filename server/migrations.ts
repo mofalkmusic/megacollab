@@ -103,4 +103,12 @@ export const migrations: Migration[] = [
                 )`)
 		},
 	},
+	{
+		id: 2,
+		name: 'gain_db_to_gain',
+		func: async (queryFn) => {
+			await queryFn(`ALTER TABLE ${TRACKS_TABLE} RENAME COLUMN gain_db TO gain`)
+			await queryFn(`ALTER TABLE ${CLIPS_TABLE} RENAME COLUMN gain_db TO gain`)
+		},
+	},
 ]

@@ -24,7 +24,7 @@ export const clipSchema = z.object({
 	start_beat: z.number(),
 	end_beat: z.number(),
 	offset_seconds: z.number(),
-	gain_db: z.number(),
+	gain: z.number(),
 	created_at: z.iso.datetime({ offset: true }),
 })
 
@@ -44,7 +44,7 @@ export const ServerTrackSchema = z.object({
 	belongs_to_user_id: z.string().nullable(), // foreign key + null for editable by all
 	title: z.string().nullable(),
 	order_index: z.number(),
-	gain_db: z.number(),
+	gain: z.number(),
 	created_at: z.iso.datetime({ offset: true }),
 })
 

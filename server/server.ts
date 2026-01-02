@@ -34,7 +34,7 @@ import { history } from './history'
 import { nanoid } from 'nanoid'
 import { type AudioFileBase, type ClientTrack, type Clip, type ServerTrack } from '~/schema'
 import { EVENTS } from '~/events'
-import { audioMimeTypes, BACKEND_PORT } from '~/constants'
+import { audioMimeTypes, BACKEND_PORT, DEFAULT_GAIN } from '~/constants'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
 import { RateLimiter, getSafeIp } from './ratelimiter'
 
@@ -184,7 +184,7 @@ io.on('connection', async (socket) => {
 				creator_user_id: user.id,
 				title: null,
 				belongs_to_user_id: user.id, // for now
-				gain_db: 0,
+				gain: DEFAULT_GAIN,
 			}
 
 			let track: ClientTrack
@@ -218,7 +218,7 @@ io.on('connection', async (socket) => {
 
 			const t = await db.getTrackSafe(id)
 
-			if (!t || t.belongs_to_user_id != null || t.belongs_to_user_id !== user.id) {
+			if (!t || (t.belongs_to_user_id !== user.id && t.belongs_to_user_id != null)) {
 				callback({
 					success: false,
 					error: {
@@ -251,7 +251,7 @@ io.on('connection', async (socket) => {
 		})
 
 		socket.on('get:clip:create', async (data, callback) => {
-			const { start_beat, end_beat, audio_file_id, track_id, offset_seconds, gain_db } = data
+			const { start_beat, end_beat, audio_file_id, track_id, offset_seconds, gain } = data
 
 			const newClip: Omit<Clip, 'created_at'> = {
 				id: nanoid(),
@@ -259,7 +259,7 @@ io.on('connection', async (socket) => {
 				start_beat,
 				end_beat,
 				audio_file_id,
-				gain_db: gain_db ?? 0,
+				gain: gain ?? DEFAULT_GAIN,
 				offset_seconds: offset_seconds ?? 0,
 				track_id,
 			}

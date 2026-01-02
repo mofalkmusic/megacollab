@@ -13,6 +13,6 @@ export default defineSocketHandler({
 		}
 
 		Object.assign(existing, updatedTrack)
-		setTrackGain(updatedTrack.id, updatedTrack.gain_db)
+		setTrackGain(updatedTrack.id, updatedTrack.gain)
 	},
 })

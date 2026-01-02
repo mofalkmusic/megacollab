@@ -1,8 +1,8 @@
 <template>
-	<div class="track-controls-wrapper" :style="wrapperStyles">
+	<div class="track-controls-wrapper no-select" :style="wrapperStyles" @contextmenu.prevent>
 		<div v-for="([id, track], index) in sortedTracks" :key="id" class="track-controls">
-			<p v-if="track.title" class="small">{{ track.title }}</p>
-			<p v-else class="small dim track-title">Track {{ index + 1 }}</p>
+			<p v-if="track.title" class="small no-select">{{ track.title }}</p>
+			<p v-else class="small dim track-title no-select">Track {{ index + 1 }}</p>
 			<UseElementBounding v-slot="{ top, height }" style="grid-area: vol">
 				<div class="volumeSlider" @pointerdown="startVolumeDrag($event, id, top, height)">
 					<div
@@ -14,7 +14,7 @@
 					<div
 						class="volume-thumb"
 						:style="{
-							bottom: `${((track.gain_db + 35) / 40) * 100}%`,
+							bottom: `${track.gain * 50}%`,
 						}"
 					></div>
 					<div class="volume-zero-marker"></div>
@@ -22,7 +22,7 @@
 			</UseElementBounding>
 			<p
 				v-if="track.belongs_to_display_name"
-				class="small dim"
+				class="small dim no-select"
 				style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap"
 			>
 				@{{ track.belongs_to_display_name }}
@@ -32,12 +32,13 @@
 </template>
 
 <script setup lang="ts">
-import { tracks, pxTrackHeight } from '@/state'
+import { tracks, pxTrackHeight, altKeyPressed, controlKeyPressed } from '@/state'
 import { computed, reactive, useTemplateRef, watch, type CSSProperties } from 'vue'
 import { getTrackVolume, isPlaying, setTrackGain } from '@/audioEngine'
-import { useRafFn } from '@vueuse/core'
+import { useRafFn, useEventListener } from '@vueuse/core'
 import { UseElementBounding } from '@vueuse/components'
 import { socket } from '@/socket/socket'
+import { useToast } from '@/composables/useToast'
 
 const wrapperStyles = computed((): CSSProperties => {
 	return {
@@ -50,12 +51,13 @@ const sortedTracks = computed(() => {
 })
 
 const trackVolumes = reactive(new Map<string, number>())
+const { addToast } = useToast()
 
 const { pause, resume } = useRafFn(
 	() => {
 		for (const id of tracks.keys()) {
 			const vol = getTrackVolume(id)
-			// smooth decay could be nice, but raw for now
+			// todo: smooth decay could be nice, but raw for now
 			trackVolumes.set(id, vol)
 		}
 	},
@@ -73,37 +75,32 @@ watch(isPlaying, (playing) => {
 	}
 })
 
-// const volumeSliderEl = useTemplateRef('volumeSlider')
-
-// const { bottom } = useElementBounding(volumeSliderEl)
-
-// useEventListener(volumeSliderEl, 'pointerdown', (event) => { })
-
-// todo: make own
 function startVolumeDrag(e: PointerEvent, trackId: string, top: number, height: number) {
 	const target = e.currentTarget as HTMLElement
 	target.setPointerCapture(e.pointerId)
 
-	const range = 40 // -35 to +5
-	const min = -35
+	const track = tracks.get(trackId)
+	if (!track) return // todo: toast, track has already been deleted
+	const initialGain = track.gain
+
+	const range = 2
+	const min = 0
 
 	function update(e: PointerEvent) {
-		// y is from top.
-		// relative y from bottom = rect.height - (e.clientY - rect.top)
-		// but simplified: 0 at bottom, 1 at top.
-		// val = 1 - (e.clientY - rect.top) / rect.height
 		const relativeY = Math.max(0, Math.min(1, 1 - (e.clientY - top) / height))
 
-		const db = min + relativeY * range
-		// clamp
-		const clampedDb = Math.max(-35, Math.min(5, db))
+		let gain: number = min + relativeY * range
 
-		// update local state optimistic
+		if (altKeyPressed.value || controlKeyPressed.value) {
+			gain = 1
+		}
+
+		// update local state optimistically
 		const track = tracks.get(trackId)
+
 		if (track) {
-			track.gain_db = clampedDb
-			// direct audio update for responsiveness (watcher might be slightly delayed or just to be safe)
-			setTrackGain(trackId, clampedDb)
+			track.gain = gain
+			setTrackGain(trackId, gain)
 		}
 	}
 
@@ -114,28 +111,47 @@ function startVolumeDrag(e: PointerEvent, trackId: string, top: number, height: 
 		update(e)
 	}
 
-	async function onUp(e: PointerEvent) {
-		target.releasePointerCapture(e.pointerId)
-		target.removeEventListener('pointermove', onMove)
-		target.removeEventListener('pointerup', onUp)
+	const { stop: stopKeys } = watch([altKeyPressed, controlKeyPressed], (alt, crtl) => {
+		if (alt || crtl) {
+			update(e)
+		}
+	})
+
+	async function onEnd() {
+		// Cleanup listeners
+		stopMove()
+		stopUp()
+		stopLostCapture()
+		stopKeys()
+
+		if (target.hasPointerCapture(e.pointerId)) {
+			target.releasePointerCapture(e.pointerId)
+		}
 
 		// Final sync
 		const track = tracks.get(trackId)
 		if (track) {
 			const res = await socket.emitWithAck('get:track:update', {
 				id: trackId,
-				changes: { gain_db: track.gain_db },
+				changes: { gain: track.gain },
 			})
 
 			if (!res.success) {
-				// todo: restore changes from optimistic update
-				// todo: addtoast
+				track.gain = initialGain
+				setTrackGain(trackId, initialGain)
+				addToast({
+					type: 'notification',
+					message: res.error.message,
+					priority: 'medium',
+					icon: 'warning',
+				})
 			}
 		}
 	}
 
-	target.addEventListener('pointermove', onMove)
-	target.addEventListener('pointerup', onUp)
+	const stopMove = useEventListener(window, 'pointermove', onMove)
+	const stopUp = useEventListener(window, 'pointerup', onEnd)
+	const stopLostCapture = useEventListener(target, 'lostpointercapture', onEnd)
 }
 </script>
 
@@ -205,8 +221,8 @@ function startVolumeDrag(e: PointerEvent, trackId: string, top: number, height: 
 	width: 100%;
 	background: linear-gradient(
 		to top,
-		var(--border-primary) 20px,
-		color-mix(in lch, var(--border-primary), white 60%) 70px
+		var(--border-primary) 10px,
+		color-mix(in lch, var(--border-primary), white 60%) 69px
 	);
 	min-height: 0;
 	transition: height 0.1s linear;
@@ -224,7 +240,7 @@ function startVolumeDrag(e: PointerEvent, trackId: string, top: number, height: 
 
 .volume-zero-marker {
 	position: absolute;
-	top: 12.5%;
+	top: 50%;
 	left: 0;
 	right: 0;
 	height: 1px;

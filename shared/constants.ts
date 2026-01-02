@@ -8,3 +8,5 @@ export const audioMimeTypes: readonly string[] = [
 ] as const
 
 export const BACKEND_PORT = 3000 as const
+
+export const DEFAULT_GAIN = 1 as const
