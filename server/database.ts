@@ -7,6 +7,7 @@ import {
 	type Clip,
 	type ServerTrack,
 	type UpdateClip,
+	type UpdateTrack,
 	type User,
 } from '~/schema'
 import { migrations } from './migrations'
@@ -77,6 +78,8 @@ export const db = {
 	getAudioFileSafe,
 	createTrack,
 	getTracksSafe,
+	getTrackSafe,
+	updateTrackSafe,
 	createClipSafe,
 	getClipsSafe,
 	getClipSafe,
@@ -115,12 +118,12 @@ async function getAudioFileSafe(id: string): Promise<AudioFileBase | null> {
 }
 
 async function createTrack(track: Omit<ServerTrack, 'order_index'>): Promise<ClientTrack> {
-	const { id, creator_user_id, title, belongs_to_user_id, gain_db } = track
+	const { id, creator_user_id, title, belongs_to_user_id, gain } = track
 
 	const rows = await queryFn<ClientTrack>(
 		`
 			WITH inserted AS (
-				INSERT INTO ${TRACKS_TABLE} (id, creator_user_id, title, belongs_to_user_id, gain_db, order_index) 
+				INSERT INTO ${TRACKS_TABLE} (id, creator_user_id, title, belongs_to_user_id, gain, order_index) 
 				VALUES ($1, $2, $3, $4, $5, (SELECT COALESCE(MAX(order_index), 0) + 1 FROM ${TRACKS_TABLE}))
 				RETURNING *
 			)
@@ -131,7 +134,7 @@ async function createTrack(track: Omit<ServerTrack, 'order_index'>): Promise<Cli
 			LEFT JOIN ${USERS_TABLE} AS users
 				ON inserted.belongs_to_user_id = users.id
 		`,
-		[id, creator_user_id, title, belongs_to_user_id, gain_db],
+		[id, creator_user_id, title, belongs_to_user_id, gain],
 	)
 
 	if (!rows.length) throw new Error('Failed to create track')
@@ -153,6 +156,50 @@ async function getTracksSafe(): Promise<ClientTrack[]> {
 	}
 }
 
+async function getTrackSafe(id: string): Promise<ServerTrack | null> {
+	try {
+		const rows = await queryFn<ServerTrack>(`SELECT * FROM ${TRACKS_TABLE} WHERE id = $1`, [id])
+		return rows[0] || null
+	} catch (err) {
+		if (IN_DEV_MODE) print.db('error:', err)
+		return null
+	}
+}
+
+async function updateTrackSafe(id: string, changes: UpdateTrack): Promise<ClientTrack | null> {
+	try {
+		const entries = Object.entries(changes)
+
+		if (entries.length === 0) return null
+
+		const setClauses = entries.map(([key], index) => `${key} = $${index + 2}`)
+		const values = entries.map(([, value]) => value)
+
+		const sql = `
+			WITH updated AS (
+				UPDATE ${TRACKS_TABLE}
+				SET ${setClauses.join(', ')}
+				WHERE id = $1
+				RETURNING *
+			)
+			SELECT 
+				updated.*,
+				users.display_name AS belongs_to_display_name
+			FROM updated
+			LEFT JOIN ${USERS_TABLE} AS users
+				ON updated.belongs_to_user_id = users.id
+		`
+
+		const rows = await queryFn<ClientTrack>(sql, [id, ...values])
+
+		if (!rows.length) return null
+		return rows[0]!
+	} catch (err) {
+		if (IN_DEV_MODE) print.db('error:', err)
+		return null
+	}
+}
+
 async function createClipSafe(clip: Omit<Clip, 'created_at'>): Promise<Clip | null> {
 	try {
 		const {
@@ -162,17 +209,17 @@ async function createClipSafe(clip: Omit<Clip, 'created_at'>): Promise<Clip | nu
 			audio_file_id,
 			end_beat,
 			start_beat,
-			gain_db,
+			gain,
 			offset_seconds,
 		} = clip
 
 		const rows = await queryFn<Clip>(
 			`
-			INSERT INTO ${CLIPS_TABLE} (id, creator_user_id, track_id, audio_file_id, end_beat, start_beat, gain_db, offset_seconds) 
+			INSERT INTO ${CLIPS_TABLE} (id, creator_user_id, track_id, audio_file_id, end_beat, start_beat, gain, offset_seconds) 
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			RETURNING *
 		`,
-			[id, creator_user_id, track_id, audio_file_id, end_beat, start_beat, gain_db, offset_seconds],
+			[id, creator_user_id, track_id, audio_file_id, end_beat, start_beat, gain, offset_seconds],
 		)
 
 		if (!rows.length) return null

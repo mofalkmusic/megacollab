@@ -14,8 +14,10 @@ const masterGain = audioContext.createGain()
 masterGain.connect(audioContext.destination)
 
 const trackGainNodes = new Map<string, GainNode>()
+const trackAnalysers = new Map<string, AnalyserNode>()
 
 const SCHEDULER_LOOP_INRERVAL_MS = 25 as const
+const FFT_SIZE_VOLUMES = 256 as const
 
 // Playback State
 export const isPlaying = shallowRef(false)
@@ -25,7 +27,10 @@ export const currentTime = shallowRef(0)
 const playId = shallowRef<symbol>(Symbol())
 
 const nextScheduleTime = shallowRef(0)
-const activeSources = new Map<string, { source: AudioBufferSourceNode; hash: string }>()
+const activeSources = new Map<
+	string,
+	{ source: AudioBufferSourceNode; gainNode: GainNode; hash: string }
+>()
 const scheduledClipIds = new Set<string>() // kept for loop lookahead optimization if needed, but might be redundant with activeSources check
 export const restingPositionSec = shallowRef(0)
 
@@ -41,12 +46,14 @@ export const loopRangeBeats = computed(() => {
 })
 
 function getClipHash(clip: Clip): string {
-	return `${clip.start_beat}:${clip.end_beat}:${clip.offset_seconds}:${clip.audio_file_id}:${clip.track_id}:${clip.gain_db}`
+	return `${clip.start_beat}:${clip.end_beat}:${clip.offset_seconds}:${clip.audio_file_id}:${clip.track_id}:${clip.gain}`
 }
 
-function stopSource(sourceWrapper: { source: AudioBufferSourceNode }) {
+function stopSource(sourceWrapper: { source: AudioBufferSourceNode; gainNode: GainNode }) {
 	try {
 		sourceWrapper.source.stop()
+		sourceWrapper.source.disconnect()
+		sourceWrapper.gainNode.disconnect()
 	} catch (e) {
 		if (inDev) console.error(e)
 	}
@@ -137,14 +144,29 @@ export function clearLoop() {
 	loopEndBeat.value = null
 }
 
-export function registerTrack(trackId: ServerTrack['id']) {
+export function registerTrack(trackId: ServerTrack['id'], initialGain: number = 1) {
 	if (trackGainNodes.has(trackId)) return
 
 	const gainNode = audioContext.createGain()
 	gainNode.connect(masterGain)
 
-	gainNode.gain.value = 1 // todo: implement when actually getting to gain stuff
+	gainNode.gain.value = initialGain
 	trackGainNodes.set(trackId, gainNode)
+
+	// sidechained vol analyser
+	const analyser = audioContext.createAnalyser()
+	analyser.fftSize = FFT_SIZE_VOLUMES
+	gainNode.connect(analyser) // connect post-gain
+	trackAnalysers.set(trackId, analyser)
+}
+
+export function setTrackGain(trackId: ServerTrack['id'], gain: number) {
+	const gainNode = trackGainNodes.get(trackId)
+	if (!gainNode) return
+
+	// ramp to prevent clicks
+	const now = audioContext.currentTime
+	gainNode.gain.setTargetAtTime(gain, now, 0.02)
 }
 
 export function unregisterTrack(trackId: ServerTrack['id']) {
@@ -153,6 +175,34 @@ export function unregisterTrack(trackId: ServerTrack['id']) {
 
 	gainNode.disconnect()
 	trackGainNodes.delete(trackId)
+
+	const analyser = trackAnalysers.get(trackId)
+	if (analyser) {
+		analyser.disconnect()
+		trackAnalysers.delete(trackId)
+	}
+}
+
+const floatBuffer = new Float32Array(FFT_SIZE_VOLUMES)
+
+export function getTrackVolume(trackId: ServerTrack['id']): number {
+	const analyser = trackAnalysers.get(trackId)
+	if (!analyser) return 0
+
+	analyser.getFloatTimeDomainData(floatBuffer)
+
+	// find peak amplitude
+	let max = 0
+	let rms = 0
+	for (let i = 0; i < floatBuffer.length; i++) {
+		const val = floatBuffer[i] ?? 0
+		if (Math.abs(val) > max) max = Math.abs(val)
+		rms += val * val
+	}
+
+	rms = Math.sqrt(rms / floatBuffer.length)
+
+	return max
 }
 
 const uiRAFLoop = useRafFn(
@@ -202,9 +252,13 @@ function scheduleClipSource(clip: Clip, whenAbsoluteSeconds: number) {
 	if (!buffer || !trackGainNode) return
 
 	const source = audioContext.createBufferSource()
+	const clipGainNode = audioContext.createGain()
+
+	clipGainNode.gain.value = clip.gain
 
 	source.buffer = buffer
-	source.connect(trackGainNode)
+	source.connect(clipGainNode)
+	clipGainNode.connect(trackGainNode)
 
 	const whenToPlay = playbackStartTime.value + (whenAbsoluteSeconds - startOffset.value)
 	// IMPORTANT: start() time parameter is in AudioContext time.
@@ -235,7 +289,7 @@ function scheduleClipSource(clip: Clip, whenAbsoluteSeconds: number) {
 	source.start(playAt, finalOffset, durationSeconds)
 
 	const hash = getClipHash(clip)
-	const wrapper = { source, hash }
+	const wrapper = { source, gainNode: clipGainNode, hash }
 	activeSources.set(clip.id, wrapper)
 
 	const sessionId = playId.value
@@ -249,6 +303,7 @@ function scheduleClipSource(clip: Clip, whenAbsoluteSeconds: number) {
 		const active = activeSources.get(clip.id)
 		if (active && active.source === source) {
 			activeSources.delete(clip.id)
+			clipGainNode.disconnect()
 		}
 	}
 }

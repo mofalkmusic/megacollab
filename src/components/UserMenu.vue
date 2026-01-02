@@ -43,6 +43,16 @@
 					padding-bottom: 0.5rem;
 				"
 			></div>
+			<button class="default-button menu-btn" @click="openBugReport" v-element-hover="onBugHover">
+				<Bug class="dim" :size="15" :stroke-width="2" />
+				<p>Report a Bug</p>
+				<ExternalLink
+					class="dim"
+					style="margin-left: auto; transition: opacity 0.1s"
+					:size="16"
+					:style="{ opacity: isBugButtonHovered ? 1 : 0 }"
+				/>
+			</button>
 			<button class="default-button menu-btn">
 				<Settings2 class="dim" :size="16" :stroke-width="2" />
 				<p>Settings</p>
@@ -107,10 +117,18 @@ import {
 	MessageSquareShare,
 	ZoomIn,
 	ZoomOut,
+	Bug,
+	ExternalLink,
 } from 'lucide-vue-next'
 import { nextTick, shallowRef, useTemplateRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
+import { vElementHover } from '@vueuse/components'
+
+const isBugButtonHovered = shallowRef(false)
+function onBugHover(hovered: boolean) {
+	isBugButtonHovered.value = hovered
+}
 
 const router = useRouter()
 const inDev = import.meta.env.MODE === 'development'
@@ -122,6 +140,10 @@ function signout() {
 	}
 
 	window.location.href = '/api/auth/signout'
+}
+
+function openBugReport() {
+	window.open('https://github.com/mofalkmusic/megacollab/issues', '_blank')
 }
 
 const isEditingUsername = shallowRef(false)

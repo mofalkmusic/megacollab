@@ -46,13 +46,9 @@ const props = defineProps<{
 	track: ServerTrack
 }>()
 
-onMounted(() => {
-	registerTrack(props.track.id)
-})
+onMounted(() => registerTrack(props.track.id, props.track.gain))
 
-onUnmounted(() => {
-	unregisterTrack(props.track.id)
-})
+onUnmounted(() => unregisterTrack(props.track.id))
 
 const trackStyle = computed(() => {
 	const lineColor = 'var(--_minor-line-color)'
@@ -129,7 +125,7 @@ const { isOverDropZone } = useDropZone(trackEl, {
 			start_beat: startBeat,
 			end_beat: endBeat,
 			offset_seconds: 0,
-			gain_db: 0,
+			gain: 1,
 			created_at: new Date().toISOString(),
 		}
 
@@ -149,7 +145,7 @@ const { isOverDropZone } = useDropZone(trackEl, {
 					start_beat: currentClip.start_beat,
 					end_beat: currentClip.end_beat,
 					offset_seconds: currentClip.offset_seconds,
-					gain_db: currentClip.gain_db,
+					gain: currentClip.gain,
 				})
 
 				if (syncRes.success) {

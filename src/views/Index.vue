@@ -27,7 +27,7 @@
 			<TrackControls />
 			<div class="all-tracks-wrapper" ref="tracksWrapper" :style="{ width: `${timelineWidth}px` }">
 				<TimelineHeader />
-				<TrackInstance v-for="[id, track] in tracks" :key="id" :track="track" />
+				<TrackInstance v-for="[id, track] in sortedTracks" :key="id" :track="track" />
 
 				<ClipInstance
 					v-if="ghostClip && ghostAudioFile && ghostDragState.track_id"
@@ -161,6 +161,10 @@ import { useToast } from '@/composables/useToast'
 import GlobalLoadingIndicator from '@/components/GlobalLoadingIndicator.vue'
 import { nanoid } from 'nanoid'
 const { addToast } = useToast()
+
+const sortedTracks = computed(() => {
+	return [...tracks.entries()].sort((a, b) => a[1].order_index - b[1].order_index)
+})
 
 // todo
 function sendChat() {
@@ -481,7 +485,7 @@ const ghostClip = computed<Clip | null>(() => {
 		start_beat: ghostDragState.value.start_beat,
 		end_beat: ghostDragState.value.end_beat,
 		offset_seconds: 0,
-		gain_db: 0,
+		gain: 1,
 		created_at: new Date().toISOString(),
 		// peaks: ghostAudioFile.value.peaks // Clip doesn't have peaks, AudioFile does.
 	}
@@ -582,7 +586,7 @@ watch(
 					start_beat: state.start_beat,
 					end_beat: state.end_beat,
 					offset_seconds: 0,
-					gain_db: 0,
+					gain: 1,
 					created_at: new Date().toISOString(),
 				}
 
@@ -605,7 +609,7 @@ watch(
 						start_beat: currentClip.start_beat,
 						end_beat: currentClip.end_beat,
 						offset_seconds: currentClip.offset_seconds,
-						gain_db: currentClip.gain_db,
+						gain: currentClip.gain,
 					})
 
 					if (res.success) {

@@ -34,7 +34,7 @@ import { history } from './history'
 import { nanoid } from 'nanoid'
 import { type AudioFileBase, type ClientTrack, type Clip, type ServerTrack } from '~/schema'
 import { EVENTS } from '~/events'
-import { audioMimeTypes, BACKEND_PORT } from '~/constants'
+import { audioMimeTypes, BACKEND_PORT, DEFAULT_GAIN } from '~/constants'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
 import { RateLimiter, getSafeIp } from './ratelimiter'
 
@@ -184,7 +184,7 @@ io.on('connection', async (socket) => {
 				creator_user_id: user.id,
 				title: null,
 				belongs_to_user_id: user.id, // for now
-				gain_db: 0,
+				gain: DEFAULT_GAIN,
 			}
 
 			let track: ClientTrack
@@ -213,8 +213,45 @@ io.on('connection', async (socket) => {
 			socket.broadcast.emit('track:create', track)
 		})
 
+		socket.on('get:track:update', async (data, callback) => {
+			const { id, changes } = data
+
+			const t = await db.getTrackSafe(id)
+
+			if (!t || (t.belongs_to_user_id !== user.id && t.belongs_to_user_id != null)) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are not authorized to update this track.',
+					},
+				})
+				return
+			}
+
+			const track = await db.updateTrackSafe(id, changes)
+
+			if (!track) {
+				callback({
+					success: false,
+					error: {
+						status: 'SERVER_ERROR',
+						message: 'Oops, something unexpected went wrong. Please try reconnecting.',
+					},
+				})
+				return
+			}
+
+			callback({
+				success: true,
+				data: track,
+			})
+
+			socket.broadcast.emit('track:update', track)
+		})
+
 		socket.on('get:clip:create', async (data, callback) => {
-			const { start_beat, end_beat, audio_file_id, track_id, offset_seconds, gain_db } = data
+			const { start_beat, end_beat, audio_file_id, track_id, offset_seconds, gain } = data
 
 			const newClip: Omit<Clip, 'created_at'> = {
 				id: nanoid(),
@@ -222,7 +259,7 @@ io.on('connection', async (socket) => {
 				start_beat,
 				end_beat,
 				audio_file_id,
-				gain_db: gain_db ?? 0,
+				gain: gain ?? DEFAULT_GAIN,
 				offset_seconds: offset_seconds ?? 0,
 				track_id,
 			}
@@ -549,8 +586,6 @@ app.get('/api/auth/twitch/callback', handleTwitchOAuthCallback)
 
 const DIST_DIR = join(import.meta.dir, '..', 'dist')
 app.use('/*', serveStatic({ root: DIST_DIR }))
-
-console.log('DIST_DIR:', DIST_DIR, 'import.meta.dir:', import.meta.dir)
 
 // - It's not an API route
 // - It's not a physical file (like /assets/logo.png)
