@@ -216,18 +216,20 @@ io.on('connection', async (socket) => {
 		socket.on('get:track:update', async (data, callback) => {
 			const { id, changes } = data
 
-			const t = await db.getTrackSafe(id)
+			// todo: add volume changes to history for undos
 
-			if (!t || (t.belongs_to_user_id !== user.id && t.belongs_to_user_id != null)) {
-				callback({
-					success: false,
-					error: {
-						status: 'UNAUTHORIZED',
-						message: 'You are not authorized to update this track.',
-					},
-				})
-				return
-			}
+			// const t = await db.getTrackSafe(id)
+
+			// if (!t || (t.belongs_to_user_id !== user.id && t.belongs_to_user_id != null)) {
+			// 	callback({
+			// 		success: false,
+			// 		error: {
+			// 			status: 'UNAUTHORIZED',
+			// 			message: 'You are not authorized to update this track.',
+			// 		},
+			// 	})
+			// 	return
+			// }
 
 			const track = await db.updateTrackSafe(id, changes)
 
