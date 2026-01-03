@@ -23,7 +23,7 @@ const _socketConnected = shallowRef<boolean>(false)
 export const _socketReady = shallowRef<boolean>(false)
 export const _socketError = shallowRef<AppError | null>(null)
 
-const socketReadyState = computed<'NOT_CONNECTED' | 'INITIALIZING' | 'READY'>(() => {
+export const socketReadyState = computed<'NOT_CONNECTED' | 'INITIALIZING' | 'READY'>(() => {
 	return !_socketConnected.value ? 'NOT_CONNECTED' : !_socketReady.value ? 'INITIALIZING' : 'READY'
 })
 

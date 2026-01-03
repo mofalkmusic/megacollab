@@ -1,7 +1,7 @@
 import { computed, shallowRef, watch } from 'vue'
-import { beats_to_sec, quantize_beats } from '@/utils/mathUtils'
+import { beats_to_sec, quantize_beats, sec_to_beats } from '@/utils/mathUtils'
 import { useIntervalFn, useRafFn, watchThrottled } from '@vueuse/core'
-import { clips, TOTAL_BEATS, audioBuffers } from '@/state'
+import { clips, TOTAL_BEATS, audioBuffers, bpm } from '@/state'
 import type { Clip, ServerTrack } from '~/schema'
 
 // this is very hacked together, some ai stuff here aswell :D
@@ -124,6 +124,17 @@ watchThrottled(
 watch(audioBuffers, () => {
 	reconcileActiveSources()
 })
+
+export const currentPlayTimeSeconds = shallowRef<number>(0)
+export const currentPlayTimeBeats = computed(() => sec_to_beats(currentPlayTimeSeconds.value))
+
+watchThrottled(
+	[isPlaying, currentTime, restingPositionSec, () => bpm],
+	() => {
+		currentPlayTimeSeconds.value = isPlaying.value ? currentTime.value : restingPositionSec.value
+	},
+	{ throttle: 64, immediate: false },
+)
 
 export const playheadSec = shallowRef(0)
 export const playheadPx = shallowRef(0)

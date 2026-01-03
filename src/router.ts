@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Index from '@/views/Index.vue'
 import Login from '@/views/Login.vue'
+import isMobile from 'is-mobile'
 
 const inDev = import.meta.env.MODE === 'development'
 
@@ -25,12 +26,22 @@ const router = createRouter({
 			component: Login,
 			meta: { auth: 'none' },
 		},
+		{
+			path: '/not-supported',
+			name: 'not-supported',
+			component: () => import('@/views/NotSupported.vue'),
+			meta: { auth: 'none' },
+		},
 	],
 })
 
 router.beforeEach(async (to, from, next) => {
 	if (inDev) {
 		return next()
+	}
+
+	if (isMobile()) {
+		return next({ name: 'not-supported' })
 	}
 
 	const res = await fetch('/api/auth/verify', {

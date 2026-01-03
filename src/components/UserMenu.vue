@@ -78,6 +78,10 @@
 					@keydown.space.stop
 					maxlength="32"
 					:disabled="isUpdating"
+					:style="{
+						color: errorMessage ? 'color-mix(in lch, red 80%, var(--text-color-primary))' : '',
+						border: errorMessage ? '1px solid red' : '',
+					}"
 				/>
 			</form>
 			<p class="small dim">You can change your username at any time.</p>

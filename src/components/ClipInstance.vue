@@ -716,6 +716,7 @@ function getWaveform(
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+	margin-top: -1px;
 }
 
 .outerClipCanvasWrap {

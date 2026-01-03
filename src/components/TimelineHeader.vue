@@ -9,17 +9,17 @@
 					:style="{ width: `${pxPerBeat}px` }"
 				>
 					<p v-if="i % 4 === 1" class="small dim mono timeline-marker">
-						{{ i }}
+						{{ (i + 3) / 4 }}
 					</p>
 				</div>
 			</div>
 		</div>
 	</div>
 
-	<!-- Scrolling Lines (z-index 30) -->
+	<!-- Scrolling Lines -->
 	<div class="playhead-line" :style="playheadStyle" :class="{ 'is-playing': isPlaying }" />
 
-	<!-- Sticky Playhead Heads (z-index 35) -->
+	<!-- Sticky Playhead Heads -->
 	<div class="timeline-heads-wrap">
 		<div v-if="!isPressed" class="resting-playhead-head" :style="restingPlayheadStyle" />
 		<div class="playhead-head" :style="playheadHeadStyle" :class="{ 'is-playing': isPlaying }" />
