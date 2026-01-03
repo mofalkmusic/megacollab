@@ -28,7 +28,7 @@ const props = defineProps<{
 	flex-direction: column;
 	--_gapHam: 4px;
 	--_lineHeight: 2px;
-	--_lineW: 21px;
+	--_lineW: 16px;
 	gap: var(--_gapHam);
 	cursor: pointer;
 	position: relative;
@@ -49,6 +49,7 @@ const props = defineProps<{
 	background-color: var(--text-color-primary);
 	width: var(--_lineW);
 	height: var(--_lineHeight);
+	border-radius: 4px;
 	transition: all 250ms ease-in-out;
 }
 
