@@ -11,7 +11,7 @@ Each producer contributes to the same song. With only a few clicks, you can uplo
 
 <p align="center">
   <a target="_blank" href="https://mega.mofalk.com">
-    <img alt="showcase" src="https://mofalk.com/megascreen.jpg">
+    <img alt="showcase" src="https://mega.mofalk.com/preview_github_1.jpg">
   </a>
 </p>
 
