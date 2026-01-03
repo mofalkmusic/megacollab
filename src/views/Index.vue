@@ -31,7 +31,7 @@
 			<div style="flex-grow: 1"></div>
 
 			<button ref="userButton" class="controls-panel-btn" @click="isUserMenuOpen = !isUserMenuOpen">
-				<User :size="18" />
+				<CustomMenu :isMenuOpen="isUserMenuOpen" />
 			</button>
 
 			<div v-if="isUserMenuOpen" ref="userMenu" style="z-index: 100" :style="floatingStyles">
@@ -186,13 +186,24 @@ import {
 import type { Clip } from '~/schema'
 import ClipInstance from '@/components/ClipInstance.vue'
 import AddTrack from '@/components/tracks/AddTrack.vue'
-import { Play, Pause, Square, User, Undo2, Radio, WifiOff, ArrowUpDown } from 'lucide-vue-next'
+import {
+	Play,
+	Pause,
+	Square,
+	User,
+	Undo2,
+	Radio,
+	WifiOff,
+	ArrowUpDown,
+	Menu,
+} from 'lucide-vue-next'
 import { offset, useFloating } from '@floating-ui/vue'
 import { useRouter } from 'vue-router'
 import UserMenu from '@/components/UserMenu.vue'
 import { useToast } from '@/composables/useToast'
 import GlobalLoadingIndicator from '@/components/GlobalLoadingIndicator.vue'
 import { nanoid } from 'nanoid'
+import CustomMenu from '@/components/icons/CustomMenu.vue'
 const { addToast } = useToast()
 
 const minutesNseconds = computed(() => {
