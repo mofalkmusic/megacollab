@@ -35,8 +35,10 @@ const scheduledClipIds = new Set<string>() // kept for loop lookahead optimizati
 export const restingPositionSec = shallowRef(0)
 
 // Loop State
-const loopStartBeat = shallowRef<number | null>(null)
-const loopEndBeat = shallowRef<number | null>(null)
+// Loop State
+export const isLooping = shallowRef(false)
+const loopStartBeat = shallowRef<number | null>(4)
+const loopEndBeat = shallowRef<number | null>(8)
 
 export const loopRangeBeats = computed(() => {
 	if (loopStartBeat.value == null || loopEndBeat.value == null) return null
@@ -143,16 +145,35 @@ export const fullDurationSeconds = computed(() => {
 	return beats_to_sec(TOTAL_BEATS)
 })
 
-export function setLoopInBeats(start_beats: number, end_beats: number) {
-	const quantizedStart = quantize_beats(start_beats)
-	const quantizedEnd = quantize_beats(end_beats, { ceil: true })
-	loopStartBeat.value = Math.min(quantizedStart, quantizedEnd)
-	loopEndBeat.value = Math.max(quantizedStart, quantizedEnd)
+export function setLoopInBeats(
+	start_beats: number,
+	end_beats: number,
+	opts: { quantize?: boolean } = {},
+) {
+	const { quantize = true } = opts
+	const s = quantize ? quantize_beats(start_beats) : start_beats
+	const e = quantize ? quantize_beats(end_beats, { ceil: true }) : end_beats
+
+	loopStartBeat.value = Math.min(s, e)
+	loopEndBeat.value = Math.max(s, e)
 }
 
 export function clearLoop() {
 	loopStartBeat.value = null
 	loopEndBeat.value = null
+	isLooping.value = false
+}
+
+export function toggleLoop() {
+	if (isLooping.value) {
+		isLooping.value = false
+	} else {
+		if (loopStartBeat.value == null || loopEndBeat.value == null) {
+			loopStartBeat.value = 0
+			loopEndBeat.value = 16
+		}
+		isLooping.value = true
+	}
 }
 
 export function registerTrack(trackId: ServerTrack['id'], initialGain: number = 1) {
@@ -244,9 +265,20 @@ const schedulerLoop = useIntervalFn(
 
 		nextScheduleTime.value = lookAheadLimitSec
 
-		// todo: implement single loop logic
+		const loopStartSec = loopRangeBeats.value ? beats_to_sec(loopRangeBeats.value.start) : 0
+		const loopEndSec = loopRangeBeats.value
+			? beats_to_sec(loopRangeBeats.value.end)
+			: fullDurationSeconds.value
 
-		if (songTimeSeconds > fullDurationSeconds.value) {
+		const loopActive = isLooping.value && loopRangeBeats.value != null && loopEndSec > loopStartSec
+
+		if (loopActive) {
+			if (songTimeSeconds >= loopEndSec - 0.01) {
+				// wrap to start
+				seek(loopStartSec, { setAsRest: false })
+				return
+			}
+		} else if (songTimeSeconds >= fullDurationSeconds.value) {
 			seek(0)
 		}
 	},
@@ -414,8 +446,6 @@ export function reset() {
 
 	playheadPx.value = 0
 	playheadSec.value = 0
-
-	// reset loops
 
 	schedulerLoop.pause()
 	uiRAFLoop.pause()

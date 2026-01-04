@@ -15,6 +15,7 @@
 	--border-primary: hsl(0 0% 28%);
 
 	--active-playing-color: hsl(125 100% 50% / 1);
+	--active-looping-hue: 26;
 
 	--window-w-padding: 2rem;
 
@@ -62,13 +63,17 @@ body {
 	display: grid;
 	justify-items: start;
 	grid-template-columns:
-		[full-width-start breakout-left-start] minmax(var(--window-w-padding), 1fr)
-		[content-start breakout-right-start] min(
+		[full-width-start breakout-left-start] minmax(
+			var(--window-w-padding),
+			1fr
+		) [content-start breakout-right-start] min(
 			100% - calc(var(--window-w-padding) * 2),
 			var(--window-w-max-width)
 		)
-		[content-end breakout-left-end] minmax(var(--window-w-padding), 1fr)
-		[full-width-end breakout-right-end];
+		[content-end breakout-left-end] minmax(
+			var(--window-w-padding),
+			1fr
+		) [full-width-end breakout-right-end];
 }
 
 .custom-grid > * {
@@ -325,6 +330,15 @@ button * {
 		0px 0px 40px -16px var(--active-playing-color),
 		inset 0px 0px 6px -2px var(--active-playing-color),
 		inset 0px 0px 18px -7px var(--active-playing-color);
+}
+
+.looping {
+	z-index: 21;
+	/* --_border: 1px solid var(--active-playing-color); */
+	box-shadow:
+		0px 0px 40px -16px hsl(var(--active-looping-hue) 100% 50% / 1),
+		inset 0px 0px 6px -2px hsl(var(--active-looping-hue) 100% 50% / 1),
+		inset 0px 0px 18px -7px hsl(var(--active-looping-hue) 100% 50% / 1);
 }
 
 .textInput {

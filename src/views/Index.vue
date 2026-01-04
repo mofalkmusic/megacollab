@@ -9,22 +9,40 @@
 			<button @click="reset" class="controls-panel-btn" style="border-left: none">
 				<Square :size="16" style="color: var(--text-color-primary)" />
 			</button>
+			<button
+				@click="toggleLoop"
+				class="controls-panel-btn"
+				:class="{ looping: isLooping }"
+				style="border-left: none"
+			>
+				<Repeat
+					:size="16"
+					:style="{
+						color: isLooping
+							? 'hsl(var(--active-looping-hue) 100% 50% / 1)'
+							: 'var(--text-color-primary)',
+					}"
+				/>
+			</button>
 
 			<p class="small mono controls-panel-wrap">
 				{{ minutesNseconds }}<br />
 				{{ barNumber }}:{{ beatNumber }}
 			</p>
 
-			<p class="mono controls-panel-wrap">{{ bpm }} BPM</p>
+			<p class="small mono controls-panel-wrap">{{ bpm }}<br />BPM</p>
 
-			<p class="controls-panel-wrap" :style="{ color: socketReadyState !== 'READY' ? 'red' : '' }">
-				<Radio v-if="socketReadyState === 'READY'" :size="18" style="margin-right: 0.6rem" />
-				<WifiOff v-else :size="17" style="margin-right: 0.6rem" />
+			<p
+				class="small mono controls-panel-wrap"
+				:style="{ color: socketReadyState !== 'READY' ? 'red' : '' }"
+			>
+				<Radio v-if="socketReadyState === 'READY'" :size="14" style="margin-right: 0.6rem" />
+				<WifiOff v-else :size="14" style="margin-right: 0.6rem" />
 				{{ socketReadyState === 'READY' ? 'Connected' : 'Offline' }}
 			</p>
 
-			<p class="controls-panel-wrap">
-				<ArrowUpDown :size="16" style="margin-right: 0.5rem" />
+			<p class="small mono controls-panel-wrap">
+				<ArrowUpDown :size="13" style="margin-right: 0.5rem" />
 				{{ 25 }}ms
 			</p>
 
@@ -35,7 +53,12 @@
 			</button>
 
 			<div v-if="isUserMenuOpen" ref="userMenu" style="z-index: 100" :style="floatingStyles">
-				<UserMenu @on-updated="update()" @on-undo="tryUndo()" @on-send-chat="sendChat()" />
+				<UserMenu
+					@on-updated="update()"
+					@on-undo="tryUndo()"
+					@on-send-chat="sendChat()"
+					@on-toggle-loop="toggleLoop()"
+				/>
 			</div>
 		</div>
 
@@ -173,6 +196,8 @@ import {
 	pause,
 	play,
 	reset,
+	toggleLoop,
+	isLooping,
 } from '@/audioEngine'
 import UserCursors from '@/components/UserCursors.vue'
 import TimelineHeader from '@/components/TimelineHeader.vue'
@@ -200,6 +225,7 @@ import {
 	WifiOff,
 	ArrowUpDown,
 	Menu,
+	Repeat,
 } from 'lucide-vue-next'
 import { offset, useFloating } from '@floating-ui/vue'
 import { useRouter } from 'vue-router'
@@ -315,6 +341,10 @@ useEventListener('keydown', (event) => {
 		event.preventDefault()
 		if (isPlaying.value) pause()
 		else play()
+	}
+
+	if (event.code === 'KeyL') {
+		toggleLoop()
 	}
 })
 

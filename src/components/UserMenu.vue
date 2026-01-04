@@ -36,6 +36,14 @@
 				</div>
 			</button>
 
+			<button class="default-button menu-btn" @click="emits('onToggleLoop')">
+				<Repeat class="dim" :size="14" :stroke-width="2" />
+				<p>Set Loop</p>
+				<div class="shortcut-container mono">
+					<p class="kbd" :class="{ active: lKeyPressed }">L</p>
+				</div>
+			</button>
+
 			<div
 				style="
 					border-top: 1px solid var(--border-primary);
@@ -111,7 +119,7 @@
 
 <script setup lang="ts">
 import { socket } from '@/socket/socket'
-import { user, controlKeyPressed, zKeyPressed, tKeyPressed } from '@/state'
+import { user, controlKeyPressed, zKeyPressed, tKeyPressed, lKeyPressed } from '@/state'
 import {
 	UserPen,
 	Settings2,
@@ -121,6 +129,7 @@ import {
 	MessageSquareShare,
 	Bug,
 	ExternalLink,
+	Repeat,
 } from 'lucide-vue-next'
 import { nextTick, shallowRef, useTemplateRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -158,6 +167,7 @@ const emits = defineEmits<{
 	(e: 'onUpdated'): void
 	(e: 'onUndo'): void
 	(e: 'onSendChat'): void
+	(e: 'onToggleLoop'): void
 }>()
 
 async function cancelEditingUsername() {

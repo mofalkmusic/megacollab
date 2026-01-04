@@ -1,5 +1,4 @@
 import { pxPerBeat, bpm } from '@/state'
-import type { AudioFile } from '@/types'
 
 export function beats_to_px(beats: number) {
 	return beats * pxPerBeat.value

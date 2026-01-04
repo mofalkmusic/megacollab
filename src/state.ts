@@ -57,8 +57,10 @@ export const { pixelRatio } = useDevicePixelRatio()
 
 export const altKeyPressed = shallowRef(false)
 export const controlKeyPressed = shallowRef(false)
+export const shiftKeyPressed = shallowRef(false)
 export const zKeyPressed = shallowRef(false)
 export const tKeyPressed = shallowRef(false)
+export const lKeyPressed = shallowRef(false)
 export const rightMouseButtonPressedOnTimeline = shallowRef(false)
 
 useEventListener(window, 'pointerdown', (event) => {
@@ -106,6 +108,11 @@ useEventListener(window, 'keydown', (event) => {
 		return
 	}
 
+	if (event.key === 'Shift') {
+		shiftKeyPressed.value = true
+		return
+	}
+
 	if (event.key === 'z') {
 		zKeyPressed.value = true
 		return
@@ -113,6 +120,11 @@ useEventListener(window, 'keydown', (event) => {
 
 	if (event.key === 't') {
 		tKeyPressed.value = true
+		return
+	}
+
+	if (event.key === 'l') {
+		lKeyPressed.value = true
 		return
 	}
 })
@@ -129,6 +141,11 @@ useEventListener(window, 'keyup', (event) => {
 		return
 	}
 
+	if (event.key === 'Shift') {
+		shiftKeyPressed.value = false
+		return
+	}
+
 	if (event.key === 'z') {
 		zKeyPressed.value = false
 		return
@@ -136,6 +153,11 @@ useEventListener(window, 'keyup', (event) => {
 
 	if (event.key === 't') {
 		tKeyPressed.value = false
+		return
+	}
+
+	if (event.key === 'l') {
+		lKeyPressed.value = false
 		return
 	}
 })
