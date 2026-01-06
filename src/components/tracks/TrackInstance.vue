@@ -124,6 +124,7 @@ const { isOverDropZone } = useDropZone(trackEl, {
 			track_id: props.track.id,
 			audio_file_id: res.id,
 			creator_user_id: user.value.id,
+			creator_display_name: user.value.display_name,
 			start_beat: startBeat,
 			end_beat: endBeat,
 			offset_seconds: 0,

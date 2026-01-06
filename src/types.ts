@@ -1,4 +1,4 @@
-import type { AudioFileBase } from '~/schema'
+import type { ClientAudioFile } from '~/schema'
 
 export type ImageBitmapLODs = {
 	[samplesPerPeak: number]: ImageBitmap
@@ -9,7 +9,7 @@ export type BitmapLODs = {
 	resolutions: ImageBitmapLODs
 }
 
-export type AudioFile = AudioFileBase & {
+export type AudioFile = ClientAudioFile & {
 	hash: string
 	sampleRate?: number
 	waveforms?: ImageBitmapLODs

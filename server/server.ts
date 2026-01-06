@@ -32,12 +32,17 @@ import { DEV_FILE_FOLDER, MAX_UPLOAD_FILE_SIZE_BYTES } from './constants'
 import { store } from './store'
 import { history } from './history'
 import { nanoid } from 'nanoid'
-import { type AudioFileBase, type ClientTrack, type Clip, type ServerTrack } from '~/schema'
+import {
+	type ClientTrack,
+	type Clip,
+	type ServerTrack,
+	type ClientAudioFile,
+	type TimelinePos,
+} from '~/schema'
 import { EVENTS } from '~/events'
 import { audioMimeTypes, BACKEND_PORT, CURSOR_INACTIVE_TIMEOUT_MS, DEFAULT_GAIN } from '~/constants'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
 import { RateLimiter, getSafeIp } from './ratelimiter'
-import type { TimelinePos } from '~/schema'
 
 const IN_DEV_MODE = Bun.env['ENV'] === 'development'
 
@@ -204,10 +209,11 @@ io.on('connection', async (socket) => {
 			const publicUrl = store.getPublicUrl(file_key)
 			const createdAt = new Date().toISOString()
 
-			const audioFile: AudioFileBase = {
+			const audioFile: ClientAudioFile = {
 				created_at: createdAt,
 				id: pending.file_id,
 				creator_user_id: pending.user_id,
+				creator_display_name: user.display_name,
 				duration,
 				file_name: pending.file_name,
 				public_url: publicUrl,
@@ -305,6 +311,7 @@ io.on('connection', async (socket) => {
 			const newClip: Omit<Clip, 'created_at'> = {
 				id: nanoid(),
 				creator_user_id: user.id,
+				creator_display_name: user.display_name,
 				start_beat,
 				end_beat,
 				audio_file_id,

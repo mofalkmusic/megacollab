@@ -6,7 +6,7 @@ import {
 	computePeaks,
 } from '@/utils/workerPool'
 import { audioBuffers, audiofiles, clips } from '@/state'
-import type { AudioFileBase, Clip } from '~/schema'
+import type { ServerAudioFile, Clip } from '~/schema'
 import { audioContext } from '@/audioEngine'
 import type { AudioFile, ImageBitmapLODs } from '@/types'
 
@@ -17,7 +17,7 @@ import type { AudioFile, ImageBitmapLODs } from '@/types'
  * caches everything in local indexdb
  */
 export async function ingestNewAudioFileMetadata(
-	allfiles: AudioFileBase | AudioFileBase[],
+	allfiles: ServerAudioFile | ServerAudioFile[],
 	opts?: { onProgress?: (progress: number) => void; onAllComplete?: () => void },
 ): Promise<void> {
 	const onProgress = opts?.onProgress ?? (() => {})
@@ -75,8 +75,8 @@ export async function ingestNewAudioFileMetadata(
 		})(),
 	])
 
-	const filesToFetch = new Set<AudioFileBase>()
-	const filesCached = new Set<AudioFileBase>()
+	const filesToFetch = new Set<ServerAudioFile>()
+	const filesCached = new Set<ServerAudioFile>()
 
 	for (const file of files) {
 		// If we already have the buffer in memory, skip (redundancy check)

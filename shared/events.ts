@@ -1,7 +1,7 @@
 import z from 'zod'
 import {
-	audioFileBaseSchema,
-	clipSchema,
+	ClientAudioFileSchema,
+	ClientClipSchema,
 	UserSchema,
 	AppErrorSchema,
 	timelinePosSchema,
@@ -62,23 +62,23 @@ export const EVENTS = Object.freeze({
 		'server:refresh': z.null(),
 		'server:ready': z.object({
 			user: UserSchema,
-			clips: z.array(clipSchema),
-			audiofiles: z.array(audioFileBaseSchema),
+			clips: z.array(ClientClipSchema),
+			audiofiles: z.array(ClientAudioFileSchema),
 			tracks: z.array(ClientTrackScema),
 		}),
 		'server:error': AppErrorSchema,
-		'audiofile:create': audioFileBaseSchema,
+		'audiofile:create': ClientAudioFileSchema,
 		'audiofile:delete': z.object({
-			audio_file: audioFileBaseSchema.pick({ id: true }),
-			deleted_clips: z.array(clipSchema.shape['id']),
+			audio_file: ClientAudioFileSchema.pick({ id: true }),
+			deleted_clips: z.array(ClientClipSchema.shape['id']),
 		}),
-		'clip:create': clipSchema,
-		'clip:update': clipSchema,
-		'clip:delete': clipSchema.shape['id'],
+		'clip:create': ClientClipSchema,
+		'clip:update': ClientClipSchema,
+		'clip:delete': ClientClipSchema.shape['id'],
 		'track:create': ClientTrackScema,
 		'track:delete': z.object({
 			track_id: ClientTrackScema.shape['id'],
-			deleted_clips: z.array(clipSchema.shape['id']),
+			deleted_clips: z.array(ClientClipSchema.shape['id']),
 		}),
 		'track:update': ClientTrackScema,
 		'clients:pos_updates': z.record(
@@ -114,7 +114,7 @@ export const EVENTS = Object.freeze({
 				file_key: z.string(),
 				duration: z.number(),
 			}),
-			res: audioFileBaseSchema,
+			res: ClientAudioFileSchema,
 		}),
 		'get:track:create': defineRequest({
 			req: z.null(),
@@ -136,18 +136,18 @@ export const EVENTS = Object.freeze({
 				offset_seconds: z.number().optional(),
 				gain: z.number().optional(),
 			}),
-			res: clipSchema,
+			res: ClientClipSchema,
 		}),
 		'get:clip:delete': defineRequest({
-			req: clipSchema.pick({ id: true }),
-			res: clipSchema.pick({ id: true }),
+			req: ClientClipSchema.pick({ id: true }),
+			res: ClientClipSchema.pick({ id: true }),
 		}),
 		'get:clip:update': defineRequest({
 			req: z.object({
-				id: clipSchema.shape['id'],
+				id: ClientClipSchema.shape['id'],
 				changes: updateClipSchema,
 			}),
-			res: clipSchema,
+			res: ClientClipSchema,
 		}),
 		'get:update:username': defineRequest({
 			req: z.object({
@@ -162,17 +162,17 @@ export const EVENTS = Object.freeze({
 			res: z.null(),
 		}),
 		'get:audiofile:delete': defineRequest({
-			req: audioFileBaseSchema.pick({ id: true }),
+			req: ClientAudioFileSchema.pick({ id: true }),
 			res: z.object({
-				audio_file: audioFileBaseSchema.pick({ id: true }),
-				deleted_clips: z.array(clipSchema.shape['id']),
+				audio_file: ClientAudioFileSchema.pick({ id: true }),
+				deleted_clips: z.array(ClientClipSchema.shape['id']),
 			}),
 		}),
 		'get:track:delete': defineRequest({
 			req: ClientTrackScema.pick({ id: true }),
 			res: z.object({
 				track_id: ClientTrackScema.shape['id'],
-				deleted_clips: z.array(clipSchema.shape['id']),
+				deleted_clips: z.array(ClientClipSchema.shape['id']),
 			}),
 		}),
 	},

@@ -100,6 +100,7 @@ export async function optimisticAudioCreateUpload(
 			duration,
 			waveforms,
 			creator_user_id: user.value.id,
+			creator_display_name: user.value.display_name,
 			sampleRate,
 			// filename here is already sanitized from server res
 			hash: makeAudioFileHash({ duration, file_name, creator_user_id: user.value.id }),

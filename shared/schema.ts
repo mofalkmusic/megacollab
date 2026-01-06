@@ -2,7 +2,7 @@ import z from 'zod'
 
 // AUDIO FILES
 
-export const audioFileBaseSchema = z.object({
+export const ServerAudioFileSchema = z.object({
 	id: z.string(),
 	creator_user_id: z.string(), // foreign key
 	file_name: z.string(),
@@ -12,11 +12,17 @@ export const audioFileBaseSchema = z.object({
 	color: z.string(),
 })
 
-export type AudioFileBase = z.output<typeof audioFileBaseSchema>
+export type ServerAudioFile = z.output<typeof ServerAudioFileSchema>
+
+export const ClientAudioFileSchema = ServerAudioFileSchema.extend({
+	creator_display_name: z.string(),
+})
+
+export type ClientAudioFile = z.output<typeof ClientAudioFileSchema>
 
 // CLIPS
 
-export const clipSchema = z.object({
+export const ServerClipSchema = z.object({
 	id: z.string(),
 	track_id: z.string(), // foreign key
 	audio_file_id: z.string(), // foreign key
@@ -28,11 +34,22 @@ export const clipSchema = z.object({
 	created_at: z.iso.datetime({ offset: true }),
 })
 
-export type Clip = z.output<typeof clipSchema>
+export type ServerClip = z.output<typeof ServerClipSchema>
 
-export const updateClipSchema = clipSchema
-	.omit({ id: true, created_at: true, audio_file_id: true, creator_user_id: true })
-	.partial()
+export const ClientClipSchema = ServerClipSchema.extend({
+	creator_display_name: z.string(),
+})
+
+export type ClientClip = z.output<typeof ClientClipSchema>
+
+export type Clip = ClientClip
+
+export const updateClipSchema = ServerClipSchema.omit({
+	id: true,
+	created_at: true,
+	audio_file_id: true,
+	creator_user_id: true,
+}).partial()
 
 export type UpdateClip = z.output<typeof updateClipSchema>
 

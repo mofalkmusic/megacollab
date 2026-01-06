@@ -651,6 +651,7 @@ const ghostClip = computed<Clip | null>(() => {
 		track_id: ghostDragState.value.track_id ?? 'ghost-track',
 		audio_file_id: dragFromPoolState.value.audioFileId,
 		creator_user_id: 'me',
+		creator_display_name: user.value?.display_name ?? 'Me', // added display name
 		start_beat: ghostDragState.value.start_beat,
 		end_beat: ghostDragState.value.end_beat,
 		offset_seconds: 0,
@@ -752,6 +753,7 @@ watch(
 					track_id: state.track_id,
 					audio_file_id: source.audioFileId,
 					creator_user_id: user.value.id,
+					creator_display_name: user.value.display_name, // added display name
 					start_beat: state.start_beat,
 					end_beat: state.end_beat,
 					offset_seconds: 0,
