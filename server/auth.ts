@@ -317,7 +317,7 @@ export async function handleTwitchOAuthCallback(c: Context) {
 
 		const sessionId = nanoid(64)
 
-		await db.saveSessionSafe({ session_id: sessionId, user_id: completeUser.id })
+		await db.saveSession({ session_id: sessionId, user_id: completeUser.id })
 
 		await setSignedCookie(c, COOKIE_NAME, sessionId, COOKIE_SIGNING_SECRET, {
 			httpOnly: true,
@@ -464,7 +464,7 @@ export async function handleDiscordOAuthCallback(c: Context) {
 
 		const sessionId = nanoid(64)
 
-		await db.saveSessionSafe({ session_id: sessionId, user_id: completeUser.id })
+		await db.saveSession({ session_id: sessionId, user_id: completeUser.id })
 
 		await setSignedCookie(c, COOKIE_NAME, sessionId, COOKIE_SIGNING_SECRET, {
 			httpOnly: true,

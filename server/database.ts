@@ -76,47 +76,41 @@ export const db = {
 	query: queryFn,
 	saveAudioFile,
 	migrateAndSeedDb,
-	getAudioFilesSafe,
-	getAudioFileSafe,
+	getAudioFiles,
+	getAudioFile,
 	createTrack,
-	getTracksSafe,
-	getTrackSafe,
-	updateTrackSafe,
-	createClipSafe,
-	getClipsSafe,
-	getClipSafe,
-	deleteClipSafe,
-	updateClipSafe,
-	updateExistingUsernameSafe,
+	getTracks,
+	getTrack,
+	updateTrack,
+	createClip,
+	getClips,
+	getClip,
+	deleteClip,
+	updateClip,
+	updateExistingUsername,
 	makeNewIfNotExistUserSafe,
-	saveSessionSafe,
+	saveSession,
 	getUserFromSessionIdSafe,
 	getOrCreateDevUser,
-	deleteAudioFileSafe,
+	deleteAudioFile,
 	deleteSessionSafe,
 }
 
 const audioFileCache = new Map<string, ClientAudioFile>()
 
-async function getAudioFilesSafe(): Promise<ClientAudioFile[]> {
-	try {
-		return await queryFn<ClientAudioFile>(`
+async function getAudioFiles(): Promise<ClientAudioFile[]> {
+	return await queryFn<ClientAudioFile>(`
 			SELECT 
 				af.*,
 				u.display_name AS creator_display_name
 			FROM ${AUDIOFILES_TABLE} AS af
 			LEFT JOIN ${USERS_TABLE} AS u ON af.creator_user_id = u.id
 		`)
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return [] // todo: may want to actually provide an error to the client...
-	}
 }
 
-async function getAudioFileSafe(id: string): Promise<ClientAudioFile | null> {
-	try {
-		const rows = await queryFn<ClientAudioFile>(
-			`
+async function getAudioFile(id: string): Promise<ClientAudioFile | null> {
+	const rows = await queryFn<ClientAudioFile>(
+		`
 			SELECT 
 				af.*,
 				u.display_name AS creator_display_name
@@ -124,13 +118,9 @@ async function getAudioFileSafe(id: string): Promise<ClientAudioFile | null> {
 			LEFT JOIN ${USERS_TABLE} AS u ON af.creator_user_id = u.id
 			WHERE af.id = $1
 		`,
-			[id],
-		)
-		return rows[0] || null
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return null
-	}
+		[id],
+	)
+	return rows[0] || null
 }
 
 async function createTrack(track: Omit<ServerTrack, 'order_index'>): Promise<ClientTrack> {
@@ -157,41 +147,30 @@ async function createTrack(track: Omit<ServerTrack, 'order_index'>): Promise<Cli
 	return rows[0]!
 }
 
-async function getTracksSafe(): Promise<ClientTrack[]> {
-	try {
-		return await queryFn<ClientTrack>(`
+async function getTracks(): Promise<ClientTrack[]> {
+	return await queryFn<ClientTrack>(`
 			SELECT
 				t.*,
 				u.display_name AS belongs_to_display_name
 			FROM ${TRACKS_TABLE} AS t
 			LEFT JOIN ${USERS_TABLE} AS u ON t.belongs_to_user_id = u.id
 		`)
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return [] // todo: may want to actually provide an error to the client...
-	}
 }
 
-async function getTrackSafe(id: string): Promise<ServerTrack | null> {
-	try {
-		const rows = await queryFn<ServerTrack>(`SELECT * FROM ${TRACKS_TABLE} WHERE id = $1`, [id])
-		return rows[0] || null
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return null
-	}
+async function getTrack(id: string): Promise<ServerTrack | null> {
+	const rows = await queryFn<ServerTrack>(`SELECT * FROM ${TRACKS_TABLE} WHERE id = $1`, [id])
+	return rows[0] || null
 }
 
-async function updateTrackSafe(id: string, changes: UpdateTrack): Promise<ClientTrack | null> {
-	try {
-		const entries = Object.entries(changes)
+async function updateTrack(id: string, changes: UpdateTrack): Promise<ClientTrack> {
+	const entries = Object.entries(changes)
 
-		if (entries.length === 0) return null
+	if (entries.length === 0) throw new Error('No changes provided')
 
-		const setClauses = entries.map(([key], index) => `${key} = $${index + 2}`)
-		const values = entries.map(([, value]) => value)
+	const setClauses = entries.map(([key], index) => `${key} = $${index + 2}`)
+	const values = entries.map(([, value]) => value)
 
-		const sql = `
+	const sql = `
 			WITH updated AS (
 				UPDATE ${TRACKS_TABLE}
 				SET ${setClauses.join(', ')}
@@ -206,33 +185,26 @@ async function updateTrackSafe(id: string, changes: UpdateTrack): Promise<Client
 				ON updated.belongs_to_user_id = users.id
 		`
 
-		const rows = await queryFn<ClientTrack>(sql, [id, ...values])
+	const rows = await queryFn<ClientTrack>(sql, [id, ...values])
 
-		if (!rows.length) return null
-		return rows[0]!
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return null
-	}
+	if (!rows.length) throw new Error(`Failed to update track ${id}`)
+	return rows[0]!
 }
 
-async function createClipSafe(
-	clip: Omit<Clip, 'created_at' | 'creator_display_name'>,
-): Promise<Clip | null> {
-	try {
-		const {
-			id,
-			creator_user_id,
-			track_id,
-			audio_file_id,
-			end_beat,
-			start_beat,
-			gain,
-			offset_seconds,
-		} = clip
+async function createClip(clip: Omit<Clip, 'created_at' | 'creator_display_name'>): Promise<Clip> {
+	const {
+		id,
+		creator_user_id,
+		track_id,
+		audio_file_id,
+		end_beat,
+		start_beat,
+		gain,
+		offset_seconds,
+	} = clip
 
-		const rows = await queryFn<Clip>(
-			`
+	const rows = await queryFn<Clip>(
+		`
 			WITH inserted AS (
 				INSERT INTO ${CLIPS_TABLE} (id, creator_user_id, track_id, audio_file_id, end_beat, start_beat, gain, offset_seconds) 
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -245,38 +217,28 @@ async function createClipSafe(
 			LEFT JOIN ${USERS_TABLE} AS users
 				ON inserted.creator_user_id = users.id
 		`,
-			[id, creator_user_id, track_id, audio_file_id, end_beat, start_beat, gain, offset_seconds],
-		)
+		[id, creator_user_id, track_id, audio_file_id, end_beat, start_beat, gain, offset_seconds],
+	)
 
-		if (!rows.length) return null
-		const result = rows[0]!
+	if (!rows.length) throw new Error('Failed to create clip')
+	const result = rows[0]!
 
-		return result
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return null
-	}
+	return result
 }
 
-async function getClipsSafe(): Promise<Clip[]> {
-	try {
-		return await queryFn<Clip>(`
+async function getClips(): Promise<Clip[]> {
+	return await queryFn<Clip>(`
 			SELECT 
 				c.*,
 				u.display_name AS creator_display_name
 			FROM ${CLIPS_TABLE} AS c
 			LEFT JOIN ${USERS_TABLE} AS u ON c.creator_user_id = u.id
 		`)
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return [] // todo: may want to actually provide an error to the client...
-	}
 }
 
-async function getClipSafe(id: string): Promise<Clip | null> {
-	try {
-		const rows = await queryFn<Clip>(
-			`
+async function getClip(id: string): Promise<Clip | null> {
+	const rows = await queryFn<Clip>(
+		`
 			SELECT 
 				c.*,
 				u.display_name AS creator_display_name
@@ -284,24 +246,19 @@ async function getClipSafe(id: string): Promise<Clip | null> {
 			LEFT JOIN ${USERS_TABLE} AS u ON c.creator_user_id = u.id
 			WHERE c.id = $1
 		`,
-			[id],
-		)
-		return rows[0] || null
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return null
-	}
+		[id],
+	)
+	return rows[0] || null
 }
 
-async function updateClipSafe(id: string, changes: UpdateClip): Promise<Clip | null> {
-	try {
-		const entries = Object.entries(changes)
+async function updateClip(id: string, changes: UpdateClip): Promise<Clip> {
+	const entries = Object.entries(changes)
 
-		const setClauses = entries.map(([key], index) => `${key} = $${index + 2}`)
+	const setClauses = entries.map(([key], index) => `${key} = $${index + 2}`)
 
-		const values = entries.map(([, value]) => value)
+	const values = entries.map(([, value]) => value)
 
-		const sql = `
+	const sql = `
 			WITH updated AS (
 				UPDATE ${CLIPS_TABLE}
 				SET ${setClauses.join(', ')}
@@ -316,36 +273,27 @@ async function updateClipSafe(id: string, changes: UpdateClip): Promise<Clip | n
 				ON updated.creator_user_id = users.id
 		`
 
-		const rows = await queryFn<Clip>(sql, [id, ...values])
+	const rows = await queryFn<Clip>(sql, [id, ...values])
 
-		if (!rows.length) return null
-		const result = rows[0]!
+	if (!rows.length) throw new Error(`Failed to update clip ${id}`)
+	const result = rows[0]!
 
-		return result
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return null
-	}
+	return result
 }
 
-async function deleteClipSafe(id: string): Promise<ServerClip | null> {
-	try {
-		const rows = await queryFn<ServerClip>(
-			`
-				DELETE FROM ${CLIPS_TABLE} WHERE id = $1
-				RETURNING *
+async function deleteClip(id: string): Promise<ServerClip> {
+	const rows = await queryFn<ServerClip>(
+		`
+			DELETE FROM ${CLIPS_TABLE} WHERE id = $1
+			RETURNING *
 		`,
-			[id],
-		)
+		[id],
+	)
 
-		if (!rows.length) return null
-		const result = rows[0]!
+	if (!rows.length) throw new Error(`Failed to delete clip ${id}`)
+	const result = rows[0]!
 
-		return result
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return null
-	}
+	return result
 }
 
 async function saveAudioFile(audioFile: ServerAudioFile): Promise<ClientAudioFile | null> {
@@ -406,27 +354,22 @@ async function makeNewIfNotExistUserSafe(user: Omit<User, 'created_at'>): Promis
 	}
 }
 
-async function saveSessionSafe(session: Omit<Session, 'created_at'>): Promise<Session | null> {
-	try {
-		const { session_id, user_id } = session
+async function saveSession(session: Omit<Session, 'created_at'>): Promise<Session> {
+	const { session_id, user_id } = session
 
-		const rows = await queryFn<Session>(
-			`
+	const rows = await queryFn<Session>(
+		`
 			INSERT INTO ${SESSIONS_TABLE} (session_id, user_id) 
 			VALUES ($1, $2)
 			RETURNING *
 		`,
-			[session_id, user_id],
-		)
+		[session_id, user_id],
+	)
 
-		if (!rows.length) return null
+	if (!rows.length) throw new Error('Failed to save session')
 
-		const result = rows[0]!
-		return result
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return null
-	}
+	const result = rows[0]!
+	return result
 }
 
 async function deleteSessionSafe(session_id: string): Promise<Session | null> {
@@ -469,29 +412,21 @@ async function getUserFromSessionIdSafe(session_id: string): Promise<User | null
 	}
 }
 
-async function updateExistingUsernameSafe(
-	id: string,
-	username: string,
-): Promise<User['display_name'] | null> {
-	try {
-		const rows = await queryFn<Pick<User, 'display_name'>>(
-			`
+async function updateExistingUsername(id: string, username: string): Promise<User['display_name']> {
+	const rows = await queryFn<Pick<User, 'display_name'>>(
+		`
 			UPDATE ${USERS_TABLE}
 			SET display_name = $2
 			WHERE id = $1
 			RETURNING display_name
 		`,
-			[id, username],
-		)
+		[id, username],
+	)
 
-		if (!rows.length) return null
-		const result = rows[0]!
+	if (!rows.length) throw new Error('Failed to update username')
+	const result = rows[0]!
 
-		return result.display_name
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return null
-	}
+	return result.display_name
 }
 
 // async function getFullClientByUser(user: User): Promise<(Client & User) | null> {
@@ -586,12 +521,11 @@ async function getOrCreateDevUser(): Promise<User | null> {
 	}
 }
 
-async function deleteAudioFileSafe(
+async function deleteAudioFile(
 	id: string,
-): Promise<{ deleted_clips: Clip['id'][]; deleted_file: ServerAudioFile } | null> {
-	try {
-		const rows = await queryFn<ServerAudioFile & { deleted_clip_ids: ServerClip['id'][] | null }>(
-			`
+): Promise<{ deleted_clips: Clip['id'][]; deleted_file: ServerAudioFile }> {
+	const rows = await queryFn<ServerAudioFile & { deleted_clip_ids: ServerClip['id'][] | null }>(
+		`
 			WITH deleted_clips AS (
 				DELETE FROM ${CLIPS_TABLE}
 				WHERE audio_file_id = $1
@@ -607,20 +541,16 @@ async function deleteAudioFileSafe(
 				(SELECT array_agg(id) FROM deleted_clips) AS deleted_clip_ids
 			FROM deleted_file
 			`,
-			[id],
-		)
+		[id],
+	)
 
-		if (!rows.length) return null
-		const row = rows[0]!
+	if (!rows.length) throw new Error(`Failed to delete audio file ${id}`)
+	const row = rows[0]!
 
-		const { deleted_clip_ids, ...fileData } = row
+	const { deleted_clip_ids, ...fileData } = row
 
-		return {
-			deleted_clips: deleted_clip_ids || [],
-			deleted_file: fileData,
-		}
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return null
+	return {
+		deleted_clips: deleted_clip_ids || [],
+		deleted_file: fileData,
 	}
 }

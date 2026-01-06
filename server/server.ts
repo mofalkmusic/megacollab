@@ -284,25 +284,25 @@ io.on('connection', async (socket) => {
 			// 	return
 			// }
 
-			const track = await db.updateTrackSafe(id, changes)
+			try {
+				const track = await db.updateTrack(id, changes)
 
-			if (!track) {
+				callback({
+					success: true,
+					data: track,
+				})
+
+				socket.broadcast.emit('track:update', track)
+			} catch (err) {
+				const error = err instanceof Error ? err.message : 'Unknown error'
 				callback({
 					success: false,
 					error: {
 						status: 'SERVER_ERROR',
-						message: 'Oops, something unexpected went wrong. Please try reconnecting.',
+						message: `Database error: ${error}`,
 					},
 				})
-				return
 			}
-
-			callback({
-				success: true,
-				data: track,
-			})
-
-			socket.broadcast.emit('track:update', track)
 		})
 
 		socket.on('get:clip:create', async (data, callback) => {
@@ -320,102 +320,101 @@ io.on('connection', async (socket) => {
 				track_id,
 			}
 
-			const clip = await db.createClipSafe(newClip)
+			try {
+				const clip = await db.createClip(newClip)
 
-			if (!clip) {
+				callback({
+					success: true,
+					data: clip,
+				})
+
+				socket.broadcast.emit('clip:create', clip)
+
+				history.push({
+					type: 'CLIP_CREATE',
+					payload: clip,
+					inverse: { id: clip.id },
+					userId: user.id,
+				})
+			} catch (err) {
+				const error = err instanceof Error ? err.message : 'Unknown error'
 				callback({
 					success: false,
 					error: {
 						status: 'SERVER_ERROR',
-						message: 'Oops, something unexpected went wrong. Please try reconnecting.',
+						message: `Database error: ${error}`,
 					},
 				})
-				return
 			}
-
-			callback({
-				success: true,
-				data: clip,
-			})
-
-			socket.broadcast.emit('clip:create', clip)
-
-			history.push({
-				type: 'CLIP_CREATE',
-				payload: clip,
-				inverse: { id: clip.id },
-				userId: user.id,
-			})
 		})
 
 		socket.on('get:clip:delete', async (data, callback) => {
 			const { id } = data
 
-			const clip = await db.deleteClipSafe(id)
+			try {
+				const clip = await db.deleteClip(id)
 
-			if (!clip) {
+				callback({
+					success: true,
+					data: {
+						id: clip.id,
+					},
+				})
+
+				socket.broadcast.emit('clip:delete', clip.id)
+
+				history.push({
+					type: 'CLIP_DELETE',
+					payload: { id: clip.id },
+					inverse: clip,
+					userId: user.id,
+				})
+			} catch (err) {
+				const error = err instanceof Error ? err.message : 'Unknown error'
 				callback({
 					success: false,
 					error: {
 						status: 'SERVER_ERROR',
-						message: 'Oops, something unexpected went wrong. Please try reconnecting.',
+						message: `Database error: ${error}`,
 					},
 				})
-				return
 			}
-
-			callback({
-				success: true,
-				data: {
-					id: clip.id,
-				},
-			})
-
-			socket.broadcast.emit('clip:delete', clip.id)
-
-			history.push({
-				type: 'CLIP_DELETE',
-				payload: { id: clip.id },
-				inverse: clip,
-				userId: user.id,
-			})
 		})
 
 		socket.on('get:clip:update', async (data, callback) => {
 			const { id, changes } = data
 
-			const oldClip = await db.getClipSafe(id)
+			try {
+				const oldClip = await db.getClip(id)
+				const clip = await db.updateClip(id, changes)
 
-			const clip = await db.updateClipSafe(id, changes)
+				callback({
+					success: true,
+					data: clip,
+				})
 
-			if (!clip) {
+				socket.broadcast.emit('clip:update', clip)
+
+				if (oldClip) {
+					const oldValues: any = {}
+					for (const key of Object.keys(changes)) {
+						oldValues[key] = (oldClip as any)[key]
+					}
+					history.push({
+						type: 'CLIP_UPDATE',
+						payload: { id, changes },
+						inverse: { id, oldValues },
+						userId: user.id,
+					})
+				}
+			} catch (err) {
+				const error = err instanceof Error ? err.message : 'Unknown error'
 				callback({
 					success: false,
 					error: {
 						status: 'SERVER_ERROR',
-						message: 'Oops, something unexpected went wrong. Please try reconnecting.',
+						message: `Database error: ${error}`,
 					},
-				})
-				return
-			}
-
-			callback({
-				success: true,
-				data: clip,
-			})
-
-			socket.broadcast.emit('clip:update', clip)
-
-			if (oldClip) {
-				const oldValues: any = {}
-				for (const key of Object.keys(changes)) {
-					oldValues[key] = (oldClip as any)[key]
-				}
-				history.push({
-					type: 'CLIP_UPDATE',
-					payload: { id, changes },
-					inverse: { id, oldValues },
-					userId: user.id,
 				})
 			}
 		})
@@ -447,30 +446,30 @@ io.on('connection', async (socket) => {
 				return
 			}
 
-			const updatedUsername = await db.updateExistingUsernameSafe(
-				user.id,
-				cleanUsername.toLowerCase(),
-			)
+			try {
+				const updatedUsername = await db.updateExistingUsername(
+					user.id,
+					cleanUsername.toLowerCase(),
+				)
 
-			if (!updatedUsername) {
+				callback({
+					success: true,
+					data: {
+						username: updatedUsername,
+					},
+				})
+
+				user.display_name = updatedUsername
+			} catch (err) {
+				const error = err instanceof Error ? err.message : 'Unknown error'
 				callback({
 					success: false,
 					error: {
 						status: 'SERVER_ERROR',
-						message: 'Oops, something unexpected went wrong. Please try again.',
+						message: `Database error: ${error}`,
 					},
 				})
-				return
 			}
-
-			callback({
-				success: true,
-				data: {
-					username: updatedUsername,
-				},
-			})
-
-			user.display_name = updatedUsername
 
 			// todo: when implementing foreign cursors, broadcast this change aswell!
 		})
@@ -499,60 +498,60 @@ io.on('connection', async (socket) => {
 			// check wether or not this user is actually the creator of the audio file.
 			// otherwise dont allow!!
 
-			const audioFile = await db.getAudioFileSafe(id)
+			try {
+				const audioFile = await db.getAudioFile(id)
 
-			if (!audioFile || audioFile.creator_user_id !== user.id) {
+				if (!audioFile || audioFile.creator_user_id !== user.id) {
+					callback({
+						success: false,
+						error: {
+							status: 'UNAUTHORIZED',
+							message: 'You are not authorized to delete this audio file.',
+						},
+					})
+					return
+				}
+
+				const result = await db.deleteAudioFile(id)
+
+				const { deleted_clips, deleted_file } = result
+
 				callback({
-					success: false,
-					error: {
-						status: 'UNAUTHORIZED',
-						message: 'You are not authorized to delete this audio file.',
+					success: true,
+					data: {
+						audio_file: { id },
+						deleted_clips: deleted_clips,
 					},
 				})
-				return
-			}
 
-			const result = await db.deleteAudioFileSafe(id)
+				socket.broadcast.emit('audiofile:delete', {
+					audio_file: { id },
+					deleted_clips: deleted_clips,
+				})
 
-			if (!result) {
+				const key = generateStorageKey(
+					deleted_file.file_name,
+					deleted_file.creator_user_id,
+					deleted_file.id,
+				)
+				await store.deleteIfExists(key)
+			} catch (err) {
+				const error = err instanceof Error ? err.message : 'Unknown error'
 				callback({
 					success: false,
 					error: {
 						status: 'SERVER_ERROR',
-						message: 'Oops, something unexpected went wrong. Please try reconnecting.',
+						message: `Database error: ${error}`,
 					},
 				})
-				return
 			}
-
-			const { deleted_clips, deleted_file } = result
-
-			callback({
-				success: true,
-				data: {
-					audio_file: { id },
-					deleted_clips: deleted_clips,
-				},
-			})
-
-			socket.broadcast.emit('audiofile:delete', {
-				audio_file: { id },
-				deleted_clips: deleted_clips,
-			})
-
-			const key = generateStorageKey(
-				deleted_file.file_name,
-				deleted_file.creator_user_id,
-				deleted_file.id,
-			)
-			await store.deleteIfExists(key)
 		})
 
 		socket.emit('server:ready', {
 			user,
-			audiofiles: await db.getAudioFilesSafe(),
-			clips: await db.getClipsSafe(),
-			tracks: await db.getTracksSafe(),
+			audiofiles: await db.getAudioFiles(),
+			clips: await db.getClips(),
+			tracks: await db.getTracks(),
 		})
 
 		if (IN_DEV_MODE) ensureAllEventsHandled(socket.eventNames())
@@ -635,8 +634,8 @@ app.get('/api/auth/verify', async (c) => {
 
 	return c.text('Authorized', 200)
 })
-app.get('/api/auth/signout', getSignOut)
 
+app.get('/api/auth/signout', getSignOut)
 app.get('/api/auth/discord/url', getDiscordOAuthUrl)
 app.get('/api/auth/discord/callback', handleDiscordOAuthCallback)
 app.get('/api/auth/twitch/url', getTwitchOAuthUrl)

@@ -58,12 +58,21 @@ class HistoryManager {
 			switch (action.type) {
 				case 'CLIP_CREATE': {
 					const clipId = action.payload.id // omg i hate that this is any... fix todo
-					const current = await db.getClipSafe(clipId)
+					let current
+					try {
+						current = await db.getClip(clipId)
+					} catch {
+						return { success: false, error: 'Failed to retrieve clip status.' }
+					}
 
 					if (current) {
-						await db.deleteClipSafe(clipId)
-						socketBroadcast('clip:delete', clipId)
-						processed = true
+						try {
+							await db.deleteClip(clipId)
+							socketBroadcast('clip:delete', clipId)
+							processed = true
+						} catch {
+							return { success: false, error: 'Failed to delete clip.' }
+						}
 					} else {
 						return { success: false, error: 'Clip was already deleted by someone else.' }
 					}
@@ -71,13 +80,22 @@ class HistoryManager {
 				}
 				case 'CLIP_DELETE': {
 					const clipId = action.payload.id
-					const current = await db.getClipSafe(clipId)
+					let current
+					try {
+						current = await db.getClip(clipId)
+					} catch {
+						return { success: false, error: 'Failed to retrieve clip status.' }
+					}
 
 					if (!current) {
 						const clip = action.inverse as Clip
-						await db.createClipSafe(clip)
-						socketBroadcast('clip:create', clip)
-						processed = true
+						try {
+							const restored = await db.createClip(clip)
+							socketBroadcast('clip:create', restored)
+							processed = true
+						} catch {
+							return { success: false, error: 'Failed to restore clip.' }
+						}
 					} else {
 						return { success: false, error: 'Clip already exists (ID collision).' }
 					}
@@ -87,7 +105,12 @@ class HistoryManager {
 					const { id, oldValues } = action.inverse
 					const { changes } = action.payload
 
-					const current = await db.getClipSafe(id)
+					let current
+					try {
+						current = await db.getClip(id)
+					} catch {
+						return { success: false, error: 'Failed to retrieve clip status.' }
+					}
 					if (current) {
 						let conflict = false
 						for (const key of Object.keys(changes)) {
@@ -102,10 +125,12 @@ class HistoryManager {
 							return { success: false, error: 'Clip has been modified by someone else.' }
 						}
 
-						const updated = await db.updateClipSafe(id, oldValues)
-						if (updated) {
+						try {
+							const updated = await db.updateClip(id, oldValues)
 							socketBroadcast('clip:update', updated)
 							processed = true
+						} catch {
+							return { success: false, error: 'Failed to revert clip update.' }
 						}
 					} else {
 						return { success: false, error: 'Clip no longer exists.' }

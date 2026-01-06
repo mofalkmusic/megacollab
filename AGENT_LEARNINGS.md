@@ -23,6 +23,11 @@ This file tracks project-specific patterns, architectural decisions, and bug fix
 - **Learning**: Always verify implemented changes by running `bun run typecheck`, `bun run lint`, and `bun run format` before concluding the task.
 - **Context**: Ensuring the codebase remains type-safe, linted, and formatted is a hard requirement for all changes to prevent regression and maintain quality.
 
+### Knowledge Preservation
+
+- **Learning**: Include a final step/task to add learnings to `AGENT_LEARNINGS.md` if it makes sense to keep knowledge about whatever was done in this knowledgebase.
+- **Context**: Continuous updates to `AGENT_LEARNINGS.md` are essential for maintaining a "collective memory" of the project's specific quirks and patterns.
+
 ## [TypeScript & Code Style]
 
 ### Interface Avoidance
