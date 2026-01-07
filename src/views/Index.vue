@@ -46,6 +46,14 @@
 				{{ 25 }}ms
 			</p>
 
+			<input
+				type="range"
+				:min="minPxPerBeat"
+				:max="maxPxPerBeat"
+				v-model.number="pxPerBeat"
+				style="width: 80px; margin-left: 1rem"
+			/>
+
 			<div style="flex-grow: 1"></div>
 
 			<button ref="userButton" class="controls-panel-btn" @click="isUserMenuOpen = !isUserMenuOpen">
@@ -172,6 +180,7 @@ import {
 	timelineWidth,
 	tracks,
 	maxPxPerBeat,
+	minPxPerBeat,
 	controlKeyPressed,
 	zKeyPressed,
 	activeUploads,
@@ -354,6 +363,23 @@ function togglePlayState() {
 }
 
 const timelineContainerEl = useTemplateRef('timelineContainer')
+
+useEventListener(
+	timelineContainerEl,
+	'wheel',
+	(e) => {
+		if (e.ctrlKey) {
+			e.preventDefault()
+			const sensitivity = 0.05
+			const unclipped = pxPerBeat.value - e.deltaY * sensitivity
+			pxPerBeat.value = Math.max(minPxPerBeat, Math.min(maxPxPerBeat, unclipped))
+		}
+	},
+	{
+		passive: false,
+	},
+)
+
 const { x: scrollX, y: scrollY } = useScroll(timelineContainerEl)
 const { width: timelineContainerClientWidth } = useElementSize(timelineContainerEl)
 
