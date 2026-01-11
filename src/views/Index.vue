@@ -876,6 +876,9 @@ useEventListener(tracksWrapperEl, 'pointerdown', (e) => {
 	// Don't interact if clicking on a clip or other interactive element, unless selecting
 	if (!controlKeyPressed.value && (e.target as HTMLElement).closest('.clip')) return
 
+	// Don't interact if clicking on the timeline header (e.g. for loop controls)
+	if ((e.target as HTMLElement).closest('.timeline-header-wrap')) return
+
 	// Clear selection if clicking on empty space without Control key (Left or Right Click)
 	if (!controlKeyPressed.value && (e.button === 0 || e.button === 2)) {
 		selectedClipIds.clear()
