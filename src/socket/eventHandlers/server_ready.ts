@@ -4,7 +4,6 @@ import { audiofiles, clips, tracks, user } from '@/state'
 import { ingestNewAudioFileMetadata } from '@/utils/preProcessAudio'
 import { pruneAudioCache } from '@/utils/workerPool'
 import { useToast } from '@/composables/useToast'
-import { useDebug } from '@/composables/useDebug'
 import { makeAudioFileHash } from '~/utils'
 
 const { addToast } = useToast()
@@ -43,7 +42,7 @@ export default defineSocketHandler({
 		try {
 			await ingestNewAudioFileMetadata(serverAudiofiles, {
 				onProgress: (p) => {
-					useDebug(() => p, { label: 'init progress' })
+					// useDebug(() => p, { label: 'init progress' })
 				},
 				onAllComplete: async () => {
 					await pruneAudioCache(serverAudiofiles.map((f: { id: string }) => f.id))

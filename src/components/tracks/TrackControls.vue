@@ -308,7 +308,7 @@ async function resetVolume(trackId: string) {
 	grid-auto-rows: auto;
 	position: sticky;
 	left: 0;
-	z-index: 40;
+	z-index: 100;
 
 	padding-top: 2rem;
 }

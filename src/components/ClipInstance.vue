@@ -1,8 +1,16 @@
 <template>
 	<div
-		v-memo="[wrapperStyles, waveformsDrawn, canvasStyles, props.audiofile.file_name, isHovered]"
+		v-memo="[
+			wrapperStyles,
+			waveformsDrawn,
+			canvasStyles,
+			props.audiofile.file_name,
+			isHovered,
+			isSelected,
+		]"
 		ref="clipWrapper"
-		class="outmostClipWrapper"
+		class="outmostClipWrapper clip"
+		:class="{ selected: isSelected }"
 		:style="wrapperStyles"
 		@contextmenu.prevent="rip"
 	>
@@ -44,10 +52,12 @@ import {
 	TOTAL_BEATS,
 	altKeyPressed,
 	clips,
+	controlKeyPressed,
 	dragFromPoolState,
 	pixelRatio,
 	rightMouseButtonPressedOnTimeline,
 	user,
+	selectedClipIds,
 } from '@/state'
 import type { Clip } from '~/schema'
 import { useElementBounding, useEventListener, watchThrottled, useElementHover } from '@vueuse/core'
@@ -98,6 +108,11 @@ async function rip() {
 		clips.delete(res.data.id)
 	}
 }
+
+const isSelected = computed(() => {
+	if (!props.clip) return false
+	return selectedClipIds.has(props.clip.id)
+})
 
 const withinAudioPool = computed(() => !props.clip && typeof props.customWidthPx === 'number')
 
@@ -237,6 +252,7 @@ onMounted(() => {
 			}
 
 			if (event.button !== 0) return
+			if (controlKeyPressed.value) return // Allow bubble for selection
 
 			event.preventDefault()
 			event.stopPropagation()
@@ -655,8 +671,11 @@ async function drawWaveform() {
 		ctx.globalCompositeOperation = 'source-in'
 
 		// Mix with black (0.2 = 20% black)
-		const mixed = interpolate([props.audiofile.color, '#000000'])(0.2)
-		ctx.fillStyle = formatHex(mixed) ?? props.audiofile.color
+		const mixed = interpolate([isSelected.value ? '#ff4444' : props.audiofile.color, '#000000'])(
+			0.2,
+		)
+		const finalColor = formatHex(mixed) ?? props.audiofile.color
+		ctx.fillStyle = finalColor
 		ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
 		ctx.globalCompositeOperation = 'source-over'
 
@@ -672,6 +691,7 @@ watchThrottled(
 		() => props.audiofile.waveforms,
 		() => props.audiofile.color,
 		pixelRatio,
+		isSelected,
 	],
 	() => {
 		drawWaveform()
@@ -710,6 +730,19 @@ function getWaveform(
 	position: relative;
 	z-index: 1;
 	will-change: left, width;
+}
+
+.outmostClipWrapper.selected {
+	box-shadow: 0 0 0 1px #ff4444;
+}
+
+.outmostClipWrapper.selected .clipHeader {
+	background-color: #ff4444 !important;
+	color: white !important;
+}
+
+.outmostClipWrapper.selected .outerClipCanvasWrap {
+	background-color: rgba(255, 25, 25, 0.2) !important;
 }
 
 .clipHeader {

@@ -99,6 +99,12 @@
 				/>
 
 				<UserCursors />
+
+				<div
+					v-if="selectionState.isSelecting"
+					class="selection-box"
+					:style="selectionBoxStyle"
+				></div>
 			</div>
 
 			<AddTrack @on-track-added="handleTrackAdded" style="grid-area: addtrack" />
@@ -168,11 +174,13 @@ import {
 	computed,
 	nextTick,
 	onMounted,
+	reactive,
 	ref,
 	shallowRef,
 	useTemplateRef,
 	watch,
 	watchEffect,
+	type CSSProperties,
 } from 'vue'
 import AudioFilePool from '@/components/AudioFilePool.vue'
 import {
@@ -185,6 +193,7 @@ import {
 	zKeyPressed,
 	activeUploads,
 	bpm,
+	selectedClipIds,
 } from '@/state'
 import TrackInstance from '@/components/tracks/TrackInstance.vue'
 import {
@@ -830,6 +839,182 @@ watch(
 		const stopUp = useEventListener(window, 'pointerup', onUp)
 	},
 )
+
+// --- SELECTION LOGIC ---
+
+const selectionState = reactive({
+	isSelecting: false,
+	startX: 0,
+	startY: 0,
+	currentX: 0,
+	currentY: 0,
+})
+
+const selectionBoxStyle = computed((): CSSProperties => {
+	if (!selectionState.isSelecting) return {}
+
+	const x = Math.min(selectionState.startX, selectionState.currentX)
+	const y = Math.min(selectionState.startY, selectionState.currentY)
+	const width = Math.abs(selectionState.currentX - selectionState.startX)
+	const height = Math.abs(selectionState.currentY - selectionState.startY)
+
+	return {
+		left: `${x}px`,
+		top: `${y}px`,
+		width: `${width}px`,
+		height: `${height}px`,
+		position: 'absolute',
+		backgroundColor: 'hsl(from cyan h s l / 0.1)',
+		border: '2px solid cyan',
+		borderRadius: '0.5rem',
+		pointerEvents: 'none',
+		zIndex: 80,
+	}
+})
+
+useEventListener(tracksWrapperEl, 'pointerdown', (e) => {
+	// Don't interact if clicking on a clip or other interactive element, unless selecting
+	if (!controlKeyPressed.value && (e.target as HTMLElement).closest('.clip')) return
+
+	// Clear selection if clicking on empty space without Control key (Left or Right Click)
+	if (!controlKeyPressed.value && (e.button === 0 || e.button === 2)) {
+		selectedClipIds.clear()
+	}
+
+	// Only allow selection if Control is held
+	if (!controlKeyPressed.value) return
+	// Only allow left click
+	if (e.button !== 0) return
+
+	if (!tracksWrapperEl.value) return
+	const wrapperRect = tracksWrapperEl.value.getBoundingClientRect() // todo: this should be done by reactive usebounding or so...
+
+	selectionState.isSelecting = true
+	// Relative to wrapper
+	const relX = e.clientX - wrapperRect.left
+	const relY = e.clientY - wrapperRect.top
+
+	if (relY < headerHeightPx) return
+
+	// Snap Y to track height
+	const startYSnapped =
+		Math.floor((relY - headerHeightPx) / pxTrackHeight) * pxTrackHeight + headerHeightPx
+
+	selectionState.startX = relX
+	selectionState.startY = startYSnapped
+	selectionState.currentX = relX
+	selectionState.currentY = startYSnapped + pxTrackHeight // Initial height 1 track
+
+	// Capture cursor
+	;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+
+	updateSelection()
+})
+
+const headerHeightPx = 20 // todo: make this dynamic
+
+useEventListener(tracksWrapperEl, 'pointermove', (e) => {
+	if (!selectionState.isSelecting) return
+	if (!tracksWrapperEl.value) return
+
+	const wrapperRect = tracksWrapperEl.value.getBoundingClientRect()
+	const relX = e.clientX - wrapperRect.left
+	const relY = e.clientY - wrapperRect.top
+
+	// Update X (free, but clamped to 0, but not 0 -> 1 so that visually it looks nicer)
+	selectionState.currentX = Math.max(1, relX)
+
+	// Update Y (snapped)
+	// We want the box to expand to cover the track covering the mouse
+	const rawTrackIndex = Math.floor((relY - headerHeightPx) / pxTrackHeight)
+	const maxIndex = Math.max(0, sortedTracks.value.length - 1)
+	const currentTrackIndex = Math.max(0, Math.min(rawTrackIndex, maxIndex))
+	const startTrackIndex = Math.floor((selectionState.startY - headerHeightPx) / pxTrackHeight)
+
+	// Determine directions
+	if (currentTrackIndex >= startTrackIndex) {
+		// Dragging down
+		selectionState.currentY = (currentTrackIndex + 1) * pxTrackHeight + headerHeightPx
+	} else {
+		// Dragging up
+		selectionState.currentY = currentTrackIndex * pxTrackHeight + headerHeightPx
+	}
+
+	updateSelection()
+})
+
+function updateSelection() {
+	// Finalize selection
+	const boxX = Math.min(selectionState.startX, selectionState.currentX)
+	const boxY = Math.min(selectionState.startY, selectionState.currentY)
+	const boxW = Math.abs(selectionState.currentX - selectionState.startX)
+	const boxH = Math.abs(selectionState.currentY - selectionState.startY)
+	const boxRect = { left: boxX, right: boxX + boxW, top: boxY, bottom: boxY + boxH }
+
+	// Find intersects
+	// We need clip positions in px relative to wrapper
+	// We can iterate clips and calculate their rects
+
+	const newSelectedIds = new Set<string>()
+
+	for (const clip of clips.values()) {
+		// Calculate clip rect
+		// X = clip.start_beat * pxPerBeat
+		// W = (clip.end_beat - clip.start_beat) * pxPerBeat
+		// Y = trackIndex * pxTrackHeight ... wait, we need track index from ID
+
+		const track = tracks.get(clip.track_id)
+		if (!track) continue
+
+		// We need the visual order index for Y calculation if tracks are reorderable?
+		// Existing code: sortedTracks sorts by order_index.
+		// TrackInstance renders in sortedTracks order.
+		// So Y = sortedIndex * pxTrackHeight.
+
+		// Let's find index in sortedTracks
+		const sorted = [...tracks.entries()].sort((a, b) => a[1].order_index - b[1].order_index)
+		const trackIndex = sorted.findIndex(([id]) => id === clip.track_id)
+
+		if (trackIndex === -1) continue
+
+		const clipX = clip.start_beat * pxPerBeat.value
+		const clipW = (clip.end_beat - clip.start_beat) * pxPerBeat.value
+		const clipY = headerHeightPx + trackIndex * pxTrackHeight
+		const clipH = pxTrackHeight
+
+		const clipRect = { left: clipX, right: clipX + clipW, top: clipY, bottom: clipY + clipH }
+
+		// Check intersection
+		const intersects =
+			boxRect.left < clipRect.right &&
+			boxRect.right > clipRect.left &&
+			boxRect.top < clipRect.bottom &&
+			boxRect.bottom > clipRect.top
+
+		if (intersects) {
+			newSelectedIds.add(clip.id)
+		}
+	}
+
+	// Update state
+	selectedClipIds.clear()
+	newSelectedIds.forEach((id) => selectedClipIds.add(id))
+}
+
+useEventListener(tracksWrapperEl, 'pointerup', (e) => {
+	if (!selectionState.isSelecting) return
+
+	selectionState.isSelecting = false
+	;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
+})
+
+// Cancel on blur
+useEventListener(window, 'blur', () => {
+	if (selectionState.isSelecting) {
+		selectionState.isSelecting = false
+		// Optionally clear partial selection or just cancel
+	}
+})
 </script>
 
 <style scoped>

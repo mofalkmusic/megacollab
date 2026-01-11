@@ -38,7 +38,7 @@
 
 			<button class="default-button menu-btn" @click="emits('onToggleLoop')">
 				<Repeat class="dim" :size="14" :stroke-width="2" />
-				<p>Set Loop</p>
+				<p>{{ isLooping ? 'Unset' : 'Set' }} Loop</p>
 				<div class="shortcut-container mono">
 					<p class="kbd" :class="{ active: lKeyPressed }">L</p>
 				</div>
@@ -135,7 +135,7 @@ import { nextTick, shallowRef, useTemplateRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
 import { vElementHover } from '@vueuse/components'
-import { isPlaying, reset } from '@/audioEngine'
+import { isLooping, isPlaying, reset } from '@/audioEngine'
 
 const isBugButtonHovered = shallowRef(false)
 function onBugHover(hovered: boolean) {

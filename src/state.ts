@@ -7,7 +7,7 @@ import {
 	type TimelinePos,
 	type User,
 } from '~/schema'
-import { useDebug, type DebugEntry } from '@/composables/useDebug'
+import { type DebugEntry } from '@/composables/useDebug'
 import type { Toast } from '@/composables/useToast'
 import { useDevicePixelRatio, useEventListener, useIntervalFn, useTimeoutFn } from '@vueuse/core'
 import type { AudioFile } from '@/types'
@@ -16,6 +16,7 @@ export const user = ref<User | null>(null)
 export const client = ref<Client | null>(null)
 
 export const clips = reactive<Map<string, Clip>>(new Map())
+export const selectedClipIds = reactive<Set<Clip['id']>>(new Set())
 
 export const tracks = reactive<Map<string, ClientTrack>>(new Map())
 
@@ -40,8 +41,6 @@ export const dragFromPoolState = shallowRef<{
 	clientX: number
 	clientY: number
 } | null>(null)
-
-useDebug(() => audiofiles.size, { label: 'audiofiles' })
 
 export const TOTAL_BEATS = 16 * 16
 export const pxPerBeat = shallowRef(40)
