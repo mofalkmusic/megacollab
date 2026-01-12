@@ -823,12 +823,24 @@ watch(
 						clips.delete(tempId) // Remove the temporary optimistic clip
 						clips.set(clip.id, clip)
 					} else {
-						// todo: add toast
+						addToast({
+							type: 'notification',
+							message: res.error.message,
+							icon: 'warning',
+							priority: 'high',
+							title: 'Failed to create clip',
+						})
 						console.error('failed to create clip:', res.error)
 						clips.delete(tempId)
 					}
 				} catch (err) {
-					// todo: add toast
+					addToast({
+						type: 'notification',
+						message: 'An unexpected error occurred while creating the clip.',
+						icon: 'warning',
+						priority: 'high',
+						title: 'Failed to create clip',
+					})
 					console.error(err)
 					clips.delete(tempId)
 				}

@@ -16,7 +16,10 @@
 import { Plus } from 'lucide-vue-next'
 import { socket } from '@/socket/socket'
 import { tracks, dragFromPoolState } from '@/state'
+import { useToast } from '@/composables/useToast'
 import type { ClientTrack } from '~/schema'
+
+const { addToast } = useToast()
 
 const emits = defineEmits<{ (e: 'onTrackAdded', track: ClientTrack): void }>()
 
@@ -25,7 +28,13 @@ const addTrack = async () => {
 	const { success, error, data } = await socket.emitWithAck('get:track:create', null)
 
 	if (!success) {
-		// todo: better user feedback
+		addToast({
+			type: 'notification',
+			message: error.message,
+			icon: 'warning',
+			priority: 'high',
+			title: 'Failed to create track',
+		})
 		console.error(error)
 		return
 	}

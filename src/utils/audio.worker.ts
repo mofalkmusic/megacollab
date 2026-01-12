@@ -71,8 +71,8 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
 					// @ts-expect-error: buffer is an ArrayBuffer, which is a transferable object so its fine :D
 					self.postMessage(response, [buffer])
-				} catch (err: any) {
-					if (err.name === 'NotFoundError') {
+				} catch (err: unknown) {
+					if (err instanceof DOMException && err.name === 'NotFoundError') {
 						const response: WorkerResponse = { type: 'GET_AUDIO', id, data: null }
 						self.postMessage(response)
 					} else {
@@ -91,8 +91,8 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 					const response: WorkerResponse = { type: 'DELETE_AUDIO', id, success: true }
 					sendProgress(100)
 					self.postMessage(response)
-				} catch (err: any) {
-					if (err.name === 'NotFoundError') {
+				} catch (err: unknown) {
+					if (err instanceof DOMException && err.name === 'NotFoundError') {
 						const response: WorkerResponse = { type: 'DELETE_AUDIO', id, success: true }
 						sendProgress(100)
 						self.postMessage(response)
@@ -274,7 +274,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
 					const response: WorkerResponse = { type: 'GET_BITMAPS', id, data: waveforms }
 					;(self as any).postMessage(response, transfers)
-				} catch (err: any) {
+				} catch {
 					// Fallback/Not found
 					const response: WorkerResponse = { type: 'GET_BITMAPS', id, data: null }
 					self.postMessage(response)

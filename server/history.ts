@@ -1,18 +1,35 @@
 import { db } from './database'
 import { type Clip } from '~/schema'
 import { print } from './utils'
-import { type ServerEmitKeys, type ServerEmitPayload } from '~/events'
+import { type ServerEmitKeys, type ServerEmitPayload, type ClientRequestPayload } from '~/events'
 
 const IN_DEV_MODE = Bun.env['ENV'] === 'development'
-type ActionType = 'CLIP_CREATE' | 'CLIP_DELETE' | 'CLIP_UPDATE'
 
-interface HistoryAction {
-	type: ActionType
-	payload: any // todo: this is so lazy im sorry...
-	inverse: any // todo: this is so lazy im sorry...
-	timestamp: number
-	userId: string
+type HistoryEventMap = {
+	CLIP_CREATE: {
+		payload: ClientRequestPayload<'get:clip:create'> & { id: Clip['id'] }
+		inverse: ServerEmitPayload<'clip:delete'>
+	}
+	CLIP_DELETE: {
+		payload: ClientRequestPayload<'get:clip:delete'>
+		inverse: ServerEmitPayload<'clip:create'>
+	}
+	CLIP_UPDATE: {
+		payload: ClientRequestPayload<'get:clip:update'>
+		inverse: { id: string; oldValues: Partial<Clip> }
+	}
 }
+
+export type HistoryActionKey = keyof HistoryEventMap
+
+type HistoryAction<K extends HistoryActionKey = HistoryActionKey> = {
+	[P in K]: {
+		type: P
+		timestamp: number
+		userId: string
+		data: HistoryEventMap[P]
+	}
+}[K]
 
 type BroadcastFn = <K extends ServerEmitKeys>(event: K, payload: ServerEmitPayload<K>) => void
 
@@ -20,8 +37,11 @@ class HistoryManager {
 	private undoStack: HistoryAction[] = []
 	private maxHistory = 100
 
-	push(action: Omit<HistoryAction, 'timestamp'>) {
-		this.undoStack.push({ ...action, timestamp: Date.now() })
+	push<K extends HistoryActionKey>(action: Omit<HistoryAction<K>, 'timestamp'>) {
+		const fullAction = { ...action, timestamp: Date.now() } as HistoryAction
+
+		this.undoStack.push(fullAction)
+
 		if (this.undoStack.length > this.maxHistory) {
 			this.undoStack.shift()
 		}
@@ -31,8 +51,9 @@ class HistoryManager {
 		userId: string,
 		socketBroadcast: BroadcastFn,
 	): Promise<{ success: boolean; error?: string }> {
-		// Find the last action by this user
+		// last action by this user
 		const checkIndices: number[] = []
+
 		for (let i = this.undoStack.length - 1; i >= 0; i--) {
 			const action = this.undoStack[i]
 			if (action && action.userId === userId) {
@@ -55,10 +76,13 @@ class HistoryManager {
 
 		try {
 			let processed = false
+
 			switch (action.type) {
 				case 'CLIP_CREATE': {
-					const clipId = action.payload.id // omg i hate that this is any... fix todo
-					let current
+					const clipId = action.data.payload.id
+
+					let current: Awaited<ReturnType<typeof db.getClip>>
+
 					try {
 						current = await db.getClip(clipId)
 					} catch {
@@ -76,11 +100,15 @@ class HistoryManager {
 					} else {
 						return { success: false, error: 'Clip was already deleted by someone else.' }
 					}
+
 					break
 				}
+
 				case 'CLIP_DELETE': {
-					const clipId = action.payload.id
-					let current
+					const clipId = action.data.payload.id
+
+					let current: Awaited<ReturnType<typeof db.getClip>>
+
 					try {
 						current = await db.getClip(clipId)
 					} catch {
@@ -88,7 +116,8 @@ class HistoryManager {
 					}
 
 					if (!current) {
-						const clip = action.inverse as Clip
+						const clip = action.data.inverse
+
 						try {
 							const restored = await db.createClip(clip)
 							socketBroadcast('clip:create', restored)
@@ -101,21 +130,30 @@ class HistoryManager {
 					}
 					break
 				}
-				case 'CLIP_UPDATE': {
-					const { id, oldValues } = action.inverse
-					const { changes } = action.payload
 
-					let current
+				case 'CLIP_UPDATE': {
+					const { id, oldValues } = action.data.inverse
+					const { changes } = action.data.payload
+
+					let current: Awaited<ReturnType<typeof db.getClip>>
+
 					try {
 						current = await db.getClip(id)
 					} catch {
 						return { success: false, error: 'Failed to retrieve clip status.' }
 					}
+
 					if (current) {
 						let conflict = false
-						for (const key of Object.keys(changes)) {
-							// @ts-expect-error key indexing
-							if (current[key] !== changes[key]) {
+						const keys = Object.keys(changes) as Array<keyof typeof changes>
+
+						for (const key of keys) {
+							// verify current db state matches what we expect
+							// nobody other than current user should have touched clip since last update
+							const changeVal = changes[key]
+							const currentVal = current[key]
+
+							if (currentVal !== changeVal) {
 								conflict = true
 								break
 							}

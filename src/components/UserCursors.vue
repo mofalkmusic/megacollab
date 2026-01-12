@@ -81,14 +81,16 @@ const cursorsResult = computed(() => {
 	return result
 })
 
-// todo: make nice colors only :D
 function stringToColor(str: string) {
 	let hash = 0
 	for (let i = 0; i < str.length; i++) {
 		hash = str.charCodeAt(i) + ((hash << 5) - hash)
 	}
-	const c = (hash & 0x00ffffff).toString(16).toUpperCase()
-	return '#' + '00000'.substring(0, 6 - c.length) + c
+	// Use HSL for nicer, more vibrant colors
+	const hue = Math.abs(hash) % 360
+	const saturation = 65 // High saturation for vibrancy
+	const lightness = 55 // Mid lightness for good contrast
+	return `hsl(${hue}, ${saturation}%, ${lightness}%)`
 }
 </script>
 

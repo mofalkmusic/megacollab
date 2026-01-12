@@ -282,11 +282,19 @@ async function updateClip(id: string, changes: UpdateClip): Promise<Clip> {
 	return result
 }
 
-async function deleteClip(id: string): Promise<ServerClip> {
-	const rows = await queryFn<ServerClip>(
+async function deleteClip(id: string): Promise<Clip> {
+	const rows = await queryFn<Clip>(
 		`
-			DELETE FROM ${CLIPS_TABLE} WHERE id = $1
-			RETURNING *
+			WITH deleted AS (
+				DELETE FROM ${CLIPS_TABLE} WHERE id = $1
+				RETURNING *
+			)
+			SELECT 
+				deleted.*,
+				users.display_name AS creator_display_name
+			FROM deleted
+			LEFT JOIN ${USERS_TABLE} AS users
+				ON deleted.creator_user_id = users.id
 		`,
 		[id],
 	)

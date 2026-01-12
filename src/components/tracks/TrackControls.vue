@@ -112,12 +112,18 @@ const sortedTracks = computed(() => {
 const trackVolumes = reactive(new Map<string, number>())
 const { addToast } = useToast()
 
+const DECAY_RATE = 0.15 as const // Lower = slower decay, higher = faster decay (0-1)
+
 const { pause, resume } = useRafFn(
 	() => {
 		for (const id of tracks.keys()) {
-			const vol = getTrackVolume(id)
-			// todo: smooth decay could be nice, but raw for now
-			trackVolumes.set(id, vol)
+			const currentVol = getTrackVolume(id)
+			const prevVol = trackVolumes.get(id) ?? 0
+
+			// Instant rise, smooth decay
+			const newVol =
+				currentVol >= prevVol ? currentVol : prevVol - (prevVol - currentVol) * DECAY_RATE
+			trackVolumes.set(id, Math.max(0, newVol))
 		}
 	},
 	{ fpsLimit: 30, immediate: isPlaying.value },
@@ -192,7 +198,15 @@ function startVolumeDrag(e: PointerEvent, trackId: string, top: number, height: 
 	target.setPointerCapture(e.pointerId)
 
 	const track = tracks.get(trackId)
-	if (!track) return // todo: toast, track has already been deleted
+	if (!track) {
+		addToast({
+			type: 'notification',
+			message: 'This track has been deleted.',
+			icon: 'warning',
+			priority: 'medium',
+		})
+		return
+	}
 	const initialGain = track.gain
 
 	const SENSITIVITY = 0.2

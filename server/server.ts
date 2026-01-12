@@ -365,8 +365,10 @@ io.on('connection', async (socket) => {
 
 				history.push({
 					type: 'CLIP_CREATE',
-					payload: clip,
-					inverse: { id: clip.id },
+					data: {
+						payload: clip,
+						inverse: clip.id,
+					},
 					userId: user.id,
 				})
 			} catch (err) {
@@ -398,9 +400,11 @@ io.on('connection', async (socket) => {
 
 				history.push({
 					type: 'CLIP_DELETE',
-					payload: { id: clip.id },
-					inverse: clip,
 					userId: user.id,
+					data: {
+						payload: { id: clip.id },
+						inverse: clip,
+					},
 				})
 			} catch (err) {
 				const error = err instanceof Error ? err.message : 'Unknown error'
@@ -429,15 +433,20 @@ io.on('connection', async (socket) => {
 				socket.broadcast.emit('clip:update', clip)
 
 				if (oldClip) {
-					const oldValues: any = {}
-					for (const key of Object.keys(changes)) {
-						oldValues[key] = (oldClip as any)[key]
+					const oldValues: Partial<Clip> = {}
+					const keys = Object.keys(changes) as Array<keyof typeof changes>
+
+					for (const key of keys) {
+						oldValues[key] = oldClip[key] as any
 					}
+
 					history.push({
 						type: 'CLIP_UPDATE',
-						payload: { id, changes },
-						inverse: { id, oldValues },
 						userId: user.id,
+						data: {
+							payload: { id, changes },
+							inverse: { id, oldValues },
+						},
 					})
 				}
 			} catch (err) {
