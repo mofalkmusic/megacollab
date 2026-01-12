@@ -248,13 +248,15 @@ watch([isPressed, mouseX], ([pressed, newMouseX]) => {
 
 	// Update the active handle
 	const currentBeat = altKeyPressed.value ? beats : quantize_beats(beats)
-
+	// pro fix by corx music 2026 edition
+	const clampedBeat = (beat: number) => Math.max(0, Math.min(beat, TOTAL_BEATS))
 	if (activeHandle.value === 'start') {
-		loopDragStartBeat.value = currentBeat
-	} else {
-		// creation or end-drag
-		loopDragEndBeat.value = currentBeat
+		loopDragStartBeat.value = clampedBeat(currentBeat)
+	} 
+	else {
+		loopDragEndBeat.value = clampedBeat(currentBeat)
 	}
+
 })
 
 function handleDoubleClick() {
