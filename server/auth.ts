@@ -268,7 +268,9 @@ export async function handleTwitchOAuthCallback(c: Context) {
 		})
 
 		const userResSchema = z.object({
-			data: z.array(z.object({ id: z.string(), display_name: z.string(), email: z.string() })),
+			data: z.array(
+				z.object({ id: z.string(), display_name: z.string(), email: z.string() }),
+			),
 		})
 
 		let userData: z.output<typeof userResSchema>

@@ -104,7 +104,13 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 			}
 
 			case 'COMPUTE_PEAKS': {
-				const { audioData, duration, color = '#ffffff', pixelRatio = 1, audioPoolWidth } = msg
+				const {
+					audioData,
+					duration,
+					color = '#ffffff',
+					pixelRatio = 1,
+					audioPoolWidth,
+				} = msg
 
 				const float32Data = new Float32Array(audioData)
 				const peakLayers = computeMultiResPeaks(float32Data, audioPoolWidth)

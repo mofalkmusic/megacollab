@@ -99,7 +99,9 @@ const userClipDisplayComp = computed(() => {
 			? 'you'
 			: props.audiofile.creator_display_name
 	} else {
-		return props.clip?.creator_user_id === user.value?.id ? 'you' : props.clip?.creator_display_name
+		return props.clip?.creator_user_id === user.value?.id
+			? 'you'
+			: props.clip?.creator_display_name
 	}
 })
 
@@ -316,7 +318,9 @@ onMounted(() => {
 
 				// --- VERTICAL ---
 				const els = document.elementsFromPoint(e.clientX, e.clientY)
-				const trackEl = els.find((el) => el.classList.contains('track')) as HTMLElement | undefined
+				const trackEl = els.find((el) => el.classList.contains('track')) as
+					| HTMLElement
+					| undefined
 
 				if (trackEl && sesh.sourceTrackRect) {
 					const targetRect = trackEl.getBoundingClientRect()
@@ -674,9 +678,10 @@ async function drawWaveform() {
 		ctx.globalCompositeOperation = 'source-in'
 
 		// Mix with black (0.2 = 20% black)
-		const mixed = interpolate([isSelected.value ? '#ff4444' : props.audiofile.color, '#000000'])(
-			0.2,
-		)
+		const mixed = interpolate([
+			isSelected.value ? '#ff4444' : props.audiofile.color,
+			'#000000',
+		])(0.2)
 		const finalColor = formatHex(mixed) ?? props.audiofile.color
 		ctx.fillStyle = finalColor
 		ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)

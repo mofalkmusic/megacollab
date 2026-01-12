@@ -1,5 +1,8 @@
 <template>
-	<div class="custom-grid" style="justify-items: center; align-items: center; padding-bottom: 4rem">
+	<div
+		class="custom-grid"
+		style="justify-items: center; align-items: center; padding-bottom: 4rem"
+	>
 		<div
 			v-if="rateLimitError"
 			style="display: grid; justify-items: center; gap: 1rem; text-align: center"

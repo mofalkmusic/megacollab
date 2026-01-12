@@ -27,7 +27,8 @@ export function useToast() {
 		} else if (opts.type === 'acknowledgement_request') {
 			const priority = opts.priority || 'low'
 			const autoConfirm = priority === 'low' || priority === 'medium'
-			const lifetimeMs = opts.lifetimeMs || (autoConfirm ? LIFETIME_DEFAULT_MS * 1.5 : undefined)
+			const lifetimeMs =
+				opts.lifetimeMs || (autoConfirm ? LIFETIME_DEFAULT_MS * 1.5 : undefined)
 
 			const onConfirm = {
 				func:
@@ -50,7 +51,8 @@ export function useToast() {
 		} else if (opts.type === 'action_request') {
 			const priority = opts.priority || 'low'
 			const autoConfirm = priority === 'low' || priority === 'medium'
-			const lifetimeMs = opts.lifetimeMs || (autoConfirm ? LIFETIME_DEFAULT_MS * 1.5 : undefined)
+			const lifetimeMs =
+				opts.lifetimeMs || (autoConfirm ? LIFETIME_DEFAULT_MS * 1.5 : undefined)
 
 			const onConfirm = {
 				func:

@@ -56,7 +56,8 @@ export function validateIncomingEvents(socket: TypedSocket) {
 
 		if (!isClientEmit && !isClientRequest) {
 			if (isServerEmit) {
-				if (IN_DEV_MODE) console.warn('Client is not allowed to send', event, "It's a server emit.")
+				if (IN_DEV_MODE)
+					console.warn('Client is not allowed to send', event, "It's a server emit.")
 				return
 			}
 			// let default ws & socket.io events pass

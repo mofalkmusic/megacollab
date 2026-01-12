@@ -8,8 +8,9 @@
 				designed for desktop browsers.
 			</p>
 			<p class="small dim balance">
-				Due to the complexity and performance requirements of real-time audio processing, mobile
-				devices are not supported. Please access this application from a desktop or laptop computer.
+				Due to the complexity and performance requirements of real-time audio processing,
+				mobile devices are not supported. Please access this application from a desktop or
+				laptop computer.
 			</p>
 		</div>
 	</div>

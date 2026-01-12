@@ -21,7 +21,9 @@
 				<p class="dim" style="text-align: center; margin-bottom: 2.4rem">
 					Please sign in to continue.
 				</p>
-				<div style="display: grid; gap: 0.8rem; grid-template-columns: 1fr 1fr; width: 100%">
+				<div
+					style="display: grid; gap: 0.8rem; grid-template-columns: 1fr 1fr; width: 100%"
+				>
 					<button class="default-button" @click="signInWithTwitch">
 						<Twitch style="height: 16px; width: 16px" />
 						<p>Twitch</p>
@@ -59,7 +61,8 @@
 
 				<form @submit.prevent="" style="display: grid; width: 100%">
 					<label class="txt dim" for="email" style="margin-bottom: 0.4rem"
-						><Lock :size="14" style="position: relative; top: 1px" /> Email Address</label
+						><Lock :size="14" style="position: relative; top: 1px" /> Email
+						Address</label
 					>
 					<input
 						class="textInput txt mono small"
@@ -196,8 +199,8 @@ const inDev = shallowRef<boolean>(import.meta.env.MODE === 'development')
 	--c2: color-mix(in lch, var(--bg-color), white 3%);
 
 	background:
-		conic-gradient(from 45deg at 75% 75%, var(--c1) 25%, var(--c2) 0 50%, #0000 0) 0 0 / var(--size)
-			var(--size),
+		conic-gradient(from 45deg at 75% 75%, var(--c1) 25%, var(--c2) 0 50%, #0000 0) 0 0 /
+			var(--size) var(--size),
 		conic-gradient(from 225deg at 25% 25%, var(--c2) 25%, var(--c1) 0 50%, #0000 0) 0 0 /
 			var(--size) var(--size),
 		repeating-conic-gradient(var(--c2) 0 25%, var(--c1) 0 50%) 0 0 / calc(2 * var(--size))

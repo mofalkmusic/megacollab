@@ -24,7 +24,11 @@ export const _socketReady = shallowRef<boolean>(false)
 export const _socketError = shallowRef<AppError | null>(null)
 
 export const socketReadyState = computed<'NOT_CONNECTED' | 'INITIALIZING' | 'READY'>(() => {
-	return !_socketConnected.value ? 'NOT_CONNECTED' : !_socketReady.value ? 'INITIALIZING' : 'READY'
+	return !_socketConnected.value
+		? 'NOT_CONNECTED'
+		: !_socketReady.value
+			? 'INITIALIZING'
+			: 'READY'
 })
 
 function print(type: 'log' | 'warn' | 'error', ...args: any[]) {

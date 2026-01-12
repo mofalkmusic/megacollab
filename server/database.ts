@@ -307,7 +307,8 @@ async function deleteClip(id: string): Promise<Clip> {
 
 async function saveAudioFile(audioFile: ServerAudioFile): Promise<ClientAudioFile | null> {
 	try {
-		const { id, creator_user_id, file_name, public_url, duration, created_at, color } = audioFile
+		const { id, creator_user_id, file_name, public_url, duration, created_at, color } =
+			audioFile
 
 		const rows = await queryFn<ClientAudioFile>(
 			`

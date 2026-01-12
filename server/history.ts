@@ -98,7 +98,10 @@ class HistoryManager {
 							return { success: false, error: 'Failed to delete clip.' }
 						}
 					} else {
-						return { success: false, error: 'Clip was already deleted by someone else.' }
+						return {
+							success: false,
+							error: 'Clip was already deleted by someone else.',
+						}
 					}
 
 					break
@@ -160,7 +163,10 @@ class HistoryManager {
 						}
 
 						if (conflict) {
-							return { success: false, error: 'Clip has been modified by someone else.' }
+							return {
+								success: false,
+								error: 'Clip has been modified by someone else.',
+							}
 						}
 
 						try {

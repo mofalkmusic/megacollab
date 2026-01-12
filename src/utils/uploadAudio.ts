@@ -28,10 +28,16 @@ export async function optimisticAudioCreateUpload(
 	if (!file) return { success: false, reason: 'No file provided' }
 	if (socket.readyState.value !== 'READY') return { success: false, reason: 'Socket not ready' }
 	if (!user.value)
-		return { success: false, reason: 'User not logged in. Please log in to upload audio files.' }
+		return {
+			success: false,
+			reason: 'User not logged in. Please log in to upload audio files.',
+		}
 
 	if (!audioMimeTypes.includes(file.type)) {
-		return { success: false, reason: 'Invalid file type. Please upload valid .mp3 or .wav file.' }
+		return {
+			success: false,
+			reason: 'Invalid file type. Please upload valid .mp3 or .wav file.',
+		}
 	}
 
 	try {

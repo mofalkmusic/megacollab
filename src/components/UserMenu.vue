@@ -51,7 +51,11 @@
 					padding-bottom: 0.5rem;
 				"
 			></div>
-			<button class="default-button menu-btn" @click="openBugReport" v-element-hover="onBugHover">
+			<button
+				class="default-button menu-btn"
+				@click="openBugReport"
+				v-element-hover="onBugHover"
+			>
 				<Bug class="dim" :size="15" :stroke-width="2" />
 				<p>Report a Bug</p>
 				<ExternalLink
@@ -72,11 +76,16 @@
 		</div>
 		<div v-else class="inner-menu-wrap" style="padding: 1rem; padding-top: 0.8rem">
 			<div style="display: flex; align-items: center; justify-content: space-between">
-				<label class="txt bold" for="username" style="margin-bottom: 0.4rem">Username</label>
+				<label class="txt bold" for="username" style="margin-bottom: 0.4rem"
+					>Username</label
+				>
 				<p class="small dim mono">{{ tempUsername.length }}/32</p>
 			</div>
 
-			<form @submit.prevent="confirmEditingUsername" style="padding: 0; margin: 0; display: grid">
+			<form
+				@submit.prevent="confirmEditingUsername"
+				style="padding: 0; margin: 0; display: grid"
+			>
 				<input
 					type="text"
 					class="textInput txt mono small"
@@ -87,7 +96,9 @@
 					maxlength="32"
 					:disabled="isUpdating"
 					:style="{
-						color: errorMessage ? 'color-mix(in lch, red 80%, var(--text-color-primary))' : '',
+						color: errorMessage
+							? 'color-mix(in lch, red 80%, var(--text-color-primary))'
+							: '',
 						border: errorMessage ? '1px solid red' : '',
 					}"
 				/>
@@ -190,7 +201,10 @@ async function confirmEditingUsername() {
 	lockedWidth.value = confirmBtn.value?.getBoundingClientRect().width ?? null
 	isUpdating.value = true
 
-	const cleanUsername = sanitizeLetterUnderscoreOnly(tempUsername.value.trim().toLowerCase(), false)
+	const cleanUsername = sanitizeLetterUnderscoreOnly(
+		tempUsername.value.trim().toLowerCase(),
+		false,
+	)
 
 	const res = await socket.emitWithAck('get:update:username', {
 		username: cleanUsername,

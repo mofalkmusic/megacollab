@@ -2,7 +2,10 @@
 	<div style="width: 100%">
 		<Transition name="dissapear">
 			<div v-if="isVisible" class="global-loading-indicator">
-				<div class="progress-bar" :style="{ width: `${10 + averageProgress * 0.9}%` }"></div>
+				<div
+					class="progress-bar"
+					:style="{ width: `${10 + averageProgress * 0.9}%` }"
+				></div>
 			</div>
 		</Transition>
 	</div>

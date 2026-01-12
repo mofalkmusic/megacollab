@@ -18,7 +18,9 @@
 				<button
 					class="btn-confirm"
 					@click="handleConfirm"
-					:style="{ '--lifetime': toast.lifetimeMs ? `${toast.lifetimeMs}ms` : undefined }"
+					:style="{
+						'--lifetime': toast.lifetimeMs ? `${toast.lifetimeMs}ms` : undefined,
+					}"
 				>
 					{{ toast.onConfirm.label }}
 				</button>
@@ -28,7 +30,9 @@
 				<button
 					class="btn-confirm"
 					@click="handleConfirm"
-					:style="{ '--lifetime': toast.lifetimeMs ? `${toast.lifetimeMs}ms` : undefined }"
+					:style="{
+						'--lifetime': toast.lifetimeMs ? `${toast.lifetimeMs}ms` : undefined,
+					}"
 				>
 					{{ toast.onConfirm.label }}
 				</button>

@@ -2,7 +2,11 @@
 	<Loading v-if="socket.readyState.value !== 'READY'" />
 	<div v-else class="outmost-container">
 		<div class="controls" style="grid-area: controls">
-			<button @click="togglePlayState" class="controls-panel-btn" :class="{ playing: isPlaying }">
+			<button
+				@click="togglePlayState"
+				class="controls-panel-btn"
+				:class="{ playing: isPlaying }"
+			>
 				<Play v-if="!isPlaying" :size="16" style="color: var(--text-color-primary)" />
 				<Pause v-else :size="16" style="color: var(--active-playing-color)" />
 			</button>
@@ -36,7 +40,11 @@
 				class="small mono controls-panel-wrap"
 				:style="{ color: socketReadyState !== 'READY' ? 'red' : '' }"
 			>
-				<Radio v-if="socketReadyState === 'READY'" :size="14" style="margin-right: 0.6rem" />
+				<Radio
+					v-if="socketReadyState === 'READY'"
+					:size="14"
+					style="margin-right: 0.6rem"
+				/>
 				<WifiOff v-else :size="14" style="margin-right: 0.6rem" />
 				{{ socketReadyState === 'READY' ? 'Connected' : 'Offline' }}
 			</p>
@@ -56,7 +64,11 @@
 
 			<div style="flex-grow: 1"></div>
 
-			<button ref="userButton" class="controls-panel-btn" @click="isUserMenuOpen = !isUserMenuOpen">
+			<button
+				ref="userButton"
+				class="controls-panel-btn"
+				@click="isUserMenuOpen = !isUserMenuOpen"
+			>
 				<CustomMenuIcon :isMenuOpen="isUserMenuOpen" />
 			</button>
 
@@ -74,15 +86,21 @@
 
 		<div class="timeline-scroll-container" ref="timelineContainer" style="grid-area: timeline">
 			<TrackControls />
-			<div class="all-tracks-wrapper" ref="tracksWrapper" :style="{ width: `${timelineWidth}px` }">
+			<div
+				class="all-tracks-wrapper"
+				ref="tracksWrapper"
+				:style="{ width: `${timelineWidth}px` }"
+			>
 				<TimelineHeader />
-				<TrackInstance
-					v-for="[id, track] in sortedTracks"
-					:key="id"
-					:track="track"
-					:scroll-x="scrollX"
-					:timeline-window-width="timelineContainerClientWidth"
-				/>
+				<div ref="tracksContainerInner">
+					<TrackInstance
+						v-for="[id, track] in sortedTracks"
+						:key="id"
+						:track="track"
+						:scroll-x="scrollX"
+						:timeline-window-width="timelineContainerClientWidth"
+					/>
+				</div>
 
 				<ClipInstance
 					v-if="ghostClip && ghostAudioFile && ghostDragState.track_id"
@@ -206,6 +224,7 @@ import {
 	whenever,
 	useElementSize,
 	useIntervalFn,
+	useElementBounding,
 } from '@vueuse/core'
 import {
 	currentPlayTimeBeats,
@@ -414,6 +433,7 @@ function updateDims() {
 }
 
 const tracksWrapperEl = useTemplateRef('tracksWrapper')
+const tracksContainerInnerEl = useTemplateRef('tracksContainerInner')
 useResizeObserver(tracksWrapperEl, updateDims)
 
 // Cursor Logic
@@ -612,7 +632,8 @@ function updateScrollPosition() {
 
 			// Apply to real scroll container
 			timelineContainerEl.value.scrollLeft =
-				ratio * (timelineContainerEl.value.scrollWidth - timelineContainerEl.value.clientWidth)
+				ratio *
+				(timelineContainerEl.value.scrollWidth - timelineContainerEl.value.clientWidth)
 		}
 	}
 
@@ -628,7 +649,8 @@ function updateScrollPosition() {
 			const ratio = clampedTop / scrollableHeight
 
 			timelineContainerEl.value.scrollTop =
-				ratio * (timelineContainerEl.value.scrollHeight - timelineContainerEl.value.clientHeight)
+				ratio *
+				(timelineContainerEl.value.scrollHeight - timelineContainerEl.value.clientHeight)
 		}
 	}
 }
@@ -742,7 +764,9 @@ watch(
 
 			// Y / Track Calculation
 			const els = document.elementsFromPoint(e.clientX, e.clientY)
-			const trackEl = els.find((el) => el.classList.contains('track')) as HTMLElement | undefined
+			const trackEl = els.find((el) => el.classList.contains('track')) as
+				| HTMLElement
+				| undefined
 
 			let trackId: string | null = null
 			let topPx = 0
@@ -909,16 +933,17 @@ useEventListener(tracksWrapperEl, 'pointerdown', (e) => {
 	const relX = e.clientX - wrapperRect.left
 	const relY = e.clientY - wrapperRect.top
 
-	if (relY < headerHeightPx) return
+	if (relY < headerHeightPx.value) return
 
 	// Snap Y to track height
 	const startYSnapped =
-		Math.floor((relY - headerHeightPx) / pxTrackHeight) * pxTrackHeight + headerHeightPx
+		Math.floor((relY - headerHeightPx.value) / pxTrackHeight) * pxTrackHeight +
+		headerHeightPx.value
 
 	selectionState.startX = relX
 	selectionState.startY = startYSnapped
 	selectionState.currentX = relX
-	selectionState.currentY = startYSnapped + pxTrackHeight // Initial height 1 track
+	selectionState.currentY = startYSnapped + pxTrackHeight
 
 	// Capture cursor
 	;(e.target as HTMLElement).setPointerCapture(e.pointerId)
@@ -926,7 +951,10 @@ useEventListener(tracksWrapperEl, 'pointerdown', (e) => {
 	updateSelection()
 })
 
-const headerHeightPx = 20 // todo: make this dynamic
+// Dynamic header height from tracks container position
+const { top: tracksContainerTop } = useElementBounding(tracksContainerInnerEl)
+const { top: wrapperTop } = useElementBounding(tracksWrapperEl)
+const headerHeightPx = computed(() => tracksContainerTop.value - wrapperTop.value)
 
 useEventListener(tracksWrapperEl, 'pointermove', (e) => {
 	if (!selectionState.isSelecting) return
@@ -941,18 +969,20 @@ useEventListener(tracksWrapperEl, 'pointermove', (e) => {
 
 	// Update Y (snapped)
 	// We want the box to expand to cover the track covering the mouse
-	const rawTrackIndex = Math.floor((relY - headerHeightPx) / pxTrackHeight)
+	const rawTrackIndex = Math.floor((relY - headerHeightPx.value) / pxTrackHeight)
 	const maxIndex = Math.max(0, sortedTracks.value.length - 1)
 	const currentTrackIndex = Math.max(0, Math.min(rawTrackIndex, maxIndex))
-	const startTrackIndex = Math.floor((selectionState.startY - headerHeightPx) / pxTrackHeight)
+	const startTrackIndex = Math.floor(
+		(selectionState.startY - headerHeightPx.value) / pxTrackHeight,
+	)
 
 	// Determine directions
 	if (currentTrackIndex >= startTrackIndex) {
 		// Dragging down
-		selectionState.currentY = (currentTrackIndex + 1) * pxTrackHeight + headerHeightPx
+		selectionState.currentY = (currentTrackIndex + 1) * pxTrackHeight + headerHeightPx.value
 	} else {
 		// Dragging up
-		selectionState.currentY = currentTrackIndex * pxTrackHeight + headerHeightPx
+		selectionState.currentY = currentTrackIndex * pxTrackHeight + headerHeightPx.value
 	}
 
 	updateSelection()
@@ -994,7 +1024,7 @@ function updateSelection() {
 
 		const clipX = clip.start_beat * pxPerBeat.value
 		const clipW = (clip.end_beat - clip.start_beat) * pxPerBeat.value
-		const clipY = headerHeightPx + trackIndex * pxTrackHeight
+		const clipY = headerHeightPx.value + trackIndex * pxTrackHeight
 		const clipH = pxTrackHeight
 
 		const clipRect = { left: clipX, right: clipX + clipW, top: clipY, bottom: clipY + clipH }

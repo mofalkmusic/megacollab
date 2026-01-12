@@ -114,13 +114,19 @@ export async function ingestNewAudioFileMetadata(
 
 		let fetchRatio = 1
 		if (filesToFetch.size > 0) {
-			const current = Array.from(fetchCompletionMap.values()).reduce((acc, val) => acc + val, 0)
+			const current = Array.from(fetchCompletionMap.values()).reduce(
+				(acc, val) => acc + val,
+				0,
+			)
 			fetchRatio = current / fetchMax
 		}
 
 		let cacheRatio = 1
 		if (filesCached.size > 0) {
-			const current = Array.from(cachedCompletionMap.values()).reduce((acc, val) => acc + val, 0)
+			const current = Array.from(cachedCompletionMap.values()).reduce(
+				(acc, val) => acc + val,
+				0,
+			)
 			cacheRatio = current / cacheMax
 		}
 
@@ -214,7 +220,12 @@ export async function ingestNewAudioFileMetadata(
 					console.error('Cached file not found 2:', file.id, file.file_name)
 				}
 			} catch (err) {
-				console.error('Failed to decode cached buffer for file:', file.id, file.file_name, err)
+				console.error(
+					'Failed to decode cached buffer for file:',
+					file.id,
+					file.file_name,
+					err,
+				)
 				return
 			} finally {
 				cachedCompletionMap.set(file.id, 100)

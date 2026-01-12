@@ -85,12 +85,10 @@ const { files, isOverDropZone } = useDropZone(dropZoneEl, {
 		const res = await Promise.all(
 			files.map(async (file) => {
 				const progress = useGlobalProgress()
-				const { success, duration, id, reason, uploadPromise } = await optimisticAudioCreateUpload(
-					file,
-					(p) => {
+				const { success, duration, id, reason, uploadPromise } =
+					await optimisticAudioCreateUpload(file, (p) => {
 						progress.update(p)
-					},
-				)
+					})
 
 				if (uploadPromise) {
 					uploadPromise.finally(() => progress.done())

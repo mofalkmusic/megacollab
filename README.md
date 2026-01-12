@@ -61,18 +61,18 @@ Here are the commands you'll most likely need during development:
 The project is organized into a monorepo-style structure with clear separation of concerns:
 
 - **`src/`** Frontend Vue app
-  - **`socket/`**: Client-side [Socket.IO](https://socket.io/) event handlers and setup.
-  - **`composables/`**: Custom Vue composables for shared state logic.
-  - **`state.ts`**: DIY global state management **without** Pinia.
+    - **`socket/`**: Client-side [Socket.IO](https://socket.io/) event handlers and setup.
+    - **`composables/`**: Custom Vue composables for shared state logic.
+    - **`state.ts`**: DIY global state management **without** Pinia.
 - **`server/`** Backend
-  - **`server.ts`**: Main entry point using [Hono](https://hono.dev/) and [Bun](https://bun.sh).
-  - **`database.ts`**: Database connection and queries using PostgreSQL.
-  - **`socket.ts`**: Socket.IO server initialization and middleware.
-  - **`store.ts`**: File storage/uploads via R2 or local file system in dev.
+    - **`server.ts`**: Main entry point using [Hono](https://hono.dev/) and [Bun](https://bun.sh).
+    - **`database.ts`**: Database connection and queries using PostgreSQL.
+    - **`socket.ts`**: Socket.IO server initialization and middleware.
+    - **`store.ts`**: File storage/uploads via R2 or local file system in dev.
 
 - **`shared/`** Shared
-  - **`schema.ts`**: [Zod](https://zod.dev/) schemas used for validation and type inference on both ends.
-  - **`events.ts`**: Typed definitions for Socket.IO events to ensure type safety.
+    - **`schema.ts`**: [Zod](https://zod.dev/) schemas used for validation and type inference on both ends.
+    - **`events.ts`**: Typed definitions for Socket.IO events to ensure type safety.
 
 ## Development Environment
 
@@ -125,8 +125,8 @@ To not have to worry about setting up of external services, the development envi
 ## Code Style
 
 - **Typescript**:
-  - Avoid `any` when possible: use `unknown` or proper types.
-  - Avoid interfaces, use types instead.
+    - Avoid `any` when possible: use `unknown` or proper types.
+    - Avoid interfaces, use types instead.
 - **Icons**: Use `lucide-vue-next` for icons where possible.
 - Will add more here as they come up if they come up :)
 

@@ -47,7 +47,11 @@ function defineRequest<Req extends z.ZodType, Res extends z.ZodType>(opts: { req
 		req: opts.req,
 		res: z.discriminatedUnion('success', [
 			z.object({ success: z.literal(true), data: opts.res, error: z.never().optional() }),
-			z.object({ success: z.literal(false), error: AppErrorSchema, data: z.never().optional() }),
+			z.object({
+				success: z.literal(false),
+				error: AppErrorSchema,
+				data: z.never().optional(),
+			}),
 		]),
 	}
 }

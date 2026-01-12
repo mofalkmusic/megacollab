@@ -147,7 +147,9 @@ export const currentPlayTimeBeats = computed(() => sec_to_beats(currentPlayTimeS
 watchThrottled(
 	[isPlaying, currentTime, restingPositionSec, () => bpm],
 	() => {
-		currentPlayTimeSeconds.value = isPlaying.value ? currentTime.value : restingPositionSec.value
+		currentPlayTimeSeconds.value = isPlaying.value
+			? currentTime.value
+			: restingPositionSec.value
 	},
 	{ throttle: 64, immediate: false },
 )
@@ -289,7 +291,8 @@ const schedulerLoop = useIntervalFn(
 			? beats_to_sec(loopRangeBeats.value.end)
 			: fullDurationSeconds.value
 
-		const loopActive = isLooping.value && loopRangeBeats.value != null && loopEndSec > loopStartSec
+		const loopActive =
+			isLooping.value && loopRangeBeats.value != null && loopEndSec > loopStartSec
 
 		// todo: this should perhaps predict the loop and do negative overshooting,
 		// but for now its fine

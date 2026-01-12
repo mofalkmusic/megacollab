@@ -58,7 +58,8 @@ const userPositions = new Map<
 let lastUpdateHadData = false
 setInterval(() => {
 	const now = Date.now()
-	const payload: Record<string, { pos: TimelinePos; display_name: string; updatedAt: number }> = {}
+	const payload: Record<string, { pos: TimelinePos; display_name: string; updatedAt: number }> =
+		{}
 
 	for (const [userId, data] of userPositions.entries()) {
 		if (now - data.updatedAt > CURSOR_INACTIVE_TIMEOUT_MS) {
@@ -186,7 +187,10 @@ io.on('connection', async (socket) => {
 			if (!pending || Date.now() > pending.expires_at || pending.user_id !== user.id) {
 				return callback({
 					success: false,
-					error: { status: 'UNAUTHORIZED', message: 'Upload session expired or invalid.' },
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'Upload session expired or invalid.',
+					},
 				})
 			}
 

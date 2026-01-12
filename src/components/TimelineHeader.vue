@@ -47,7 +47,11 @@
 	<!-- Sticky Playhead Heads -->
 	<div class="timeline-heads-wrap">
 		<div v-if="!isPressed" class="resting-playhead-head" :style="restingPlayheadStyle" />
-		<div class="playhead-head" :style="playheadHeadStyle" :class="{ 'is-playing': isPlaying }" />
+		<div
+			class="playhead-head"
+			:style="playheadHeadStyle"
+			:class="{ 'is-playing': isPlaying }"
+		/>
 	</div>
 </template>
 

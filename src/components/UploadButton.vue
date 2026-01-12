@@ -70,13 +70,11 @@ onChange(async (files) => {
 		filesArray.map(async (file) => {
 			progressMap.value.set(file.name, 0)
 			const progressGlob = useGlobalProgress()
-			const { success, duration, id, reason, uploadPromise } = await optimisticAudioCreateUpload(
-				file,
-				(progress) => {
+			const { success, duration, id, reason, uploadPromise } =
+				await optimisticAudioCreateUpload(file, (progress) => {
 					progressMap.value.set(file.name, progress)
 					progressGlob.update(progress)
-				},
-			)
+				})
 			if (uploadPromise) {
 				uploadPromise.finally(() => progressGlob.done())
 			} else {
