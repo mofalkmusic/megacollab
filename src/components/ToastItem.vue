@@ -1,5 +1,5 @@
 <template>
-	<div ref="elementRef" v-bind="$attrs" class="toast-container" :style="{ zIndex: index }">
+	<div ref="elementRef" v-bind="$attrs" class="toast-container">
 		<div class="toast-content" :class="[`priority-${toast.priority}`, `type-${toast.type}`]">
 			<h3 v-if="toast.title" class="bold title">{{ toast.title }}</h3>
 			<p class="small message">{{ toast.message }}</p>
@@ -126,34 +126,32 @@ function handleDeny() {
 
 <style scoped>
 .toast-container {
-	grid-area: stack;
-	width: min(calc(100vw - 2 * (1.8rem)), 26rem);
-	margin: 0 2rem;
-	transition: transform 0.2s;
+	width: min(calc(100vw - 4rem), 24rem);
+	transition: all 0.2s;
 	pointer-events: none;
 }
 
 .toast-content {
+	position: relative;
 	pointer-events: auto;
 	--_color: #0077ff;
-	background: color-mix(in lch, var(--bg-color), #fff 10%);
+	background: color-mix(in lch, var(--bg-color), white 5%);
 	color: var(--text-color-primary);
-	padding: 1.2rem 1.8rem;
+	padding: 1rem 1.2rem;
 	overflow: hidden;
-	box-shadow:
-		inset calc(70px) 0px 140px -80px var(--_color),
-		inset 2px 0px 0px -1px var(--_color),
-		0px 0px 1rem -0.3rem var(--bg-color);
-	border-radius: 0.7rem;
+	border: 1px solid var(--border-primary);
+	border-left: 4px solid var(--_color);
+	border-radius: 0.5rem;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 
 	display: grid;
 	grid-template-rows: auto auto auto;
 	grid-template-columns: 1fr auto;
 
-	column-gap: 0.6rem;
+	column-gap: 0.8rem;
 
 	grid-template-areas: 'title infoicon' 'message infoicon' 'actions actions';
-	animation: slide-in 0.4s ease-in-out;
+	animation: slide-in 0.3s ease-out;
 }
 
 .toast-content:hover .progress-bar,
@@ -163,7 +161,7 @@ function handleDeny() {
 
 @keyframes slide-in {
 	from {
-		transform: translateX(-20px);
+		transform: translateX(20px);
 		opacity: 0;
 	}
 
@@ -174,14 +172,21 @@ function handleDeny() {
 }
 
 .priority-low {
-	box-shadow:
-		inset calc(70px) 0px 140px -80px var(--_color),
-		0px 0px 1rem -0.3rem var(--bg-color);
+	--_color: #0077ff;
+}
+
+.priority-medium {
+	--_color: #f63bed;
+}
+
+.priority-high {
+	--_color: #ffbb00;
 }
 
 .title {
-	margin-bottom: 0.4rem;
-	line-height: 100%;
+	margin-bottom: 0.2rem;
+	line-height: 1.2;
+	font-weight: 600;
 	grid-area: title;
 }
 
@@ -191,6 +196,8 @@ function handleDeny() {
 	overflow-wrap: break-word;
 	word-break: break-all;
 	min-width: 0;
+	line-height: 1.4;
+	color: var(--text-color-secondary);
 }
 
 .icon {
@@ -202,100 +209,51 @@ function handleDeny() {
 }
 
 .svg-icon {
-	height: 2rem;
-	width: 2rem;
-}
-
-.priority-medium {
-	--_color: #f63bed;
-}
-
-.priority-high {
-	--_color: #ffbb00;
-	border: 1px solid var(--_color);
+	height: 1.5rem;
+	width: 1.5rem;
 }
 
 .toast-actions {
 	grid-area: actions;
 	display: flex;
-	gap: 1rem;
-	margin-top: 1rem;
+	gap: 0.5rem;
+	margin-top: 0.8rem;
 	justify-content: flex-end;
-	position: relative;
-	right: -0.6rem;
 	flex-wrap: wrap-reverse;
 }
 
 button {
 	border: none;
-	border-radius: 4px;
-	padding: 6px 12px;
-	font-size: 12px;
+	border-radius: 0.25rem;
+	padding: 0.4rem 0.8rem;
+	font-size: 0.85rem;
 	cursor: pointer;
 	font-weight: 500;
-	transition:
-		background 0.2s,
-		color 0.2s;
-	background: color-mix(in lch, var(--_color), transparent 60%);
+	transition: background 0.2s;
+	background: color-mix(in lch, var(--bg-color), white 10%);
+	border: 1px solid var(--border-primary);
 	color: var(--text-color-primary);
-	height: 2.8rem;
-	box-shadow: inset 0px 0px 0px 1px color-mix(in lch, var(--_color), transparent 70%);
 }
 
 button:hover {
-	background: color-mix(in lch, var(--_color), transparent 20%);
+	background: color-mix(in lch, var(--bg-color), white 20%);
 }
 
 .btn-confirm {
-	background-size: 200% 100%;
-	background-image: linear-gradient(
-		to right,
-		color-mix(in lch, var(--_color), transparent 20%) 50%,
-		color-mix(in lch, var(--_color), transparent 60%) 50%
-	);
-	background-position: 100% 0;
-}
-
-.btn-confirm[style*='--lifetime'] {
-	animation: progress-bg var(--lifetime) linear forwards;
+	background: var(--_color);
+	color: black; /* contrast against bright priority colors */
+	border: none;
+	font-weight: 600;
 }
 
 .btn-confirm:hover {
-	background-position: 0% 0 !important;
-	transition: background-position 0.2s ease-out;
+	filter: brightness(1.1);
 }
 
-@keyframes progress-bg {
-	to {
-		background-position: 0% 0;
-	}
-}
-
-.btn-deny {
-	--_color: rgb(94, 94, 94);
-	color: var(--text-color-secondary);
-	background: transparent;
-	box-shadow: inset 0px 0px 0px 1px var(--_color);
-}
-
-.btn-deny:hover {
-	background: color-mix(in lch, var(--_color), transparent 20%);
-	color: var(--text-color-primary);
-}
-
-.btn-close {
-	position: absolute;
-	top: 8px;
-	right: 8px;
-	background: transparent;
-	color: #666;
-	padding: 4px;
-	line-height: 1;
-	font-size: 16px;
-}
-
-.btn-close:hover {
-	color: white;
+.btn-confirm[style*='--lifetime'] {
+	/* Removing the complex background animation for button to simplify */
+	/* If we want progress on button, we can keep it, but user wanted simple */
+	/* leaving it out for cleaner look, or maybe just kept on progress bar */
 }
 
 /* Progress Bar */
@@ -304,7 +262,8 @@ button:hover {
 	bottom: 0;
 	left: 0;
 	height: 3px;
-	background: rgba(255, 255, 255, 0.3);
+	background: var(--_color);
+	opacity: 0.5;
 	width: 100%;
 	transform-origin: left;
 	animation: progress var(--lifetime) linear forwards;

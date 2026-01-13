@@ -1,45 +1,27 @@
 <template>
-	<div class="toast-overlay">
-		<ToastItem
-			v-for="(toast, index) in visibleToasts.toasts"
-			:key="toast.id"
-			:toast="toast"
-			:index="visibleToasts.length - 1 - index"
-			:style="getTransform(index)"
-		/>
+	<div class="toast-overlay" :style="{ bottom: `calc(${audioFilePoolHeightPx}px + 2rem)` }">
+		<ToastItem v-for="(toast, index) in toasts" :key="toast.id" :toast="toast" :index="index" />
 	</div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { toasts } from '@/state'
+import { toasts, audioFilePoolHeightPx } from '@/state'
 import ToastItem from './ToastItem.vue'
-
-const visibleToasts = computed(() => {
-	return { toasts: toasts.value.slice(0, 6), length: toasts.value.length }
-})
-
-function getTransform(index: number) {
-	const y = index * -12
-	const scale = index * -0.1
-	return {
-		transform: `translateY(${y}px) scale(${1 + scale})`,
-	}
-}
 </script>
 
 <style scoped>
 .toast-overlay {
 	position: fixed;
-	bottom: 0px;
-	left: 0px;
+	right: 2.6rem;
 	z-index: 9999;
-	display: grid;
-	grid-template-areas: 'stack';
+	display: flex;
+	flex-direction: column;
 	pointer-events: none;
-	padding-bottom: 2rem;
+	padding-bottom: 1.2rem;
+	gap: 1rem;
 
 	height: max-content;
 	width: max-content;
+	transition: bottom 0.3s ease;
 }
 </style>

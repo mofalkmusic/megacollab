@@ -51,7 +51,7 @@
 
 			<p class="small mono controls-panel-wrap">
 				<ArrowUpDown :size="13" style="margin-right: 0.5rem" />
-				{{ 25 }}ms
+				{{ averagePing }}ms
 			</p>
 
 			<input
@@ -268,10 +268,12 @@ import { offset, useFloating } from '@floating-ui/vue'
 import { useRouter } from 'vue-router'
 import UserMenu from '@/components/UserMenu.vue'
 import { useToast } from '@/composables/useToast'
+import { usePing } from '@/composables/usePing'
 import GlobalLoadingIndicator from '@/components/GlobalLoadingIndicator.vue'
 import { nanoid } from 'nanoid'
 import CustomMenuIcon from '@/components/CustomMenuIcon.vue'
 const { addToast } = useToast()
+const { averagePing } = usePing()
 
 const minutesNseconds = computed(() => {
 	const sec = currentPlayTimeSeconds.value
@@ -340,7 +342,15 @@ async function tryUndo() {
 	}
 }
 
-const router = useRouter()
+useIntervalFn(() => {
+	addToast({
+		type: 'notification',
+		message: 'this is a test toast',
+		icon: 'mail',
+		priority: 'high',
+		title: 'Test Toast',
+	})
+}, 2000)
 
 const userButtonEl = useTemplateRef('userButton')
 const userMenuEl = useTemplateRef('userMenu')

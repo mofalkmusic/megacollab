@@ -93,6 +93,10 @@ export const EVENTS = Object.freeze({
 				updatedAt: z.number(),
 			}),
 		),
+		'user:username_change': z.object({
+			user_id: UserSchema.shape['id'],
+			new_display_name: UserSchema.shape['display_name'],
+		}),
 	},
 	CLIENT_REQUESTS: {
 		'get:ping': defineRequest({

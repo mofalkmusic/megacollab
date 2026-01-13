@@ -506,6 +506,11 @@ io.on('connection', async (socket) => {
 				})
 
 				user.display_name = updatedUsername
+
+				socket.broadcast.emit('user:username_change', {
+					user_id: user.id,
+					new_display_name: updatedUsername,
+				})
 			} catch (err) {
 				const error = err instanceof Error ? err.message : 'Unknown error'
 				callback({
@@ -516,8 +521,6 @@ io.on('connection', async (socket) => {
 					},
 				})
 			}
-
-			// todo: when implementing foreign cursors, broadcast this change aswell!
 		})
 
 		socket.on('get:undo', async (_, callback) => {

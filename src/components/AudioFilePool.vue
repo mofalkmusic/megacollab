@@ -60,12 +60,12 @@
 </template>
 
 <script setup lang="ts">
-import { audiofiles, clips, user, AUDIO_POOL_WIDTH } from '@/state'
+import { audiofiles, clips, user, AUDIO_POOL_WIDTH, audioFilePoolHeightPx } from '@/state'
 import UploadButton from '@/components/UploadButton.vue'
-import { computed, useTemplateRef } from 'vue'
+import { computed, useTemplateRef, watchEffect } from 'vue'
 import type { AudioFile } from '@/types'
 import ClipInstance from '@/components/ClipInstance.vue'
-import { useDropZone } from '@vueuse/core'
+import { useDropZone, useElementSize } from '@vueuse/core'
 import { File } from 'lucide-vue-next'
 import { audioMimeTypes } from '~/constants'
 import { optimisticAudioCreateUpload } from '@/utils/uploadAudio'
@@ -74,6 +74,12 @@ import { useGlobalProgress } from '@/composables/useGlobalProgress'
 const { addToast } = useToast()
 
 const dropZoneEl = useTemplateRef('dropZoneWrapper')
+
+const { height } = useElementSize(dropZoneEl)
+
+watchEffect(() => {
+	audioFilePoolHeightPx.value = height.value
+})
 
 const { files, isOverDropZone } = useDropZone(dropZoneEl, {
 	multiple: true,

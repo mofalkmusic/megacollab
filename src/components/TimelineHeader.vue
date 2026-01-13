@@ -252,11 +252,9 @@ watch([isPressed, mouseX], ([pressed, newMouseX]) => {
 	const clampedBeat = (beat: number) => Math.max(0, Math.min(beat, TOTAL_BEATS))
 	if (activeHandle.value === 'start') {
 		loopDragStartBeat.value = clampedBeat(currentBeat)
-	} 
-	else {
+	} else {
 		loopDragEndBeat.value = clampedBeat(currentBeat)
 	}
-
 })
 
 function handleDoubleClick() {

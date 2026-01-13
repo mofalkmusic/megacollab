@@ -16,7 +16,7 @@ export function usePing() {
 
 	const averagePing = computed(() => {
 		const total = pingVals.value.reduce((prev, curr) => prev + curr, 0)
-		return Math.round(total / pingVals.value.length)
+		return Math.round(total / pingVals.value.length / 2)
 	})
 
 	function startPing() {
