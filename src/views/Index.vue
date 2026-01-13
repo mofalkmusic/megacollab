@@ -159,7 +159,17 @@
 
 		<GlobalLoadingIndicator style="grid-area: globalloader" />
 
-		<AudioFilePool style="grid-area: audiopool" />
+		<div
+			style="
+				grid-area: audiopool;
+				display: grid;
+				grid-template-columns: 1fr auto;
+				align-items: stretch;
+			"
+		>
+			<AudioFilePool />
+			<Console />
+		</div>
 	</div>
 	<div
 		v-if="dragFromPoolState && !ghostDragState.track_id && ghostAudioFile"
@@ -187,6 +197,7 @@
 
 <script setup lang="ts">
 import Loading from '@/components/Loading.vue'
+import Console from '@/components/Console.vue'
 import { _socketReady, initializeSocket, socket, socketReadyState } from '@/socket/socket'
 import {
 	computed,
@@ -267,12 +278,14 @@ import {
 import { offset, useFloating } from '@floating-ui/vue'
 import { useRouter } from 'vue-router'
 import UserMenu from '@/components/UserMenu.vue'
-import { useToast } from '@/composables/useToast'
 import { usePing } from '@/composables/usePing'
 import GlobalLoadingIndicator from '@/components/GlobalLoadingIndicator.vue'
 import { nanoid } from 'nanoid'
 import CustomMenuIcon from '@/components/CustomMenuIcon.vue'
-const { addToast } = useToast()
+import { useConsole } from '@/composables/useConsole'
+
+const { userLog } = useConsole()
+
 const { averagePing } = usePing()
 
 const minutesNseconds = computed(() => {
@@ -305,12 +318,11 @@ const sortedTracks = computed(() => {
 
 // todo
 function sendChat() {
-	addToast({
-		type: 'notification',
-		message: 'not implemented yet :D',
-		icon: 'mail',
-		priority: 'high',
-		title: 'Chat',
+	userLog('USER', 'sent a message', {
+		textColor: 'orange',
+		isBold: true,
+		display_name: user.value?.display_name || 'unknown',
+		user_id: user.value?.id || '__self__',
 	})
 }
 
@@ -323,34 +335,12 @@ async function tryUndo() {
 	try {
 		const res = await socket.emitWithAck('get:undo', null)
 		if (!res.success) {
-			addToast({
-				type: 'notification',
-				message: res.error.message,
-				icon: 'warning',
-				priority: 'medium',
-				title: 'Undo Error',
-			})
+			userLog('UNDO', `Error: ${res.error.message}`, { textColor: 'orange' })
 		}
 	} catch (e) {
-		addToast({
-			type: 'notification',
-			message: 'unexpected undo error, please try again.',
-			icon: 'warning',
-			priority: 'medium',
-			title: 'Undo Error',
-		})
+		userLog('UNDO', 'Unexpected error, please try again.', { textColor: 'red' })
 	}
 }
-
-useIntervalFn(() => {
-	addToast({
-		type: 'notification',
-		message: 'this is a test toast',
-		icon: 'mail',
-		priority: 'high',
-		title: 'Test Toast',
-	})
-}, 2000)
 
 const userButtonEl = useTemplateRef('userButton')
 const userMenuEl = useTemplateRef('userMenu')
@@ -857,23 +847,15 @@ watch(
 						clips.delete(tempId) // Remove the temporary optimistic clip
 						clips.set(clip.id, clip)
 					} else {
-						addToast({
-							type: 'notification',
-							message: res.error.message,
-							icon: 'warning',
-							priority: 'high',
-							title: 'Failed to create clip',
+						userLog('SYSTEM', `Failed to create clip: ${res.error.message}`, {
+							textColor: 'red',
 						})
 						console.error('failed to create clip:', res.error)
 						clips.delete(tempId)
 					}
 				} catch (err) {
-					addToast({
-						type: 'notification',
-						message: 'An unexpected error occurred while creating the clip.',
-						icon: 'warning',
-						priority: 'high',
-						title: 'Failed to create clip',
+					userLog('SYSTEM', `An unexpected error occurred while creating the clip.`, {
+						textColor: 'red',
 					})
 					console.error(err)
 					clips.delete(tempId)

@@ -1,10 +1,10 @@
 import { defineSocketHandler } from '@/socket/socket'
 import { audiofiles } from '@/state'
 import { ingestNewAudioFileMetadata } from '@/utils/preProcessAudio'
-import { useToast } from '@/composables/useToast'
 import { makeAudioFileHash } from '~/utils'
+import { useConsole } from '@/composables/useConsole'
 
-const { addToast } = useToast()
+const { userLog } = useConsole()
 
 export default defineSocketHandler({
 	event: 'audiofile:create',
@@ -21,12 +21,8 @@ export default defineSocketHandler({
 
 			await ingestNewAudioFileMetadata(data)
 		} catch (err) {
-			addToast({
-				type: 'notification',
-				title: 'Audio file creation failed',
-				message: `File: ${data.file_name}`,
-				icon: 'warning',
-				priority: 'high',
+			userLog('SYSTEM', `Audio file creation failed: ${data.file_name}`, {
+				textColor: 'red',
 			})
 
 			console.error(`Failed to create audio file: ${data.file_name}`, err)

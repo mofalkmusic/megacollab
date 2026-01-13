@@ -200,6 +200,7 @@ button * {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	white-space: nowrap;
 	padding: 0 1.2rem;
 	gap: 1rem;
 	background-color: var(--border-primary);
@@ -362,4 +363,9 @@ button * {
 	cursor:
 		url('/cursor_delete2.png') 7 1,
 		auto !important;
+}
+
+svg {
+	flex-grow: 0;
+	flex-shrink: 0;
 }

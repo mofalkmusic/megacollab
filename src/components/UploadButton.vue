@@ -19,16 +19,17 @@ import { useFileDialog, useTimeoutFn } from '@vueuse/core'
 import { audioMimeTypes } from '~/constants'
 import { optimisticAudioCreateUpload } from '@/utils/uploadAudio'
 import { computed, ref, shallowRef, useTemplateRef, type CSSProperties } from 'vue'
-import { useToast } from '@/composables/useToast'
 import { FolderOpen, LoaderCircle } from 'lucide-vue-next'
 import { useGlobalProgress } from '@/composables/useGlobalProgress'
+import { useConsole } from '@/composables/useConsole'
 
 function openFileDialog() {
 	if (isUploading.value) return
 	open()
 }
 
-const { addToast } = useToast()
+const { userLog } = useConsole()
+
 const buttonEl = useTemplateRef<HTMLButtonElement>('uploadButton')
 const lockedWidth = ref<number | null>(null)
 
@@ -92,13 +93,8 @@ onChange(async (files) => {
 		if (res.success) return
 		progressMap.value.delete(res.file_name)
 
-		addToast({
-			type: 'notification',
-			icon: 'info',
-			lifetimeMs: 5000,
-			title: 'File upload failed',
-			message: `${res.file_name}: ${res.reason}`,
-			priority: 'low',
+		userLog('UPLOAD', `File upload failed: ${res.file_name}: ${res.reason}`, {
+			textColor: 'red',
 		})
 	})
 

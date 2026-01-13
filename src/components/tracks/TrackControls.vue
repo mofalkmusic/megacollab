@@ -94,7 +94,7 @@ import { getTrackVolume, isPlaying, setTrackGain, unregisterTrack } from '@/audi
 import { useRafFn, useEventListener, onClickOutside } from '@vueuse/core'
 import { UseElementBounding, vOnClickOutside } from '@vueuse/components'
 import { socket } from '@/socket/socket'
-import { useToast } from '@/composables/useToast'
+import { useConsole } from '@/composables/useConsole'
 import { Trash2, Ellipsis } from 'lucide-vue-next'
 import { DEFAULT_GAIN } from '~/constants'
 import type { Clip } from '~/schema'
@@ -110,7 +110,7 @@ const sortedTracks = computed(() => {
 })
 
 const trackVolumes = reactive(new Map<string, number>())
-const { addToast } = useToast()
+const { userLog } = useConsole()
 
 const DECAY_RATE = 0.15 as const // Lower = slower decay, higher = faster decay (0-1)
 
@@ -181,12 +181,9 @@ async function deleteTrack(trackId: string) {
 
 		clipsToDelete.forEach((clip) => clips.set(clip.id, clip))
 
-		addToast({
-			type: 'notification',
-			message: res.error.message,
-			icon: 'warning',
-			priority: 'high',
-			title: 'Failed to delete track',
+		userLog('SYSTEM', `Failed to delete track: ${res.error.message}`, {
+			textColor: 'red',
+			isBold: true,
 		})
 	}
 }
@@ -199,11 +196,8 @@ function startVolumeDrag(e: PointerEvent, trackId: string, top: number, height: 
 
 	const track = tracks.get(trackId)
 	if (!track) {
-		addToast({
-			type: 'notification',
-			message: 'This track has been deleted.',
-			icon: 'warning',
-			priority: 'medium',
+		userLog('SYSTEM', 'This track has been deleted.', {
+			textColor: 'yellow',
 		})
 		return
 	}
@@ -272,11 +266,8 @@ function startVolumeDrag(e: PointerEvent, trackId: string, top: number, height: 
 			if (!res.success) {
 				track.gain = initialGain
 				setTrackGain(trackId, initialGain)
-				addToast({
-					type: 'notification',
-					message: res.error.message,
-					priority: 'medium',
-					icon: 'warning',
+				userLog('SYSTEM', `Failed to update track gain: ${res.error.message}`, {
+					textColor: 'red',
 				})
 			}
 		}
@@ -306,11 +297,8 @@ async function resetVolume(trackId: string) {
 		// Revert
 		track.gain = initialGain
 		setTrackGain(trackId, initialGain)
-		addToast({
-			type: 'notification',
-			message: res.error.message,
-			priority: 'medium',
-			icon: 'warning',
+		userLog('SYSTEM', `Failed to reset track gain: ${res.error.message}`, {
+			textColor: 'yellow',
 		})
 	}
 }

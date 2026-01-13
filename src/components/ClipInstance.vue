@@ -73,8 +73,9 @@ import { socket } from '@/socket/socket'
 import type { AudioFile } from '@/types'
 import { Trash2 } from 'lucide-vue-next'
 import { deleteAudio } from '@/socket/eventHandlers/audiofile_delete'
-import { useToast } from '@/composables/useToast'
-const { addToast } = useToast()
+import { useConsole } from '@/composables/useConsole'
+
+const { userLog } = useConsole()
 
 const wrapperEl = useTemplateRef('clipWrapper')
 const leftHandleEl = useTemplateRef('leftHandle')
@@ -129,15 +130,8 @@ async function deleteAudioFile() {
 	if (res.success) {
 		await deleteAudio(res.data.audio_file.id, res.data.deleted_clips)
 	} else {
-		addToast({
-			type: 'acknowledgement_request',
-			icon: 'warning',
-			message: `Failed to delete audio file: ${props.audiofile.file_name}`,
-			title: 'Error',
-			priority: 'medium',
-			onConfirm: {
-				label: 'Understood',
-			},
+		userLog('SYSTEM', `Failed to delete audio file: ${props.audiofile.file_name}`, {
+			textColor: 'red',
 		})
 	}
 }

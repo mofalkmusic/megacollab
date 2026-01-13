@@ -69,13 +69,14 @@ import { useDropZone, useElementSize } from '@vueuse/core'
 import { File } from 'lucide-vue-next'
 import { audioMimeTypes } from '~/constants'
 import { optimisticAudioCreateUpload } from '@/utils/uploadAudio'
-import { useToast } from '@/composables/useToast'
 import { useGlobalProgress } from '@/composables/useGlobalProgress'
-const { addToast } = useToast()
+import { useConsole } from '@/composables/useConsole'
+
+const { userLog } = useConsole()
 
 const dropZoneEl = useTemplateRef('dropZoneWrapper')
 
-const { height } = useElementSize(dropZoneEl)
+const { height } = useElementSize(dropZoneEl, { width: 0, height: 0 }, { box: 'border-box' })
 
 watchEffect(() => {
 	audioFilePoolHeightPx.value = height.value
@@ -108,13 +109,17 @@ const { files, isOverDropZone } = useDropZone(dropZoneEl, {
 
 		res.forEach((r) => {
 			if (!r.success) {
-				addToast({
-					type: 'notification',
-					title: 'File Upload Failed',
-					message: `${r.file_name}: ${r.reason || 'Unknown reason'}`,
-					icon: 'warning',
-					lifetimeMs: 5000,
-					priority: 'medium',
+				userLog(
+					'SYSTEM',
+					`Upload Failed: ${r.file_name} - ${r.reason || 'Unknown reason'}`,
+					{
+						textColor: 'red',
+						isBold: true,
+					},
+				)
+			} else {
+				userLog('SYSTEM', `Uploaded: ${r.file_name}`, {
+					textColor: 'green',
 				})
 			}
 		})

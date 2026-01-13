@@ -4,10 +4,10 @@ import { socket } from '@/socket/socket'
 import { audioContext } from '@/audioEngine'
 import { cacheAudioFile, cacheBitmaps, computePeaks } from '@/utils/workerPool'
 import { activeUploads, audioBuffers, audiofiles, clips, user } from '@/state'
-import { useToast } from '@/composables/useToast'
+import { useConsole } from '@/composables/useConsole'
 import { makeAudioFileHash, sanitizeLetterUnderscoreOnly } from '~/utils'
 
-const { addToast, removeToast } = useToast()
+const { userLog } = useConsole()
 
 type AudioCreateResult =
 	| { success: false; reason?: string; id?: never; duration?: never; uploadPromise?: never }
@@ -162,22 +162,9 @@ function handleUploadFailure(fileId: string, err: unknown) {
 		if (clip.audio_file_id === fileId) clips.delete(clipId)
 	}
 
-	addToast({
-		type: 'action_request',
-		title: 'File upload failed',
-		message: `Please refresh and try uploading the file again. Error: ${typeof err === 'object' && err !== null && 'message' in err ? err.message : 'Unknown error'}`,
-		icon: 'warning',
-		priority: 'high',
-		onConfirm: {
-			label: 'Refresh page',
-			func: () => {
-				window.location.reload()
-			},
-		},
-		onDeny: {
-			label: 'Cancel',
-			func: ({ id }) => removeToast(id),
-		},
+	const msg = `Please refresh and try uploading the file again. Error: ${typeof err === 'object' && err !== null && 'message' in err ? err.message : 'Unknown error'}`
+	userLog('UPLOAD', `Upload Failure: ${msg}`, {
+		textColor: 'red',
 	})
 }
 

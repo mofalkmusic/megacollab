@@ -8,7 +8,6 @@ import {
 	type User,
 } from '~/schema'
 import { type DebugEntry } from '@/composables/useDebug'
-import type { Toast } from '@/composables/useToast'
 import { useDevicePixelRatio, useEventListener, useIntervalFn, useTimeoutFn } from '@vueuse/core'
 import type { AudioFile } from '@/types'
 
@@ -24,7 +23,7 @@ export const audiofiles = reactive<Map<string, AudioFile>>(new Map())
 export const audioBuffers = reactive(new Map<string, AudioBuffer>())
 
 export const debugEntries = ref<Map<string, DebugEntry>>(new Map())
-export const toasts = ref<Toast[]>([])
+
 export const globalProgresses = reactive(
 	new Map<string, { progress: number; expiresAt: number; label?: string }>(),
 )

@@ -3,10 +3,10 @@ import { _socketReady } from '@/socket/socket'
 import { audiofiles, clips, tracks, user } from '@/state'
 import { ingestNewAudioFileMetadata } from '@/utils/preProcessAudio'
 import { pruneAudioCache } from '@/utils/workerPool'
-import { useToast } from '@/composables/useToast'
 import { makeAudioFileHash } from '~/utils'
+import { useConsole } from '@/composables/useConsole'
 
-const { addToast } = useToast()
+const { userLog } = useConsole()
 
 export default defineSocketHandler({
 	event: 'server:ready',
@@ -46,22 +46,12 @@ export default defineSocketHandler({
 				},
 				onAllComplete: async () => {
 					await pruneAudioCache(serverAudiofiles.map((f: { id: string }) => f.id))
-					addToast({
-						type: 'notification',
-						title: 'Audio initialization complete',
-						message: 'Audio files processed successfully',
-						icon: 'success',
-						priority: 'low',
-					})
+					userLog('SYSTEM', 'Audio initialization completed', { textColor: 'gray' })
 				},
 			})
 		} catch (err) {
-			addToast({
-				type: 'notification',
-				title: 'Audio initialization failed',
-				message: 'Failed to process audio files',
-				icon: 'warning',
-				priority: 'high',
+			userLog('SYSTEM', 'Audio initialization failed. Refresh to try again.', {
+				textColor: 'red',
 			})
 			console.error('Failed to init audio files', err)
 		}
