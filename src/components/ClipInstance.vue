@@ -23,7 +23,7 @@
 
 		<div
 			class="outerClipCanvasWrap"
-			:style="{ '--_color': props.audiofile.color }"
+			:style="outerClipCanvasStyles"
 			:class="{ loading: !waveformsDrawn }"
 		>
 			<canvas ref="canvas" :style="canvasStyles"></canvas>
@@ -104,6 +104,19 @@ const userClipDisplayComp = computed(() => {
 			? 'you'
 			: props.clip?.creator_display_name
 	}
+})
+
+const outerClipCanvasStyles = computed((): CSSProperties => {
+	const base: CSSProperties = {
+		'--_color': props.audiofile.color,
+	}
+
+	// if (withinAudioPool.value) {
+	base.borderBottomLeftRadius = 'inherit'
+	base.borderBottomRightRadius = 'inherit'
+	// }
+
+	return base
 })
 
 async function rip() {
