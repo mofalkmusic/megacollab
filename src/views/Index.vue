@@ -159,14 +159,7 @@
 
 		<GlobalLoadingIndicator style="grid-area: globalloader" />
 
-		<div
-			style="
-				grid-area: audiopool;
-				display: grid;
-				grid-template-columns: 1fr auto;
-				align-items: stretch;
-			"
-		>
+		<div class="bottom-row">
 			<AudioFilePool />
 			<Console />
 		</div>
@@ -1186,5 +1179,12 @@ useEventListener(window, 'blur', () => {
 		height 50ms linear,
 		top 50ms linear;
 	will-change: height, top;
+}
+
+.bottom-row {
+	grid-area: audiopool;
+	display: grid;
+	grid-template-columns: 1fr auto;
+	align-items: stretch;
 }
 </style>
