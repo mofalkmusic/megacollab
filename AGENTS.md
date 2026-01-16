@@ -46,3 +46,7 @@ Always use these aliases instead of relative paths when importing across directo
 ## Snapping
 
 - Respect the `altKeyPressed` state from `@/state.ts` to allow users to bypass quantization when it makes sense to do so.
+
+## Consistency
+
+- If you perform an action that contradicts this AGENTS.md, flag it immediately.
