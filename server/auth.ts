@@ -305,6 +305,8 @@ export async function handleTwitchOAuthCallback(c: Context) {
 			provider_id: user.id,
 			roles: ['regular'],
 			color: randomSafeHexColor(),
+			banned_at: null,
+			ban_reason: null,
 		}
 
 		const completeUser = await db.makeNewIfNotExistUserSafe(newUser)
@@ -452,6 +454,8 @@ export async function handleDiscordOAuthCallback(c: Context) {
 			provider_id: userData.id,
 			roles: ['regular'],
 			color: randomSafeHexColor(),
+			banned_at: null,
+			ban_reason: null,
 		}
 
 		const completeUser = await db.makeNewIfNotExistUserSafe(newUser)

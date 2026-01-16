@@ -23,7 +23,10 @@ import { FolderOpen, LoaderCircle } from 'lucide-vue-next'
 import { useGlobalProgress } from '@/composables/useGlobalProgress'
 import { useConsole } from '@/composables/useConsole'
 
+import { user } from '@/state'
+
 function openFileDialog() {
+	if (user.value?.banned_at) return
 	if (isUploading.value) return
 	open()
 }

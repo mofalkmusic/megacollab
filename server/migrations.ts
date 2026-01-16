@@ -79,4 +79,15 @@ export const migrations: Migration[] = [
                 )`)
 		},
 	},
+	{
+		id: 2,
+		name: 'add_banned_columns',
+		func: async (queryFn) => {
+			await queryFn(`
+                ALTER TABLE ${USERS_TABLE} 
+                ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ,
+                ADD COLUMN IF NOT EXISTS ban_reason TEXT
+            `)
+		},
+	},
 ]

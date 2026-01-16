@@ -95,6 +95,9 @@ export const db = {
 	deleteAudioFile,
 	deleteSessionSafe,
 	deleteTrack,
+	banUser,
+	unbanUser,
+	getAllUsers,
 }
 
 const audioFileCache = new Map<string, ClientAudioFile>()
@@ -340,18 +343,38 @@ async function saveAudioFile(audioFile: ServerAudioFile): Promise<ClientAudioFil
 
 async function makeNewIfNotExistUserSafe(user: Omit<User, 'created_at'>): Promise<User | null> {
 	try {
-		const { id, display_name, provider, provider_id, provider_email, roles, color } = user
+		const {
+			id,
+			display_name,
+			provider,
+			provider_id,
+			provider_email,
+			roles,
+			color,
+			banned_at,
+			ban_reason,
+		} = user
 
 		const rows = await queryFn<User>(
 			`
-			INSERT INTO ${USERS_TABLE} (id, display_name, provider, provider_id, provider_email, roles, color) 
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			INSERT INTO ${USERS_TABLE} (id, display_name, provider, provider_id, provider_email, roles, color, banned_at, ban_reason) 
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			ON CONFLICT (provider, provider_id) DO UPDATE
 				SET
 					provider_email=EXCLUDED.provider_email
 			RETURNING *
 		`,
-			[id, display_name, provider, provider_id, provider_email, roles, color],
+			[
+				id,
+				display_name,
+				provider,
+				provider_id,
+				provider_email,
+				roles,
+				color,
+				banned_at,
+				ban_reason,
+			],
 		)
 
 		if (!rows.length) return null
@@ -522,6 +545,8 @@ async function getOrCreateDevUser(): Promise<User | null> {
 			provider_email: 'dev@local.host',
 			roles: ['admin', 'regular'],
 			color: randomSafeHexColor(),
+			banned_at: null,
+			ban_reason: null,
 		}
 
 		return await makeNewIfNotExistUserSafe(newUser)
@@ -597,4 +622,58 @@ async function deleteTrack(
 		deleted_clips: deleted_clip_ids || [],
 		deleted_track: trackData,
 	}
+}
+
+async function banUser(
+	userId: string,
+	reason: string | null,
+	deleteContent: boolean,
+): Promise<User['display_name']> {
+	const rows = await queryFn<Pick<User, 'display_name'>>(
+		`
+		UPDATE ${USERS_TABLE}
+		SET banned_at = NOW(), ban_reason = $2
+		WHERE id = $1
+		RETURNING display_name
+	`,
+		[userId, reason],
+	)
+
+	if (!rows.length) throw new Error(`Failed to ban user ${userId}`)
+	const row = rows[0]!
+
+	if (deleteContent) {
+		await queryFn(`DELETE FROM ${CLIPS_TABLE} WHERE creator_user_id = $1`, [userId])
+		await queryFn(`DELETE FROM ${AUDIOFILES_TABLE} WHERE creator_user_id = $1`, [userId])
+		// await queryFn(`DELETE FROM ${TRACKS_TABLE} WHERE creator_user_id = $1`, [userId]) // dont delete tracks for now, bc they are not self owned
+		// todo: these have to be emmitted as updates to all clients aswell!
+	}
+
+	return row.display_name
+}
+
+async function unbanUser(userId: string): Promise<User['display_name']> {
+	const rows = await queryFn<Pick<User, 'display_name'>>(
+		`
+		UPDATE ${USERS_TABLE}
+		SET banned_at = NULL, ban_reason = NULL
+		WHERE id = $1
+		RETURNING display_name
+	`,
+		[userId],
+	)
+
+	if (!rows.length) throw new Error(`Failed to unban user ${userId}`)
+	const row = rows[0]!
+
+	return row.display_name
+}
+
+async function getAllUsers(): Promise<User[]> {
+	const rows = await queryFn<User>(`
+		SELECT *
+		FROM ${USERS_TABLE}
+		ORDER BY display_name ASC
+	`)
+	return rows
 }

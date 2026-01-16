@@ -47,6 +47,10 @@ class HistoryManager {
 		}
 	}
 
+	getHistory(userId: string): HistoryAction[] {
+		return this.undoStack.filter((action) => action.userId === userId).reverse()
+	}
+
 	async undo(
 		userId: string,
 		socketBroadcast: BroadcastFn,

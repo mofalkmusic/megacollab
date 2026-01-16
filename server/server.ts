@@ -106,6 +106,8 @@ io.on('connection', async (socket) => {
 			return
 		}
 
+		socket.data.user = user
+
 		validateIncomingEvents(socket)
 
 		socket.on('disconnect', () => {
@@ -115,6 +117,8 @@ io.on('connection', async (socket) => {
 		})
 
 		socket.on('emit:updatepos', (pos) => {
+			if (user.banned_at) return // banned users cannot show cursor
+
 			userPositions.set(user.id, {
 				pos,
 				display_name: user.display_name,
@@ -131,6 +135,16 @@ io.on('connection', async (socket) => {
 		})
 
 		socket.on('get:upload:url', async (data, callback) => {
+			if (user.banned_at) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are banned from uploading files.',
+					},
+				})
+				return
+			}
 			const { filename, filesize, filetype } = data
 
 			if (!audioMimeTypes.includes(filetype)) {
@@ -180,6 +194,16 @@ io.on('connection', async (socket) => {
 		})
 
 		socket.on('get:upload:finalize', async (data, callback) => {
+			if (user.banned_at) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are banned from uploading files.',
+					},
+				})
+				return
+			}
 			const { duration, file_key } = data
 
 			const pending = pendingSocketUploads.get(file_key)
@@ -235,6 +259,17 @@ io.on('connection', async (socket) => {
 		})
 
 		socket.on('get:track:delete', async (data, callback) => {
+			if (user.banned_at) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are banned and cannot delete tracks.',
+					},
+				})
+				return
+			}
+
 			const { id } = data
 
 			// todo: check authorization (creator or belongs_to_user_id)
@@ -268,6 +303,16 @@ io.on('connection', async (socket) => {
 		})
 
 		socket.on('get:track:create', async (_, callback) => {
+			if (user.banned_at) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are banned and cannot create tracks.',
+					},
+				})
+				return
+			}
 			const newTrack: Omit<ServerTrack, 'order_index'> = {
 				id: nanoid(),
 				created_at: new Date().toISOString(),
@@ -304,6 +349,16 @@ io.on('connection', async (socket) => {
 		})
 
 		socket.on('get:track:update', async (data, callback) => {
+			if (user.banned_at) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are banned and cannot update tracks.',
+					},
+				})
+				return
+			}
 			const { id, changes } = data
 
 			// todo: add volume changes to history for undos
@@ -343,6 +398,16 @@ io.on('connection', async (socket) => {
 		})
 
 		socket.on('get:clip:create', async (data, callback) => {
+			if (user.banned_at) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are banned and cannot create clips.',
+					},
+				})
+				return
+			}
 			const { start_beat, end_beat, audio_file_id, track_id, offset_seconds, gain } = data
 
 			const newClip: Omit<Clip, 'created_at'> = {
@@ -388,6 +453,16 @@ io.on('connection', async (socket) => {
 		})
 
 		socket.on('get:clip:delete', async (data, callback) => {
+			if (user.banned_at) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are banned and cannot delete clips.',
+					},
+				})
+				return
+			}
 			const { id } = data
 
 			try {
@@ -423,6 +498,16 @@ io.on('connection', async (socket) => {
 		})
 
 		socket.on('get:clip:update', async (data, callback) => {
+			if (user.banned_at) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are banned and cannot update clips.',
+					},
+				})
+				return
+			}
 			const { id, changes } = data
 
 			try {
@@ -466,6 +551,16 @@ io.on('connection', async (socket) => {
 		})
 
 		socket.on('get:update:username', async (data, callback) => {
+			if (user.banned_at) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are banned and cannot change your username.',
+					},
+				})
+				return
+			}
 			const { username } = data
 
 			const cleanUsername = sanitizeLetterUnderscoreOnly(username, false)
@@ -524,6 +619,16 @@ io.on('connection', async (socket) => {
 		})
 
 		socket.on('get:undo', async (_, callback) => {
+			if (user.banned_at) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are banned and cannot undo.',
+					},
+				})
+				return
+			}
 			// todo: dont like the as any, maybe i can find a way to type this differently :D
 			// Cast to any required due to TS limitation with correlated generic types in Socket.IO emit
 			const result = await history.undo(user.id, (event, data) => io.emit(event as any, data))
@@ -542,6 +647,16 @@ io.on('connection', async (socket) => {
 		})
 
 		socket.on('get:audiofile:delete', async (data, callback) => {
+			if (user.banned_at) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are banned and cannot delete files.',
+					},
+				})
+				return
+			}
 			const { id } = data
 
 			// check wether or not this user is actually the creator of the audio file.
@@ -603,7 +718,165 @@ io.on('connection', async (socket) => {
 			tracks: await db.getTracks(),
 		})
 
-		if (IN_DEV_MODE) ensureAllEventsHandled(socket.eventNames())
+		// admin handlers
+		socket.on('get:admin:users', async (_, callback) => {
+			if (!user.roles.includes('admin')) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are not an admin.',
+					},
+				})
+				return
+			}
+
+			try {
+				const users = await db.getAllUsers()
+				callback({
+					success: true,
+					// todo: actually check againts active cursors and pos etc, or perhaps keep  record of actions and timestampds or check db bc everything ahs a created_at etc idk
+					data: users.map((u) => ({ ...u, is_active: false })), // simple mapping to match extended schema
+				})
+			} catch (err) {
+				const error = err instanceof Error ? err.message : 'Unknown error'
+				callback({
+					success: false,
+					error: {
+						status: 'SERVER_ERROR',
+						message: `Database error: ${error}`,
+					},
+				})
+			}
+		})
+
+		socket.on('get:admin:ban_user', async (data, callback) => {
+			if (!user.roles.includes('admin')) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are not an admin.',
+					},
+				})
+				return
+			}
+
+			const { userId, reason, deleteContent } = data
+
+			if (user.id === userId) {
+				callback({
+					success: false,
+					error: {
+						status: 'BAD_REQUEST',
+						message: 'You cannot ban yourself.',
+					},
+				})
+				return
+			}
+
+			try {
+				const displayName = await db.banUser(userId, reason, deleteContent)
+				callback({ success: true, data: null })
+
+				socket.broadcast.emit('user:ban_status', {
+					user_id: userId,
+					is_banned: true,
+					ban_reason: reason,
+					display_name: displayName,
+				})
+
+				// Update active socket user objects
+				const sockets = await io.fetchSockets()
+
+				for (const s of sockets) {
+					if (s.data.userId === userId && s.data.user) {
+						s.data.user.banned_at = new Date().toISOString()
+						s.data.user.ban_reason = reason
+					}
+				}
+
+				// todo:
+				// If also online on this server instance (which is likely in single instance setup)
+				// we might want to forcefully disconnect them or update their local user object?
+				// The client will listen to user:ban_status and reload/lock.
+			} catch (err) {
+				const error = err instanceof Error ? err.message : 'Unknown error'
+				callback({
+					success: false,
+					error: {
+						status: 'SERVER_ERROR',
+						message: `Database error: ${error}`,
+					},
+				})
+			}
+		})
+
+		socket.on('get:admin:unban_user', async (data, callback) => {
+			if (!user.roles.includes('admin')) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are not an admin.',
+					},
+				})
+				return
+			}
+
+			const { userId } = data
+
+			try {
+				const displayName = await db.unbanUser(userId)
+				callback({ success: true, data: null })
+
+				socket.broadcast.emit('user:ban_status', {
+					user_id: userId,
+					is_banned: false,
+					ban_reason: null,
+					display_name: displayName,
+				})
+
+				const sockets = await io.fetchSockets()
+
+				for (const s of sockets) {
+					if (s.data.userId === userId && s.data.user) {
+						s.data.user.banned_at = null
+						s.data.user.ban_reason = null
+					}
+				}
+			} catch (err) {
+				const error = err instanceof Error ? err.message : 'Unknown error'
+				callback({
+					success: false,
+					error: {
+						status: 'SERVER_ERROR',
+						message: `Database error: ${error}`,
+					},
+				})
+			}
+		})
+
+		socket.on('get:admin:user_history', async (data, callback) => {
+			if (!user.roles.includes('admin')) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are not an admin.',
+					},
+				})
+				return
+			}
+
+			const { userId } = data
+			const actions = history.getHistory(userId)
+
+			callback({
+				success: true,
+				data: actions,
+			})
+		})
 	} catch (err) {
 		print.server(err)
 		socket.emit('server:error', {
@@ -612,6 +885,8 @@ io.on('connection', async (socket) => {
 		})
 		socket.disconnect()
 		return
+	} finally {
+		if (IN_DEV_MODE) ensureAllEventsHandled(socket.eventNames())
 	}
 })
 

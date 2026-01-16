@@ -13,6 +13,7 @@ import type { AudioFile } from '@/types'
 
 export const user = ref<User | null>(null)
 export const client = ref<Client | null>(null)
+export const showAdminPanel = shallowRef(false)
 
 export const clips = reactive<Map<string, Clip>>(new Map())
 export const selectedClipIds = reactive<Set<Clip['id']>>(new Set())
