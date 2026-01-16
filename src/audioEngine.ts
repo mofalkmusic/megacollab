@@ -1,6 +1,6 @@
 import { computed, shallowRef, watch } from 'vue'
 import { beats_to_sec, quantize_beats, sec_to_beats } from '@/utils/mathUtils'
-import { useIntervalFn, useRafFn, watchThrottled } from '@vueuse/core'
+import { useIntervalFn, useRafFn, watchThrottled, useTimeoutFn } from '@vueuse/core'
 import { clips, TOTAL_BEATS, audioBuffers, bpm } from '@/state'
 import type { Clip, ServerTrack } from '~/schema'
 
@@ -16,6 +16,7 @@ const trackAnalysers = new Map<string, AnalyserNode>()
 const SCHEDULER_LOOP_INRERVAL_MS = 100 as const
 const FFT_SIZE_VOLUMES = 256 as const
 const BACK_TRACKING_TIME_ON_PLAY = 0.05 as const
+const FADE_TIME_MS = 30 as const
 
 const sortedClips = computed(() => {
 	return Array.from(clips.values()).sort((a, b) => a.start_beat - b.start_beat)
@@ -430,10 +431,28 @@ function stopAllSources() {
 	scheduledClipIds.clear()
 }
 
+const { start: startPauseFadeOut, stop: stopPauseFadeOut } = useTimeoutFn(
+	() => {
+		stopAllSources()
+		schedulerLoop.pause()
+		uiRAFLoop.pause()
+	},
+	FADE_TIME_MS,
+	{ immediate: false },
+)
+
 export async function play() {
 	if (isPlaying.value) return
 
+	stopPauseFadeOut()
+
 	if (audioContext.state === 'suspended') await audioContext.resume()
+
+	// fade in
+	const now = audioContext.currentTime
+	masterGain.gain.cancelScheduledValues(now)
+	masterGain.gain.setValueAtTime(0, now)
+	masterGain.gain.linearRampToValueAtTime(1, now + FADE_TIME_MS / 1000)
 
 	playbackStartTime.value = audioContext.currentTime + BACK_TRACKING_TIME_ON_PLAY
 
@@ -461,14 +480,17 @@ export async function play() {
 export function pause() {
 	if (!isPlaying.value) return
 
-	stopAllSources()
+	// fade out
+	const now = audioContext.currentTime
+	masterGain.gain.cancelScheduledValues(now)
+	masterGain.gain.setValueAtTime(masterGain.gain.value, now)
+	masterGain.gain.linearRampToValueAtTime(0, now + FADE_TIME_MS / 1000)
 
 	startOffset.value = restingPositionSec.value
 	currentTime.value = restingPositionSec.value
-	isPlaying.value = false
+	isPlaying.value = false // for ui state
 
-	schedulerLoop.pause()
-	uiRAFLoop.pause()
+	startPauseFadeOut()
 }
 
 export function seek(newTimeSeconds: number, opts?: { setAsRest?: boolean }) {
