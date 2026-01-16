@@ -1,5 +1,10 @@
 # AGENTS.md
 
+## Plan Mode
+
+- Make the plan extremely concise. Sacrifice grammar for the sake of concision.
+- At the end of each plan, give me a list of unresolved questions to answer, if any.
+
 ## Verification instructions
 
 - Always verify implemented changes by running `bun run typecheck`, `bun run lint`, and `bun run format` before concluding the task.
