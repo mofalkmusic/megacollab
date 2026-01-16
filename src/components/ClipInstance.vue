@@ -7,10 +7,11 @@
 			props.audiofile.file_name,
 			isHovered,
 			isSelected,
+			!!dragSession,
 		]"
 		ref="clipWrapper"
 		class="outmostClipWrapper clip"
-		:class="{ selected: isSelected }"
+		:class="{ selected: isSelected, 'is-dragging': !!dragSession }"
 		:style="wrapperStyles"
 		@contextmenu.prevent="rip"
 	>
@@ -47,7 +48,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef, useTemplateRef, type CSSProperties } from 'vue'
+import {
+	computed,
+	onMounted,
+	ref,
+	shallowRef,
+	useTemplateRef,
+	watch,
+	type CSSProperties,
+} from 'vue'
 import {
 	TOTAL_BEATS,
 	altKeyPressed,
@@ -60,7 +69,13 @@ import {
 	selectedClipIds,
 } from '@/state'
 import type { Clip } from '~/schema'
-import { useElementBounding, useEventListener, watchThrottled, useElementHover } from '@vueuse/core'
+import {
+	useElementBounding,
+	useEventListener,
+	watchThrottled,
+	useElementHover,
+	useWindowFocus,
+} from '@vueuse/core'
 import { formatHex, interpolate, parse, wcagLuminance } from 'culori'
 import {
 	beats_to_px,
@@ -228,6 +243,13 @@ const dragSession = ref<{
 	verticalOffsetPx: number
 	sourceTrackRect?: DOMRect
 } | null>(null)
+
+const windowFocused = useWindowFocus()
+watch(windowFocused, (focused) => {
+	if (!focused) {
+		dragSession.value = null
+	}
+})
 
 // functionality for timeline clips
 

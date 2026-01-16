@@ -42,7 +42,11 @@
 	></div>
 
 	<!-- Scrolling Lines -->
-	<div class="playhead-line" :style="playheadStyle" :class="{ 'is-playing': isPlaying }" />
+	<div
+		class="playhead-line"
+		:style="playheadStyle"
+		:class="{ 'is-playing': isPlaying, 'no-transition': localPlayheadBeat != null }"
+	/>
 
 	<!-- Sticky Playhead Heads -->
 	<div class="timeline-heads-wrap">
@@ -50,7 +54,7 @@
 		<div
 			class="playhead-head"
 			:style="playheadHeadStyle"
-			:class="{ 'is-playing': isPlaying }"
+			:class="{ 'is-playing': isPlaying, 'no-transition': localPlayheadBeat != null }"
 		/>
 	</div>
 </template>
@@ -75,11 +79,24 @@ import {
 } from '@/utils/mathUtils'
 import { computed, shallowRef, useTemplateRef, watch, type CSSProperties } from 'vue'
 import { altKeyPressed, controlKeyPressed, shiftKeyPressed, pxPerBeat, TOTAL_BEATS } from '@/state'
-import { useMouseInElement, useMousePressed, watchThrottled } from '@vueuse/core'
+import { useMouseInElement, useMousePressed, useWindowFocus, watchThrottled } from '@vueuse/core'
 
 const timelineHeaderEl = useTemplateRef('timelineHeaderRef')
 const { elementX: mouseX } = useMouseInElement(timelineHeaderEl, { handleOutside: true })
 const { pressed: isPressed } = useMousePressed({ target: timelineHeaderEl })
+
+const windowFocused = useWindowFocus()
+
+watch(windowFocused, (focused) => {
+	if (!focused) {
+		isPressed.value = false
+		localPlayheadBeat.value = null
+		startedScrubWithActionKey.value = null
+		activeHandle.value = null
+		loopDragStartBeat.value = null
+		loopDragEndBeat.value = null
+	}
+})
 
 const playheadStyle = computed((): CSSProperties => {
 	return {
@@ -326,6 +343,11 @@ watchThrottled(
 	will-change: transform;
 
 	transition: transform 15ms linear;
+}
+
+.playhead-line.no-transition,
+.playhead-head.no-transition {
+	transition: none !important;
 }
 
 .playhead-line.is-playing {
