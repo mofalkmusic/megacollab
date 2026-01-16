@@ -7,8 +7,8 @@
 
 ## Verification instructions
 
-- Always verify implemented changes by running `bun run typecheck`, `bun run lint`, and `bun run format` before concluding the task.
-- Explicitly add this as a final step to your tasks/plans when you create them.
+- Always verify implemented changes by running `bun run typecheck`, `bun run lint`, `bun run format` before concluding the task.
+- Explicitly add these as a final step to your tasks/plans when you create them.
 
 ## Import Aliases
 
