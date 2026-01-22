@@ -735,8 +735,8 @@ io.on('connection', async (socket) => {
 				const users = await db.getAllUsers()
 				callback({
 					success: true,
-					// todo: actually check againts active cursors and pos etc, or perhaps keep  record of actions and timestampds or check db bc everything ahs a created_at etc idk
-					data: users.map((u) => ({ ...u, is_active: false })), // simple mapping to match extended schema
+					// todo: ensure userpositions is cleaned up accordingly
+					data: users.map((u) => ({ ...u, is_active: userPositions.has(u.id) })),
 				})
 			} catch (err) {
 				const error = err instanceof Error ? err.message : 'Unknown error'
@@ -776,17 +776,37 @@ io.on('connection', async (socket) => {
 			}
 
 			try {
-				const displayName = await db.banUser(userId, reason, deleteContent)
+				const result = await db.banUser(userId, reason, deleteContent)
 				callback({ success: true, data: null })
 
 				socket.broadcast.emit('user:ban_status', {
 					user_id: userId,
 					is_banned: true,
 					ban_reason: reason,
-					display_name: displayName,
+					display_name: result.display_name,
 				})
 
-				// Update active socket user objects
+				// todo: batching
+				for (const clipId of result.deleted_clips) {
+					io.emit('clip:delete', clipId)
+				}
+
+				// todo: batching
+				for (const audiofile of result.deleted_audiofiles) {
+					io.emit('audiofile:delete', {
+						audio_file: { id: audiofile.id },
+						deleted_clips: [],
+					})
+
+					const key = generateStorageKey(
+						audiofile.file_name,
+						audiofile.creator_user_id,
+						audiofile.id,
+					)
+
+					await store.deleteIfExists(key)
+				}
+
 				const sockets = await io.fetchSockets()
 
 				for (const s of sockets) {
@@ -795,11 +815,6 @@ io.on('connection', async (socket) => {
 						s.data.user.ban_reason = reason
 					}
 				}
-
-				// todo:
-				// If also online on this server instance (which is likely in single instance setup)
-				// we might want to forcefully disconnect them or update their local user object?
-				// The client will listen to user:ban_status and reload/lock.
 			} catch (err) {
 				const error = err instanceof Error ? err.message : 'Unknown error'
 				callback({

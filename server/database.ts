@@ -624,11 +624,17 @@ async function deleteTrack(
 	}
 }
 
+type BanUserResult = {
+	display_name: User['display_name']
+	deleted_clips: Clip['id'][]
+	deleted_audiofiles: Pick<ServerAudioFile, 'id' | 'file_name' | 'creator_user_id'>[]
+}
+
 async function banUser(
 	userId: string,
 	reason: string | null,
 	deleteContent: boolean,
-): Promise<User['display_name']> {
+): Promise<BanUserResult> {
 	const rows = await queryFn<Pick<User, 'display_name'>>(
 		`
 		UPDATE ${USERS_TABLE}
@@ -642,14 +648,35 @@ async function banUser(
 	if (!rows.length) throw new Error(`Failed to ban user ${userId}`)
 	const row = rows[0]!
 
+	let deleted_clips: Clip['id'][] = []
+	let deleted_audiofiles: Pick<ServerAudioFile, 'id' | 'file_name' | 'creator_user_id'>[] = []
+
 	if (deleteContent) {
-		await queryFn(`DELETE FROM ${CLIPS_TABLE} WHERE creator_user_id = $1`, [userId])
-		await queryFn(`DELETE FROM ${AUDIOFILES_TABLE} WHERE creator_user_id = $1`, [userId])
-		// await queryFn(`DELETE FROM ${TRACKS_TABLE} WHERE creator_user_id = $1`, [userId]) // dont delete tracks for now, bc they are not self owned
-		// todo: these have to be emmitted as updates to all clients aswell!
+		const clipRows = await queryFn<Pick<Clip, 'id'>>(
+			`
+			DELETE FROM ${CLIPS_TABLE} 
+			WHERE creator_user_id = $1
+			OR audio_file_id IN (SELECT id FROM ${AUDIOFILES_TABLE} WHERE creator_user_id = $1)
+			RETURNING id`,
+			[userId],
+		)
+
+		const audioRows = await queryFn<
+			Pick<ServerAudioFile, 'id' | 'file_name' | 'creator_user_id'>
+		>(
+			`DELETE FROM ${AUDIOFILES_TABLE} WHERE creator_user_id = $1 RETURNING id, file_name, creator_user_id`,
+			[userId],
+		)
+
+		deleted_clips = clipRows.map((r) => r.id)
+		deleted_audiofiles = audioRows
 	}
 
-	return row.display_name
+	return {
+		display_name: row.display_name,
+		deleted_clips,
+		deleted_audiofiles,
+	}
 }
 
 async function unbanUser(userId: string): Promise<User['display_name']> {

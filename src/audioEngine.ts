@@ -181,6 +181,17 @@ export function toggleLoop() {
 	}
 }
 
+watch(isLooping, (looping, wasLooping) => {
+	if (!isPlaying.value) return
+	if (wasLooping && !looping) {
+		const currentSongTime =
+			audioContext.currentTime - playbackStartTime.value + startOffset.value
+		stopAllSources()
+		loopIteration.value++
+		scheduleInitialClips(currentSongTime)
+	}
+})
+
 export function registerTrack(trackId: ServerTrack['id'], initialGain: number = 1) {
 	if (trackGainNodes.has(trackId)) return
 
@@ -267,10 +278,14 @@ const schedulerLoop = useIntervalFn(
 		// loop wrap-around / soft jump
 		if (loopActive && songTimeSeconds >= loopEndSec) {
 			const overshoot = songTimeSeconds - loopEndSec
-			playbackStartTime.value += loopEndSec - loopStartSec
+			// Stop all currently playing sources before restarting the loop
+			stopAllSources()
+			playbackStartTime.value = audioContext.currentTime - overshoot
+			startOffset.value = loopStartSec
 			currentTime.value = loopStartSec + overshoot
 			loopIteration.value++
-			// schedule for new position immediately
+			// Schedule clips at the new loop position
+			scheduleInitialClips(loopStartSec + overshoot)
 		} else if (!loopActive && songTimeSeconds >= fullDurationSeconds.value) {
 			// end of song
 			playbackStartTime.value += fullDurationSeconds.value
@@ -288,9 +303,9 @@ const schedulerLoop = useIntervalFn(
 			endSec: number,
 			timeShift: number = 0,
 			iteration: number,
+			loopBoundary?: number,
 		) => {
 			const startBeats = sec_to_beats(startSec)
-			const endBeats = sec_to_beats(endSec)
 			const list = sortedClips.value
 			const startIndex = binarySearchStartTimesStartIndex(list, startBeats)
 
@@ -299,18 +314,18 @@ const schedulerLoop = useIntervalFn(
 				if (!clip) continue
 
 				const clipStartSeconds = beats_to_sec(clip.start_beat)
-				if (clipStartSeconds >= endBeats) break
+				if (clipStartSeconds >= endSec) break
 
 				const key = `${clip.id}:${iteration}:${clipStartSeconds}`
 				if (activeSources.has(key)) continue
 
-				scheduleClipSource(clip, clipStartSeconds, timeShift, iteration)
+				scheduleClipSource(clip, clipStartSeconds, timeShift, iteration, loopBoundary)
 			}
 		}
 
 		if (loopActive && lookAheadLimitSec > loopEndSec) {
 			// rest of current loop
-			scheduleWindow(currentSongTime, loopEndSec, 0, loopIteration.value)
+			scheduleWindow(currentSongTime, loopEndSec, 0, loopIteration.value, loopEndSec)
 			// start of next loop
 			const nextLoopLookahead = lookAheadLimitSec - loopEndSec
 			scheduleWindow(
@@ -318,7 +333,11 @@ const schedulerLoop = useIntervalFn(
 				loopStartSec + nextLoopLookahead,
 				loopEndSec - loopStartSec,
 				loopIteration.value + 1,
+				loopEndSec,
 			)
+		} else if (loopActive) {
+			// inside the loop, pass loop boundary
+			scheduleWindow(currentSongTime, lookAheadLimitSec, 0, loopIteration.value, loopEndSec)
 		} else {
 			scheduleWindow(currentSongTime, lookAheadLimitSec, 0, loopIteration.value)
 		}
@@ -336,6 +355,7 @@ function scheduleClipSource(
 	clipStartSongTime: number,
 	timeShift: number = 0,
 	iteration: number,
+	maxEndSec?: number,
 ) {
 	const buffer = audioBuffers.get(clip.audio_file_id)
 	const trackGainNode = trackGainNodes.get(clip.track_id)
@@ -368,7 +388,16 @@ function scheduleClipSource(
 
 	// clip's own internal offsets
 	const finalOffset = clip.offset_seconds + offsetSeconds
-	const durationSeconds = beats_to_sec(clip.end_beat - clip.start_beat) - offsetSeconds
+	let durationSeconds = beats_to_sec(clip.end_beat - clip.start_beat) - offsetSeconds
+
+	// Clamp duration to not exceed maxEndSec (loop boundary)
+	if (maxEndSec != null) {
+		const clipEndSongTime = clipStartSongTime + beats_to_sec(clip.end_beat - clip.start_beat)
+		if (clipEndSongTime > maxEndSec) {
+			const overshoot = clipEndSongTime - maxEndSec
+			durationSeconds = Math.max(0, durationSeconds - overshoot)
+		}
+	}
 
 	if (durationSeconds <= 0) return
 
@@ -396,6 +425,10 @@ function scheduleInitialClips(startTimeSeconds: number) {
 	const startTimeBeats = sec_to_beats(startTimeSeconds)
 	const list = sortedClips.value
 
+	// Calculate loop boundary if looping is active
+	const loopBoundary =
+		isLooping.value && loopRangeBeats.value ? beats_to_sec(loopRangeBeats.value.end) : undefined
+
 	// start searching at current pos - longest clip duration backwards to save resources.
 
 	const searchStartBeats = Math.max(0, startTimeBeats - maxClipDuration.value)
@@ -417,7 +450,7 @@ function scheduleInitialClips(startTimeSeconds: number) {
 		if (clipEndSeconds < startTimeSeconds) continue
 
 		// -> clip must be overlapping current time.
-		scheduleClipSource(clip, clipStartSeconds, 0, loopIteration.value)
+		scheduleClipSource(clip, clipStartSeconds, 0, loopIteration.value, loopBoundary)
 	}
 }
 

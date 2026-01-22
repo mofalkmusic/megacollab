@@ -7,11 +7,17 @@ const { userLog } = useConsole()
 export default defineSocketHandler({
 	event: 'user:ban_status',
 	handler: (data) => {
-		// Only act if this event is about the current user
-		if (user.value?.id !== data.user_id)
-			return userLog('SYSTEM', `@${data.display_name} has been banned.`, {
-				textColor: 'gray',
-			})
+		if (user.value?.id !== data.user_id) {
+			if (data.is_banned) {
+				return userLog('SYSTEM', `@${data.display_name} has been banned.`, {
+					textColor: 'gray',
+				})
+			} else {
+				return userLog('SYSTEM', `@${data.display_name} has been unbanned.`, {
+					textColor: 'gray',
+				})
+			}
+		}
 
 		if (user.value) {
 			if (data.is_banned) {
