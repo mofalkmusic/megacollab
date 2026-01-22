@@ -136,6 +136,7 @@ const outerClipCanvasStyles = computed((): CSSProperties => {
 
 async function rip() {
 	if (!props.clip) return
+	if (user.value?.banned_at) return
 	const res = await socket.emitWithAck('get:clip:delete', { id: props.clip.id })
 
 	if (res.success) {
@@ -152,6 +153,7 @@ const withinAudioPool = computed(() => !props.clip && typeof props.customWidthPx
 
 async function deleteAudioFile() {
 	if (!props.audiofile) return
+	if (user.value?.banned_at) return
 
 	const res = await socket.emitWithAck('get:audiofile:delete', { id: props.audiofile.id })
 
@@ -258,6 +260,7 @@ onMounted(() => {
 		if (!wrapperEl.value) return
 
 		useEventListener(wrapperEl, 'pointerdown', (event) => {
+			if (user.value?.banned_at) return
 			event.preventDefault()
 			const rect = wrapperEl.value!.getBoundingClientRect()
 			const offsetX = event.clientX - rect.left
@@ -280,6 +283,7 @@ onMounted(() => {
 		'pointerdown',
 		(event) => {
 			if (event.defaultPrevented) return
+			if (user.value?.banned_at) return
 
 			if (event.button === 2) {
 				return rip()
@@ -414,6 +418,7 @@ onMounted(() => {
 		leftHandleEl,
 		'pointerdown',
 		(event) => {
+			if (user.value?.banned_at) return
 			if (event.button === 2) {
 				return rip()
 			}
@@ -537,6 +542,7 @@ onMounted(() => {
 		rightHandleEl,
 		'pointerdown',
 		(event) => {
+			if (user.value?.banned_at) return
 			if (event.button === 2) {
 				return rip()
 			}

@@ -164,6 +164,7 @@
 			<Console />
 		</div>
 	</div>
+	<AdminUserList v-if="showAdminPanel" @close="showAdminPanel = false" />
 	<div
 		v-if="dragFromPoolState && !ghostDragState.track_id && ghostAudioFile"
 		:style="{
@@ -216,6 +217,7 @@ import {
 	activeUploads,
 	bpm,
 	selectedClipIds,
+	showAdminPanel,
 } from '@/state'
 import TrackInstance from '@/components/tracks/TrackInstance.vue'
 import {
@@ -276,6 +278,7 @@ import GlobalLoadingIndicator from '@/components/GlobalLoadingIndicator.vue'
 import { nanoid } from 'nanoid'
 import CustomMenuIcon from '@/components/CustomMenuIcon.vue'
 import { useConsole } from '@/composables/useConsole'
+import AdminUserList from '@/components/AdminUserList.vue'
 
 const { userLog } = useConsole()
 

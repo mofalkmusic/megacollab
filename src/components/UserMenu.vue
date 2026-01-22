@@ -2,9 +2,22 @@
 	<div class="user-menu-container">
 		<div v-if="!isEditingUsername" class="inner-menu-wrap">
 			<button class="default-button user-menu-btn" @click="startEditingUsername">
-				<UserPen class="dim" :size="22" style="grid-area: logo" />
-				<p style="grid-area: name">
+				<UserPen v-if="!user?.banned_at" class="dim" :size="22" style="grid-area: logo" />
+				<Lock v-else class="dim" :size="22" style="grid-area: logo; color: #e44" />
+				<p style="grid-area: name; display: flex; align-items: center; gap: 0.5rem">
 					{{ user?.display_name }}
+					<span
+						v-if="user?.banned_at"
+						style="
+							color: #e44;
+							font-size: 0.7rem;
+							font-weight: bold;
+							border: 1px solid #e44;
+							padding: 0 4px;
+							border-radius: 4px;
+						"
+						>BANNED</span
+					>
 				</p>
 				<p class="small dim" style="line-height: 120%; grid-area: email">
 					{{ user?.provider_email }}
@@ -68,6 +81,14 @@
 			<button class="default-button menu-btn">
 				<Settings2 class="dim" :size="16" :stroke-width="2" />
 				<p>Settings</p>
+			</button>
+			<button
+				class="default-button menu-btn"
+				@click="showAdminPanel = true"
+				v-if="user?.roles.includes('admin')"
+			>
+				<Shield class="dim" :size="16" :stroke-width="2" />
+				<p>Admin Panel</p>
 			</button>
 			<button class="default-button menu-btn" @click="signout">
 				<LogOut class="dim" :size="15" :stroke-width="2" />
@@ -141,13 +162,16 @@ import {
 	Bug,
 	ExternalLink,
 	Repeat,
+	Shield,
+	Lock,
 } from 'lucide-vue-next'
-import { nextTick, shallowRef, useTemplateRef, watch } from 'vue'
+import { nextTick, shallowRef, useTemplateRef, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
 import { vElementHover } from '@vueuse/components'
 import { isLooping, isPlaying, reset } from '@/audioEngine'
 import { updateDisplayNamesForUser } from '@/socket/eventHandlers/user_username_change'
+import { showAdminPanel } from '@/state'
 
 const isBugButtonHovered = shallowRef(false)
 function onBugHover(hovered: boolean) {

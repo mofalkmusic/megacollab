@@ -88,7 +88,7 @@
 </template>
 
 <script setup lang="ts">
-import { tracks, pxTrackHeight, altKeyPressed, controlKeyPressed, clips } from '@/state'
+import { tracks, pxTrackHeight, altKeyPressed, controlKeyPressed, clips, user } from '@/state'
 import { computed, reactive, useTemplateRef, watch, type CSSProperties, shallowRef } from 'vue'
 import { getTrackVolume, isPlaying, setTrackGain, unregisterTrack } from '@/audioEngine'
 import { useRafFn, useEventListener, onClickOutside } from '@vueuse/core'
@@ -156,6 +156,7 @@ function toggleContextMenu(trackId: string) {
 }
 
 async function deleteTrack(trackId: string) {
+	if (user.value?.banned_at) return
 	contextMenuTrackId.value = null
 
 	const track = tracks.get(trackId)
@@ -189,6 +190,7 @@ async function deleteTrack(trackId: string) {
 }
 
 function startVolumeDrag(e: PointerEvent, trackId: string, top: number, height: number) {
+	if (user.value?.banned_at) return
 	if (e.button !== 0) return
 
 	const target = e.currentTarget as HTMLElement
@@ -279,6 +281,7 @@ function startVolumeDrag(e: PointerEvent, trackId: string, top: number, height: 
 }
 
 async function resetVolume(trackId: string) {
+	if (user.value?.banned_at) return
 	const track = tracks.get(trackId)
 	if (!track) return
 

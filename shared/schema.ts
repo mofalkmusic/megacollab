@@ -104,6 +104,8 @@ export const UserSchema = z.object({
 		.array(z.enum(['regular', 'vip', 'mod', 'admin']))
 		.min(1)
 		.default(['regular']),
+	banned_at: z.iso.datetime({ offset: true }).nullable(),
+	ban_reason: z.string().nullable(),
 	// not storing refresh keys and access keys for now...
 })
 

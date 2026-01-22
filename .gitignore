@@ -1,6 +1,7 @@
 /node_modules
 /dist
 .env
+ideas.md
 
 dev.database
 dev.audiofiles

@@ -87,6 +87,7 @@ const { files, isOverDropZone } = useDropZone(dropZoneEl, {
 	dataTypes: audioMimeTypes,
 	preventDefaultForUnhandled: true,
 	onDrop: async (files) => {
+		if (user.value?.banned_at) return
 		if (!files || !files.length) return
 
 		const res = await Promise.all(

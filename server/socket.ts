@@ -12,6 +12,7 @@ import {
 	type ServerAckSchape,
 } from '~/events'
 // import { RateLimiter } from './ratelimiter'
+import type { User } from '~/schema'
 
 const IN_DEV_MODE = Bun.env['ENV'] === 'development'
 
@@ -30,6 +31,7 @@ export type ClientToServerEvents = {
 
 export type SocketData = {
 	userId: string
+	user?: User
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type

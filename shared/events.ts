@@ -97,8 +97,43 @@ export const EVENTS = Object.freeze({
 			user_id: UserSchema.shape['id'],
 			new_display_name: UserSchema.shape['display_name'],
 		}),
+
+		'user:ban_status': z.object({
+			user_id: UserSchema.shape['id'],
+			display_name: UserSchema.shape['display_name'],
+			is_banned: z.boolean(),
+			ban_reason: z.string().nullable(),
+		}),
 	},
 	CLIENT_REQUESTS: {
+		'get:admin:users': defineRequest({
+			req: z.null(),
+			res: z.array(
+				UserSchema.extend({
+					is_active: z.boolean(),
+				}),
+			),
+		}),
+		'get:admin:ban_user': defineRequest({
+			req: z.object({
+				userId: UserSchema.shape['id'],
+				reason: z.string().nullable(),
+				deleteContent: z.boolean(),
+			}),
+			res: z.null(),
+		}),
+		'get:admin:unban_user': defineRequest({
+			req: z.object({
+				userId: UserSchema.shape['id'],
+			}),
+			res: z.null(),
+		}),
+		'get:admin:user_history': defineRequest({
+			req: z.object({
+				userId: UserSchema.shape['id'],
+			}),
+			res: z.array(z.any()), // todo: define history item schema properly if possible
+		}),
 		'get:ping': defineRequest({
 			req: z.null(),
 			res: z.null(),

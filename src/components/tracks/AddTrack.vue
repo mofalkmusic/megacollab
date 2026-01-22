@@ -15,7 +15,7 @@
 <script setup lang="ts">
 import { Plus } from 'lucide-vue-next'
 import { socket } from '@/socket/socket'
-import { tracks, dragFromPoolState } from '@/state'
+import { tracks, dragFromPoolState, user } from '@/state'
 import type { ClientTrack } from '~/schema'
 import { useConsole } from '@/composables/useConsole'
 
@@ -24,6 +24,7 @@ const { userLog } = useConsole()
 const emits = defineEmits<{ (e: 'onTrackAdded', track: ClientTrack): void }>()
 
 const addTrack = async () => {
+	if (user.value?.banned_at) return
 	// could be done optimistically but for now is fast enough I think...
 	const { success, error, data } = await socket.emitWithAck('get:track:create', null)
 
