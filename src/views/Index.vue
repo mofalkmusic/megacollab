@@ -28,6 +28,43 @@
 					}"
 				/>
 			</button>
+			<button
+				ref="downloadButton"
+				@click="isDownloadMenuOpen = !isDownloadMenuOpen"
+				class="controls-panel-btn"
+				style="border-left: none"
+				:disabled="isRendering"
+			>
+				<Download
+					:size="16"
+					:style="{
+						color: isRendering ? 'var(--text-color-dim)' : 'var(--text-color-primary)',
+					}"
+				/>
+			</button>
+			<div
+				v-if="isDownloadMenuOpen"
+				ref="downloadMenu"
+				style="z-index: 100"
+				:style="downloadFloatingStyles"
+				class="download-menu"
+			>
+				<div class="download-menu-inner">
+					<p class="small dim" style="padding: 0.5rem 0.7rem 0.2rem">Download Playlist</p>
+					<button class="default-button download-menu-btn" @click="handleDownload('wav')">
+						<div class="download-option-text">
+							<p>WAV <span class="dim small">(32-bit float)</span></p>
+							<p class="small dim">Lossless · larger file · retains all info</p>
+						</div>
+					</button>
+					<button class="default-button download-menu-btn" @click="handleDownload('mp3')">
+						<div class="download-option-text">
+							<p>MP3 <span class="dim small">(192 kbps)</span></p>
+							<p class="small dim">Lossy · smaller file · not recoverable</p>
+						</div>
+					</button>
+				</div>
+			</div>
 
 			<p class="small mono controls-panel-wrap">
 				{{ minutesNseconds }}<br />
@@ -269,6 +306,7 @@ import {
 	ArrowUpDown,
 	Menu,
 	Repeat,
+	Download,
 } from 'lucide-vue-next'
 import { offset, useFloating } from '@floating-ui/vue'
 import { useRouter } from 'vue-router'
@@ -279,6 +317,9 @@ import { nanoid } from 'nanoid'
 import CustomMenuIcon from '@/components/CustomMenuIcon.vue'
 import { useConsole } from '@/composables/useConsole'
 import AdminUserList from '@/components/AdminUserList.vue'
+import { renderPlaylistOffline } from '@/utils/offlineRenderer'
+import { encodeWav, encodeMp3 } from '@/utils/encoders'
+import { useGlobalProgress } from '@/composables/useGlobalProgress'
 
 const { userLog } = useConsole()
 
@@ -358,6 +399,68 @@ onClickOutside(
 	},
 	{ ignore: [userButtonEl] },
 )
+
+// --- DOWNLOAD MENU ---
+const downloadButtonEl = useTemplateRef('downloadButton')
+const downloadMenuEl = useTemplateRef('downloadMenu')
+const isDownloadMenuOpen = shallowRef(false)
+const isRendering = shallowRef(false)
+
+const { floatingStyles: downloadFloatingStyles } = useFloating(downloadButtonEl, downloadMenuEl, {
+	placement: 'bottom-start',
+	middleware: [offset({ mainAxis: 6 })],
+})
+
+onClickOutside(
+	downloadMenuEl,
+	() => {
+		isDownloadMenuOpen.value = false
+	},
+	{ ignore: [downloadButtonEl] },
+)
+
+async function handleDownload(format: 'wav' | 'mp3') {
+	isDownloadMenuOpen.value = false
+	if (isRendering.value) return
+	isRendering.value = true
+
+	const progress = useGlobalProgress({ label: `Rendering ${format.toUpperCase()}...` })
+
+	try {
+		progress.update(5)
+		const renderedBuffer = await renderPlaylistOffline()
+		progress.update(50)
+
+		let blob: Blob
+		if (format === 'wav') {
+			blob = encodeWav(renderedBuffer, (pct) => progress.update(50 + Math.round(pct * 0.45)))
+		} else {
+			blob = await encodeMp3(renderedBuffer, (pct) =>
+				progress.update(50 + Math.round(pct * 0.45)),
+			)
+		}
+
+		progress.update(95)
+
+		// Trigger browser download
+		const url = URL.createObjectURL(blob)
+		const a = document.createElement('a')
+		a.href = url
+		a.download = `mega_collab_playlist.${format}`
+		a.click()
+		URL.revokeObjectURL(url)
+
+		progress.done()
+		userLog('DOWNLOAD', `${format.toUpperCase()} download complete`, { textColor: 'green' })
+	} catch (err) {
+		progress.error()
+		userLog('DOWNLOAD', `Error: ${err instanceof Error ? err.message : 'Unknown error'}`, {
+			textColor: 'red',
+		})
+	} finally {
+		isRendering.value = false
+	}
+}
 
 /*
  * Globally make it so that buttons are not focusable.
@@ -1189,5 +1292,39 @@ useEventListener(window, 'blur', () => {
 	display: grid;
 	grid-template-columns: 1fr auto;
 	align-items: stretch;
+}
+
+.download-menu {
+	display: grid;
+	background-color: color-mix(in lch, var(--bg-color), white 10%);
+	border-radius: 0.75rem;
+	border: 1px solid var(--border-primary);
+}
+
+.download-menu-inner {
+	display: grid;
+	border-radius: inherit;
+	padding: 0.5rem;
+	box-shadow: 0px 0px 1rem 0rem var(--bg-color);
+}
+
+.download-menu-btn {
+	background-color: transparent;
+	box-shadow: none;
+	justify-content: flex-start;
+	white-space: nowrap;
+	height: unset;
+	padding: 0.5rem 0.7rem;
+}
+
+.download-menu-btn:hover {
+	background-color: color-mix(in lch, transparent, white 15%);
+	box-shadow: none;
+}
+
+.download-option-text {
+	display: grid;
+	gap: 0.15rem;
+	text-align: left;
 }
 </style>

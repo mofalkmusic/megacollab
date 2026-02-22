@@ -35,7 +35,7 @@ export type ConsoleMessageOptionsUser = ConsoleMessageOptions & {
 	user_id: User['id']
 }
 
-export type ConsoleSender = 'SYSTEM' | 'USER' | 'UNDO' | 'UPLOAD'
+export type ConsoleSender = 'SYSTEM' | 'USER' | 'UNDO' | 'UPLOAD' | 'DOWNLOAD'
 
 export type ConsoleMessage = {
 	id: string

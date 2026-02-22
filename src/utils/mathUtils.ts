@@ -24,3 +24,13 @@ export function quantize_beats(beats: number, opts?: { ceil?: boolean }) {
 	}
 	return Math.ceil(beats)
 }
+
+/**
+ * clean beats_to_sec that takes bpm explicitly.
+ * this version uses a snapshot value so offline renders are immune
+ * to changes.
+ */
+export function beats_to_sec_pure(beats: number, bpmValue: number): number {
+	const seconds_per_beat = 60 / bpmValue
+	return beats * seconds_per_beat
+}
