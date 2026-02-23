@@ -1,11 +1,7 @@
 import { Mp3Encoder } from '@breezystack/lamejs'
 
-/**
- * Encode an AudioBuffer as a 32-bit float WAV Blob (IEEE 754).
- * Float WAV preserves samples above 0 dBFS without clipping,
- * making the export non-destructive / recoverable in a DAW.
- * Processes in chunks to fire progress updates.
- */
+const LAME_ENCODER_DELAY = 1152 as const
+
 export function encodeWav(buffer: AudioBuffer, onProgress?: (pct: number) => void): Blob {
 	const numChannels = buffer.numberOfChannels
 	const sampleRate = buffer.sampleRate
@@ -69,7 +65,7 @@ function writeString(view: DataView, offset: number, str: string) {
 
 /**
  * Encode an AudioBuffer as an MP3 Blob using lamejs.
- * Async — yields to the browser every ~50k samples so the progress bar updates.
+ * Async — yields to the browser every x samples to unblock main thread.
  */
 export async function encodeMp3(
 	buffer: AudioBuffer,
@@ -77,11 +73,15 @@ export async function encodeMp3(
 ): Promise<Blob> {
 	const numChannels = Math.min(buffer.numberOfChannels, 2) as 1 | 2
 	const sampleRate = buffer.sampleRate
-	const kbps = 192
+	const kbps = 320
 	const encoder = new Mp3Encoder(numChannels, sampleRate, kbps)
 
-	const left = floatTo16BitPCM(buffer.getChannelData(0))
-	const right = numChannels === 2 ? floatTo16BitPCM(buffer.getChannelData(1)) : undefined
+	const leftRaw = floatTo16BitPCM(buffer.getChannelData(0))
+	const rightRaw = numChannels === 2 ? floatTo16BitPCM(buffer.getChannelData(1)) : undefined
+
+	// Trim encoder delay so the decoded MP3 doesn't start with silence
+	const left = leftRaw.subarray(LAME_ENCODER_DELAY)
+	const right = rightRaw?.subarray(LAME_ENCODER_DELAY)
 
 	const mp3Chunks: Uint8Array[] = []
 	const SAMPLES_PER_FRAME = 1152
