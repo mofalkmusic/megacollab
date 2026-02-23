@@ -734,13 +734,14 @@ watchThrottled(
 		() => props.audiofile.waveforms,
 		() => props.audiofile.color,
 		pixelRatio,
-		isSelected,
 	],
 	() => {
 		drawWaveform()
 	},
 	{ immediate: false, throttle: 200 },
 )
+
+watch(isSelected, () => drawWaveform(), { immediate: false })
 
 function getWaveform(
 	audiofile: AudioFile,
