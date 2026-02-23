@@ -8,14 +8,26 @@ import { useConsole } from '@/composables/useConsole'
 
 const { userLog } = useConsole()
 
+let lastBuildId: string | null = null
+
 export default defineSocketHandler({
 	event: 'server:ready',
 	handler: async ({
+		buildId,
 		user: u,
 		audiofiles: serverAudiofiles,
 		clips: serverClips,
 		tracks: serverTracks,
 	}) => {
+		if (lastBuildId !== null && lastBuildId !== buildId) {
+			userLog('SYSTEM', 'New version of the site available. Please refresh the page.', {
+				textColor: 'yellow',
+				isBold: true,
+			})
+		}
+
+		lastBuildId = buildId
+
 		user.value = u
 
 		_socketReady.value = true

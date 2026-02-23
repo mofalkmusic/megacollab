@@ -65,6 +65,7 @@ export const EVENTS = Object.freeze({
 		// when empty, use null, never undefined
 		'server:refresh': z.null(),
 		'server:ready': z.object({
+			buildId: z.string(),
 			user: UserSchema,
 			clips: z.array(ClientClipSchema),
 			audiofiles: z.array(ClientAudioFileSchema),

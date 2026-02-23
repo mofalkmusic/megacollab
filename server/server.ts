@@ -45,6 +45,7 @@ import { sanitizeLetterUnderscoreOnly } from '~/utils'
 import { RateLimiter, getSafeIp } from './ratelimiter'
 
 const IN_DEV_MODE = Bun.env['ENV'] === 'development'
+const BUILD_ID = nanoid(11)
 
 await db.migrateAndSeedDb()
 
@@ -712,6 +713,7 @@ io.on('connection', async (socket) => {
 		})
 
 		socket.emit('server:ready', {
+			buildId: BUILD_ID,
 			user,
 			audiofiles: await db.getAudioFiles(),
 			clips: await db.getClips(),
