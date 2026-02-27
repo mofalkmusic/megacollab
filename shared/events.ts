@@ -219,6 +219,10 @@ export const EVENTS = Object.freeze({
 				deleted_clips: z.array(ClientClipSchema.shape['id']),
 			}),
 		}),
+		'get:update:download_quality': defineRequest({
+			req: UserSchema.shape['download_quality'],
+			res: UserSchema.shape['download_quality'],
+		}),
 	},
 } as const satisfies EventDefinitions)
 

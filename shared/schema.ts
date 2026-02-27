@@ -106,6 +106,7 @@ export const UserSchema = z.object({
 		.default(['regular']),
 	banned_at: z.iso.datetime({ offset: true }).nullable(),
 	ban_reason: z.string().nullable(),
+	download_quality: z.enum(['wav', 'mp3']),
 	// not storing refresh keys and access keys for now...
 })
 

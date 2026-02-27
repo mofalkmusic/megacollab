@@ -82,6 +82,31 @@
 				<Settings2 class="dim" :size="16" :stroke-width="2" />
 				<p>Settings</p>
 			</button>
+			<div style="padding: 0 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem">
+				<label
+					for="download-quality"
+					class="small dim"
+					style="display: block; margin-bottom: 0.2rem"
+					>Download Format</label
+				>
+				<select
+					id="download-quality"
+					class="textInput txt mono small"
+					style="width: 100%; cursor: pointer; appearance: auto"
+					:value="user?.download_quality"
+					@change="updateDownloadQuality($event)"
+				>
+					<option value="mp3">MP3 (Lossy · smaller file)</option>
+					<option value="wav">WAV (Lossless · larger file)</option>
+				</select>
+			</div>
+			<div
+				style="
+					border-top: 1px solid var(--border-primary);
+					margin-top: 0.5rem;
+					padding-bottom: 0.5rem;
+				"
+			></div>
 			<button
 				class="default-button menu-btn"
 				@click="showAdminPanel = true"
@@ -271,6 +296,27 @@ async function startEditingUsername() {
 	errorMessage.value = null
 	await nextTick()
 	emits('onUpdated')
+}
+
+async function updateDownloadQuality(event: Event) {
+	const target = event.target as HTMLSelectElement
+	const quality = target.value as 'mp3' | 'wav'
+
+	const res = await socket.emitWithAck('get:update:download_quality', quality)
+
+	if (!res.success) {
+		if (user.value) {
+			const oldValue = user.value.download_quality
+			user.value.download_quality = quality // temporarily set to new to force update
+			await nextTick()
+			user.value.download_quality = oldValue
+		}
+		return
+	}
+
+	if (user.value) {
+		user.value.download_quality = res.data
+	}
 }
 </script>
 

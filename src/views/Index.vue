@@ -28,43 +28,6 @@
 					}"
 				/>
 			</button>
-			<button
-				ref="downloadButton"
-				@click="isDownloadMenuOpen = !isDownloadMenuOpen"
-				class="controls-panel-btn"
-				style="border-left: none"
-				:disabled="isRendering"
-			>
-				<Download
-					:size="16"
-					:style="{
-						color: isRendering ? 'var(--text-color-dim)' : 'var(--text-color-primary)',
-					}"
-				/>
-			</button>
-			<div
-				v-if="isDownloadMenuOpen"
-				ref="downloadMenu"
-				style="z-index: 100"
-				:style="downloadFloatingStyles"
-				class="download-menu"
-			>
-				<div class="download-menu-inner">
-					<p class="small dim" style="padding: 0.5rem 0.7rem 0.2rem">Download Playlist</p>
-					<button class="default-button download-menu-btn" @click="handleDownload('wav')">
-						<div class="download-option-text">
-							<p>WAV <span class="dim small">(32-bit float)</span></p>
-							<p class="small dim">Lossless · larger file · retains all info</p>
-						</div>
-					</button>
-					<button class="default-button download-menu-btn" @click="handleDownload('mp3')">
-						<div class="download-option-text">
-							<p>MP3 <span class="dim small">(192 kbps)</span></p>
-							<p class="small dim">Lossy · smaller file · not recoverable</p>
-						</div>
-					</button>
-				</div>
-			</div>
 
 			<p class="small mono controls-panel-wrap">
 				{{ minutesNseconds }}<br />
@@ -90,6 +53,21 @@
 				<ArrowUpDown :size="13" style="margin-right: 0.5rem" />
 				{{ averagePing }}ms
 			</p>
+
+			<button
+				ref="downloadButton"
+				@click="handleDownload"
+				class="controls-panel-btn"
+				style="border-left: none"
+				:disabled="isRendering"
+			>
+				<Download
+					:size="16"
+					:style="{
+						color: isRendering ? 'var(--text-color-dim)' : 'var(--text-color-primary)',
+					}"
+				/>
+			</button>
 
 			<input
 				type="range"
@@ -400,29 +378,14 @@ onClickOutside(
 	{ ignore: [userButtonEl] },
 )
 
-// --- DOWNLOAD MENU ---
 const downloadButtonEl = useTemplateRef('downloadButton')
-const downloadMenuEl = useTemplateRef('downloadMenu')
-const isDownloadMenuOpen = shallowRef(false)
 const isRendering = shallowRef(false)
 
-const { floatingStyles: downloadFloatingStyles } = useFloating(downloadButtonEl, downloadMenuEl, {
-	placement: 'bottom-start',
-	middleware: [offset({ mainAxis: 6 })],
-})
-
-onClickOutside(
-	downloadMenuEl,
-	() => {
-		isDownloadMenuOpen.value = false
-	},
-	{ ignore: [downloadButtonEl] },
-)
-
-async function handleDownload(format: 'wav' | 'mp3') {
-	isDownloadMenuOpen.value = false
+async function handleDownload() {
 	if (isRendering.value) return
 	isRendering.value = true
+
+	const format = user.value?.download_quality || 'mp3'
 
 	const progress = useGlobalProgress({ label: `Rendering ${format.toUpperCase()}...` })
 
@@ -1314,7 +1277,7 @@ useEventListener(window, 'blur', () => {
 	justify-content: flex-start;
 	white-space: nowrap;
 	height: unset;
-	padding: 0.5rem 0.7rem;
+	padding: 0.6rem 1rem;
 }
 
 .download-menu-btn:hover {
@@ -1324,7 +1287,8 @@ useEventListener(window, 'blur', () => {
 
 .download-option-text {
 	display: grid;
-	gap: 0.15rem;
+	gap: 0px;
 	text-align: left;
+	line-height: 1.1em;
 }
 </style>

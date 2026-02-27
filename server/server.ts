@@ -619,6 +619,50 @@ io.on('connection', async (socket) => {
 			}
 		})
 
+		socket.on('get:update:download_quality', async (quality, callback) => {
+			if (user.banned_at) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are banned and cannot change settings.',
+					},
+				})
+				return
+			}
+
+			if (quality !== 'mp3' && quality !== 'wav') {
+				callback({
+					success: false,
+					error: {
+						status: 'BAD_REQUEST',
+						message: 'Invalid quality selection.',
+					},
+				})
+				return
+			}
+
+			try {
+				const updatedQuality = await db.updateDownloadQuality(user.id, quality)
+
+				callback({
+					success: true,
+					data: updatedQuality,
+				})
+
+				user.download_quality = updatedQuality
+			} catch (err) {
+				const error = err instanceof Error ? err.message : 'Unknown error'
+				callback({
+					success: false,
+					error: {
+						status: 'SERVER_ERROR',
+						message: `Database error: ${error}`,
+					},
+				})
+			}
+		})
+
 		socket.on('get:undo', async (_, callback) => {
 			if (user.banned_at) {
 				callback({

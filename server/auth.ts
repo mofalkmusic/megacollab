@@ -297,7 +297,7 @@ export async function handleTwitchOAuthCallback(c: Context) {
 
 		const user = data[0]!
 
-		const newUser: Omit<User, 'created_at'> = {
+		const newUser: Omit<User, 'created_at' | 'download_quality'> = {
 			id: nanoid(),
 			display_name: sanitizeLetterUnderscoreOnly(user.display_name),
 			provider: 'twitch',
@@ -446,7 +446,7 @@ export async function handleDiscordOAuthCallback(c: Context) {
 			return c.redirect(`/login?${params.toString()}`, 302)
 		}
 
-		const newUser: Omit<User, 'created_at'> = {
+		const newUser: Omit<User, 'created_at' | 'download_quality'> = {
 			id: nanoid(),
 			display_name: sanitizeLetterUnderscoreOnly(userData.username),
 			provider: 'discord',

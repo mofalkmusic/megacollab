@@ -88,6 +88,7 @@ export const db = {
 	deleteClip,
 	updateClip,
 	updateExistingUsername,
+	updateDownloadQuality,
 	makeNewIfNotExistUserSafe,
 	saveSession,
 	getUserFromSessionIdSafe,
@@ -341,7 +342,9 @@ async function saveAudioFile(audioFile: ServerAudioFile): Promise<ClientAudioFil
 	}
 }
 
-async function makeNewIfNotExistUserSafe(user: Omit<User, 'created_at'>): Promise<User | null> {
+async function makeNewIfNotExistUserSafe(
+	user: Omit<User, 'created_at' | 'download_quality'>,
+): Promise<User | null> {
 	try {
 		const {
 			id,
@@ -462,6 +465,26 @@ async function updateExistingUsername(id: string, username: string): Promise<Use
 	return result.display_name
 }
 
+async function updateDownloadQuality(
+	id: string,
+	quality: User['download_quality'],
+): Promise<User['download_quality']> {
+	const rows = await queryFn<Pick<User, 'download_quality'>>(
+		`
+			UPDATE ${USERS_TABLE}
+			SET download_quality = $2
+			WHERE id = $1
+			RETURNING download_quality
+		`,
+		[id, quality],
+	)
+
+	if (!rows.length) throw new Error('Failed to update download quality')
+	const result = rows[0]!
+
+	return result.download_quality
+}
+
 // async function getFullClientByUser(user: User): Promise<(Client & User) | null> {
 // 	const { id, email, display_name } = user
 
@@ -537,7 +560,7 @@ async function getOrCreateDevUser(): Promise<User | null> {
 		}
 
 		// Create if not exists
-		const newUser: Omit<User, 'created_at'> = {
+		const newUser: Omit<User, 'created_at' | 'download_quality'> = {
 			id: nanoid(),
 			display_name: 'Dev User',
 			provider: 'dev',

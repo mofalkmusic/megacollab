@@ -90,4 +90,14 @@ export const migrations: Migration[] = [
             `)
 		},
 	},
+	{
+		id: 3,
+		name: 'add_download_quality_users',
+		func: async (queryFn) => {
+			await queryFn(`
+                ALTER TABLE ${USERS_TABLE}
+                ADD COLUMN IF NOT EXISTS download_quality TEXT NOT NULL DEFAULT 'wav'
+            `)
+		},
+	},
 ]
