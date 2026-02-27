@@ -1,8 +1,16 @@
 <template>
 	<div v-bind="$attrs" class="audio-file-pool-root" ref="dropZoneWrapper">
 		<div class="options-and-controls">
-			<div style="display: flex; gap: 1rem">
+			<div style="display: flex; gap: 1rem; align-items: center">
 				<UploadButton />
+
+				<input
+					v-model="searchQuery"
+					type="text"
+					placeholder="Search samples..."
+					class="textInput txt small"
+					style="width: 200px"
+				/>
 			</div>
 
 			<div style="display: flex; gap: 1rem" class="dim small">
@@ -62,7 +70,7 @@
 <script setup lang="ts">
 import { audiofiles, clips, user, AUDIO_POOL_WIDTH, audioFilePoolHeightPx } from '@/state'
 import UploadButton from '@/components/UploadButton.vue'
-import { computed, useTemplateRef, watchEffect } from 'vue'
+import { computed, useTemplateRef, watchEffect, ref } from 'vue'
 import type { AudioFile } from '@/types'
 import ClipInstance from '@/components/ClipInstance.vue'
 import { useDropZone, useElementSize } from '@vueuse/core'
@@ -72,7 +80,10 @@ import { optimisticAudioCreateUpload } from '@/utils/uploadAudio'
 import { useGlobalProgress } from '@/composables/useGlobalProgress'
 import { useConsole } from '@/composables/useConsole'
 
+
 const { userLog } = useConsole()
+
+const searchQuery = ref('')
 
 const dropZoneEl = useTemplateRef('dropZoneWrapper')
 
@@ -130,12 +141,20 @@ const { files, isOverDropZone } = useDropZone(dropZoneEl, {
 const sortedAudioFiles = computed(() => {
 	const owned: (AudioFile & { deletable: boolean })[] = []
 	const foreign: (AudioFile & { deletable: boolean })[] = []
+
+	const query = searchQuery.value.trim().toLowerCase()
+
 	for (const f of audiofiles.values()) {
+		// just showing stuff that contains the string, ultra pro method
+		if (query && !f.file_name?.toLowerCase().includes(query)) continue
+
 		if (f.creator_user_id === user.value?.id) owned.push({ ...f, deletable: true })
 		else foreign.push({ ...f, deletable: false })
 	}
+
 	const byDate = (a: AudioFile, b: AudioFile) =>
 		new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+
 	return [...owned.sort(byDate), ...foreign.sort(byDate)]
 })
 </script>
