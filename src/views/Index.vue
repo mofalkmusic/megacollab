@@ -470,6 +470,45 @@ useEventListener(
 	},
 )
 
+// --- Middle Click Pan Logic (for macOS/Chrome) ---
+useEventListener(timelineContainerEl, 'pointerdown', (e) => {
+	// Only handle middle click (button 1)
+	if (e.button !== 1) return
+
+	const container = timelineContainerEl.value
+	if (!container) return
+
+	// Prevent default browser behavior (like auto-scroll on Windows, though we're fixing Mac)
+	e.preventDefault()
+
+	const startX = e.clientX
+	const startY = e.clientY
+	const startScrollLeft = container.scrollLeft
+	const startScrollTop = container.scrollTop
+
+	const target = e.target as HTMLElement
+	target.setPointerCapture(e.pointerId)
+
+	const onMove = (moveEvent: PointerEvent) => {
+		if (!timelineContainerEl.value) return
+		const deltaX = moveEvent.clientX - startX
+		const deltaY = moveEvent.clientY - startY
+
+		// Subtract delta to pan: moving mouse left scrolls right, etc.
+		timelineContainerEl.value.scrollLeft = startScrollLeft - deltaX
+		timelineContainerEl.value.scrollTop = startScrollTop - deltaY
+	}
+
+	const onUp = (upEvent: PointerEvent) => {
+		target.releasePointerCapture(upEvent.pointerId)
+		stopMove()
+		stopUp()
+	}
+
+	const stopMove = useEventListener(window, 'pointermove', onMove)
+	const stopUp = useEventListener(window, 'pointerup', onUp)
+})
+
 const { x: scrollX, y: scrollY } = useScroll(timelineContainerEl)
 const { width: timelineContainerClientWidth } = useElementSize(timelineContainerEl)
 

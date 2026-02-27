@@ -11,7 +11,7 @@
 			</div>
 		</div>
 
-		<div class="clips-container">
+		<div class="clips-container" ref="clipsContainer">
 			<div v-for="audioFile in sortedAudioFiles" :key="audioFile.id">
 				<ClipInstance
 					:audiofile="audioFile"
@@ -137,6 +137,43 @@ const sortedAudioFiles = computed(() => {
 	const byDate = (a: AudioFile, b: AudioFile) =>
 		new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
 	return [...owned.sort(byDate), ...foreign.sort(byDate)]
+})
+
+// --- Middle Click Pan Logic (for macOS/Chrome) ---
+const clipsContainerEl = useTemplateRef('clipsContainer')
+
+import { useEventListener } from '@vueuse/core'
+
+useEventListener(clipsContainerEl, 'pointerdown', (e) => {
+	// Only handle middle click (button 1)
+	if (e.button !== 1) return
+
+	const container = clipsContainerEl.value
+	if (!container) return
+
+	// Prevent default browser behavior (like auto-scroll on Windows)
+	e.preventDefault()
+
+	const startX = e.clientX
+	const startScrollLeft = container.scrollLeft
+
+	const target = e.target as HTMLElement
+	target.setPointerCapture(e.pointerId)
+
+	const onMove = (moveEvent: PointerEvent) => {
+		if (!clipsContainerEl.value) return
+		const deltaX = moveEvent.clientX - startX
+		clipsContainerEl.value.scrollLeft = startScrollLeft - deltaX
+	}
+
+	const onUp = (upEvent: PointerEvent) => {
+		target.releasePointerCapture(upEvent.pointerId)
+		stopMove()
+		stopUp()
+	}
+
+	const stopMove = useEventListener(window, 'pointermove', onMove)
+	const stopUp = useEventListener(window, 'pointerup', onUp)
 })
 </script>
 
