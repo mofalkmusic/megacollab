@@ -7,8 +7,36 @@
 			@contextmenu.prevent="openContextMenu($event, id)"
 			:class="{ active: contextMenuTrackId === id }"
 		>
-			<p v-if="track.title" class="small no-select">{{ track.title }}</p>
-			<p v-else class="small dim track-title no-select">Track {{ index + 1 }}</p>
+			<!-- title / editing input -->
+			<p
+				v-if="editingTrackId !== id && track.title"
+				class="small no-select"
+				@dblclick.stop.prevent="startEditing(id)"
+			>
+				{{ track.title }}
+			</p>
+			<p
+				v-else-if="editingTrackId !== id && !track.title"
+				class="small dim track-title no-select"
+				@dblclick.stop.prevent="startEditing(id)"
+			>
+				Track {{ index + 1 }}
+			</p>
+			<!-- when you're editing the name, the space bar should insert a space
+			     *not* trigger playback. this little trick prevents the song from
+			     randomly starting mid-typing. #UXstuff -->
+			<input
+				v-else
+				ref="titleInput"
+				class="small track-title title-input"
+				v-model="editingTitle"
+				:placeholder="`Track ${index + 1}`"
+				@blur="commitTitle"
+				@keydown.enter.prevent="commitTitle"
+				@keydown.esc.prevent="cancelEditing"
+				@keydown.space.stop
+				maxlength="40"
+			/>
 
 			<UseElementBounding v-slot="{ top, height }" style="grid-area: vol">
 				<div
@@ -89,7 +117,7 @@
 
 <script setup lang="ts">
 import { tracks, pxTrackHeight, altKeyPressed, controlKeyPressed, clips, user } from '@/state'
-import { computed, reactive, useTemplateRef, watch, type CSSProperties, shallowRef } from 'vue'
+import { computed, reactive, useTemplateRef, watch, type CSSProperties, shallowRef, nextTick } from 'vue'
 import { getTrackVolume, isPlaying, setTrackGain, unregisterTrack } from '@/audioEngine'
 import { useRafFn, useEventListener, onClickOutside } from '@vueuse/core'
 import { UseElementBounding, vOnClickOutside } from '@vueuse/components'
@@ -140,8 +168,99 @@ watch(isPlaying, (playing) => {
 	}
 })
 
-// --- Context Menu Logic ---
+
 const contextMenuTrackId = shallowRef<string | null>(null)
+
+// editing state for track titles
+const editingTrackId = shallowRef<string | null>(null)
+const editingTitle = shallowRef<string>('')
+const titleInput = useTemplateRef<HTMLInputElement>('titleInput')
+const MAX_TITLE_LENGTH = 40
+
+function startEditing(id: string) {
+	const track = tracks.get(id)
+	if (!track) return
+	editingTrackId.value = id
+	editingTitle.value = track.title ?? ''
+	nextTick(() => {
+		if (titleInput.value) {
+			titleInput.value.focus()
+			titleInput.value.select()
+		}
+	})
+}
+
+function cancelEditing() {
+	editingTrackId.value = null
+}
+
+// check whether a string matches the automatic "Track N" label
+// yes, pro method :))))))))))
+function isDefaultLabel(name: string) {
+	return /^Track \d+$/.test(name)
+}
+
+async function commitTitle() {
+	// bail if somehow called while nothing is being edited
+	if (!editingTrackId.value) return
+	const id = editingTrackId.value
+	const track = tracks.get(id)
+	if (!track) {
+		// idk if gonna happen but just in case
+		editingTrackId.value = null
+		return
+	}
+
+
+	let candidate = editingTitle.value.trim()
+
+	// hitting enter with nothing should just cancel
+	if (candidate === '') {
+		editingTrackId.value = null
+		return
+	}
+
+	if (candidate.length > MAX_TITLE_LENGTH) {
+		userLog('SYSTEM', `Track name must be <= ${MAX_TITLE_LENGTH} characters.`, { textColor: 'red' })
+		return
+	}
+
+	// default label collision guard
+	if (isDefaultLabel(candidate)) {
+		const match = sortedTracks.value.find(([tid, t], idx) => `Track ${idx + 1}` === candidate)
+		if (match) {
+			if (match[0] !== id) {
+				userLog('SYSTEM', 'This track name is not available.', { textColor: 'red' })
+				return
+			} else {
+				// resetting to your own default, clears the custom title!!
+				candidate = ''
+			}
+		}
+	}
+
+	const prev = track.title
+	const newName: string | null = candidate === '' ? null : candidate
+	if (newName === prev) {
+		editingTrackId.value = null
+		return
+	}
+
+	
+	track.title = newName
+	editingTrackId.value = null
+
+	const res = await socket.emitWithAck('get:track:update', {
+		id,
+		changes: { title: newName },
+	})
+
+	if (!res.success) {
+		//put it back
+		track.title = prev
+		userLog('SYSTEM', `Failed to rename track: ${res.error.message}`, { textColor: 'red' })
+	}
+}
 
 function openContextMenu(e: MouseEvent, trackId: string) {
 	contextMenuTrackId.value = trackId
@@ -359,6 +478,22 @@ async function resetVolume(trackId: string) {
 
 .track-controls:last-child {
 	border-bottom: none;
+}
+
+/* for the track renaming field */
+.title-input {
+	width: 100%;
+	box-sizing: border-box;
+	background-color: transparent;
+	color: var(--text-color-primary);
+	border: 1px solid var(--border-primary);
+	border-radius: 0.25rem;
+	padding: 2px 4px;
+	font-size: 1.0rem; 
+}
+.title-input:focus {
+	outline: none;
+	border-color: var(--text-color-primary);
 }
 
 .volumeSlider {
