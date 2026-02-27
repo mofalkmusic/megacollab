@@ -460,9 +460,18 @@ useEventListener(
 	(e) => {
 		if (e.ctrlKey) {
 			e.preventDefault()
+			const container = timelineContainerEl.value!
+			// Beat under cursor before zoom
+			const mouseXInContainer = e.clientX - container.getBoundingClientRect().left
+			const beatUnderCursor = (container.scrollLeft + mouseXInContainer) / pxPerBeat.value
+
 			const sensitivity = 0.05
 			const unclipped = pxPerBeat.value - e.deltaY * sensitivity
-			pxPerBeat.value = Math.max(minPxPerBeat, Math.min(maxPxPerBeat, unclipped))
+			const newPxPerBeat = Math.max(minPxPerBeat, Math.min(maxPxPerBeat, unclipped))
+			pxPerBeat.value = newPxPerBeat
+
+			// Adjust scroll so the same beat stays under the cursor
+			container.scrollLeft = beatUnderCursor * newPxPerBeat - mouseXInContainer
 		}
 	},
 	{
