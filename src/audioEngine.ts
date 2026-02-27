@@ -9,6 +9,12 @@ const inDev = import.meta.env.MODE === 'development'
 export const audioContext = new AudioContext()
 const masterGain = audioContext.createGain()
 masterGain.connect(audioContext.destination)
+export const masterGainValue = shallowRef(1)
+
+export function setMasterGain(gain: number) {
+	masterGainValue.value = gain
+	masterGain.gain.setTargetAtTime(gain, audioContext.currentTime, 0.02)
+}
 
 const trackGainNodes = new Map<string, GainNode>()
 const trackAnalysers = new Map<string, AnalyserNode>()
