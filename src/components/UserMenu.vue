@@ -83,6 +83,7 @@
 				<p>Settings</p>
 			</button>
 			<div style="padding: 0 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem">
+				// oficial fix by core eggs
 				<label
 				for="download-quality"
 				class="txt small dim"
