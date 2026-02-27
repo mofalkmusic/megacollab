@@ -129,13 +129,13 @@ async function getAudioFile(id: string): Promise<ClientAudioFile | null> {
 }
 
 async function createTrack(track: Omit<ServerTrack, 'order_index'>): Promise<ClientTrack> {
-	const { id, creator_user_id, title, belongs_to_user_id, gain } = track
+	const { id, creator_user_id, title, belongs_to_user_id, gain, color } = track
 
 	const rows = await queryFn<ClientTrack>(
 		`
 			WITH inserted AS (
-				INSERT INTO ${TRACKS_TABLE} (id, creator_user_id, title, belongs_to_user_id, gain, order_index) 
-				VALUES ($1, $2, $3, $4, $5, (SELECT COALESCE(MAX(order_index), 0) + 1 FROM ${TRACKS_TABLE}))
+				INSERT INTO ${TRACKS_TABLE} (id, creator_user_id, title, belongs_to_user_id, gain, color, order_index) 
+				VALUES ($1, $2, $3, $4, $5, $6, (SELECT COALESCE(MAX(order_index), 0) + 1 FROM ${TRACKS_TABLE}))
 				RETURNING *
 			)
 			SELECT 
@@ -145,7 +145,7 @@ async function createTrack(track: Omit<ServerTrack, 'order_index'>): Promise<Cli
 			LEFT JOIN ${USERS_TABLE} AS users
 				ON inserted.belongs_to_user_id = users.id
 		`,
-		[id, creator_user_id, title, belongs_to_user_id, gain],
+		[id, creator_user_id, title, belongs_to_user_id, gain, color],
 	)
 
 	if (!rows.length) throw new Error('Failed to create track')

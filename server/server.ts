@@ -319,6 +319,7 @@ io.on('connection', async (socket) => {
 				created_at: new Date().toISOString(),
 				creator_user_id: user.id,
 				title: null,
+				color: null,
 				belongs_to_user_id: user.id, // for now
 				gain: DEFAULT_GAIN,
 			}

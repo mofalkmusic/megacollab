@@ -100,4 +100,14 @@ export const migrations: Migration[] = [
             `)
 		},
 	},
+	{
+		id: 4,
+		name: 'add_track_color',
+		func: async (queryFn) => {
+			await queryFn(`
+                ALTER TABLE ${TRACKS_TABLE}
+                ADD COLUMN IF NOT EXISTS color TEXT
+            `)
+		},
+	},
 ]

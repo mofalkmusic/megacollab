@@ -1,7 +1,7 @@
-import { computed, shallowRef, watch } from 'vue'
+import { computed, shallowRef, watch, watchEffect } from 'vue'
 import { beats_to_sec, quantize_beats, sec_to_beats } from '@/utils/mathUtils'
 import { useIntervalFn, useRafFn, watchThrottled, useTimeoutFn } from '@vueuse/core'
-import { clips, TOTAL_BEATS, audioBuffers, bpm } from '@/state'
+import { clips, TOTAL_BEATS, audioBuffers, bpm, mutedTrackIds, soloTrackIds } from '@/state'
 import type { Clip, ServerTrack } from '~/schema'
 
 const inDev = import.meta.env.MODE === 'development'
@@ -192,13 +192,23 @@ watch(isLooping, (looping, wasLooping) => {
 	}
 })
 
+/** Stored "real" gain per track so we can restore after unmute/unsolo */
+const trackBaseGain = new Map<string, number>()
+
+export function isTrackAudible(trackId: string): boolean {
+	if (mutedTrackIds.has(trackId)) return false
+	if (soloTrackIds.size > 0 && !soloTrackIds.has(trackId)) return false
+	return true
+}
+
 export function registerTrack(trackId: ServerTrack['id'], initialGain: number = 1) {
 	if (trackGainNodes.has(trackId)) return
 
 	const gainNode = audioContext.createGain()
 	gainNode.connect(masterGain)
 
-	gainNode.gain.value = initialGain
+	trackBaseGain.set(trackId, initialGain)
+	gainNode.gain.value = isTrackAudible(trackId) ? initialGain : 0
 	trackGainNodes.set(trackId, gainNode)
 
 	// sidechained vol analyser
@@ -212,10 +222,27 @@ export function setTrackGain(trackId: ServerTrack['id'], gain: number) {
 	const gainNode = trackGainNodes.get(trackId)
 	if (!gainNode) return
 
+	trackBaseGain.set(trackId, gain)
+
 	// ramp to prevent clicks
 	const now = audioContext.currentTime
-	gainNode.gain.setTargetAtTime(gain, now, 0.02)
+	const effectiveGain = isTrackAudible(trackId) ? gain : 0
+	gainNode.gain.setTargetAtTime(effectiveGain, now, 0.02)
 }
+
+// Reactively update gain nodes when solo/mute sets change
+watchEffect(() => {
+	// Touch the reactive sets to subscribe
+	const _muted = mutedTrackIds.size
+	const _solo = soloTrackIds.size
+
+	for (const [trackId, gainNode] of trackGainNodes) {
+		const baseGain = trackBaseGain.get(trackId) ?? 1
+		const audible = isTrackAudible(trackId)
+		const now = audioContext.currentTime
+		gainNode.gain.setTargetAtTime(audible ? baseGain : 0, now, 0.02)
+	}
+})
 
 export function unregisterTrack(trackId: ServerTrack['id']) {
 	const gainNode = trackGainNodes.get(trackId)

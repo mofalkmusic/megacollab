@@ -19,6 +19,9 @@ export const clips = reactive<Map<string, Clip>>(new Map())
 export const selectedClipIds = reactive<Set<Clip['id']>>(new Set())
 
 export const tracks = reactive<Map<string, ClientTrack>>(new Map())
+export const mutedTrackIds = reactive<Set<string>>(new Set())
+export const soloTrackIds = reactive<Set<string>>(new Set())
+export const hoveredTrackId = shallowRef<string | null>(null)
 
 export const audiofiles = reactive<Map<string, AudioFile>>(new Map())
 export const audioBuffers = reactive(new Map<string, AudioBuffer>())

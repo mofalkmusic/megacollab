@@ -6,6 +6,8 @@
 			:style="trackStyle"
 			:data-track-id="props.track.id"
 			@contextmenu.prevent
+			@pointerenter="hoveredTrackId = props.track.id"
+			@pointerleave="hoveredTrackId === props.track.id && (hoveredTrackId = null)"
 		>
 			<ClipInstance
 				v-for="clip in trackClips"
@@ -24,6 +26,12 @@
 				class="drop-indicator"
 				:style="{ left: `${dropIndicatorX}px` }"
 			></div>
+
+			<!-- mute overlay -->
+			<div v-if="mutedTrackIds.has(props.track.id)" class="mute-overlay"></div>
+
+			<!-- solo overlay -->
+			<div v-if="soloTrackIds.has(props.track.id)" class="solo-overlay"></div>
 		</div>
 	</div>
 </template>
@@ -32,7 +40,17 @@
 import type { ServerTrack, Clip } from '~/schema'
 import ClipInstance from '@/components/ClipInstance.vue'
 import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef } from 'vue'
-import { clips, pxPerBeat, audiofiles, pxTrackHeight, TOTAL_BEATS, user } from '@/state'
+import {
+	clips,
+	pxPerBeat,
+	audiofiles,
+	pxTrackHeight,
+	TOTAL_BEATS,
+	user,
+	mutedTrackIds,
+	soloTrackIds,
+	hoveredTrackId,
+} from '@/state'
 import { registerTrack, unregisterTrack } from '@/audioEngine'
 import { useDropZone, useEventListener, useElementBounding } from '@vueuse/core'
 import { audioMimeTypes } from '~/constants'
@@ -205,6 +223,23 @@ useEventListener(trackEl, 'dragover', (e: DragEvent) => {
 	width: 10rem;
 	background: linear-gradient(to right, yellowgreen, transparent 80%);
 	z-index: 10;
+	pointer-events: none;
+}
+
+.mute-overlay {
+	position: absolute;
+	inset: 0;
+	background-color: rgba(0, 0, 0, 0.55);
+	z-index: 5;
+	pointer-events: none;
+}
+
+.solo-overlay {
+	position: absolute;
+	inset: 0;
+	border: 1px solid rgba(232, 166, 32, 0.5);
+	box-shadow: inset 0 0 12px rgba(232, 166, 32, 0.15);
+	z-index: 5;
 	pointer-events: none;
 }
 </style>

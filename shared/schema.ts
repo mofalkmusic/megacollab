@@ -60,6 +60,7 @@ export const ServerTrackSchema = z.object({
 	creator_user_id: z.string(), // foreign key
 	belongs_to_user_id: z.string().nullable(), // foreign key + null for editable by all
 	title: z.string().nullable(),
+	color: z.string().nullable(),
 	order_index: z.number(),
 	gain: z.number(),
 	created_at: z.iso.datetime({ offset: true }),
