@@ -61,7 +61,7 @@ export const loopRangeBeats = computed(() => {
 })
 
 function getClipHash(clip: Clip): string {
-	return `${clip.start_beat}:${clip.end_beat}:${clip.offset_seconds}:${clip.audio_file_id}:${clip.track_id}:${clip.gain}`
+	return `${clip.start_beat}:${clip.end_beat}:${clip.offset_seconds}:${clip.audio_file_id}:${clip.track_id}`
 }
 
 function stopSource(sourceWrapper: { source: AudioBufferSourceNode; gainNode: GainNode }) {
@@ -93,11 +93,17 @@ function reconcileActiveSources() {
 			continue
 		}
 
-		// clip changed
+		// clip changed (time/track/source)
 		const currentHash = getClipHash(clip)
 		if (currentHash !== wrapper.hash) {
 			stopSource(wrapper)
 			activeSources.delete(key)
+			continue
+		}
+
+		// dynamically update gain if it changed
+		if (wrapper.gainNode.gain.value !== clip.gain) {
+			wrapper.gainNode.gain.setTargetAtTime(clip.gain, audioContext.currentTime, 0.02)
 		}
 	}
 

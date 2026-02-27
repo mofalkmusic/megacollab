@@ -36,6 +36,9 @@
 		<!-- RIGHT HANDLE -->
 		<div v-if="!withinAudioPool" ref="rightHandle" class="resizehandle right"></div>
 
+		<!-- GAIN HANDLE -->
+		<div v-if="!withinAudioPool && isHovered" ref="gainHandle" class="gainhandle"></div>
+
 		<button
 			v-if="withinAudioPool && isHovered && props.deletable === true"
 			class="trash-button"
@@ -95,6 +98,7 @@ const { userLog } = useConsole()
 const wrapperEl = useTemplateRef('clipWrapper')
 const leftHandleEl = useTemplateRef('leftHandle')
 const rightHandleEl = useTemplateRef('rightHandle')
+const gainHandleEl = useTemplateRef('gainHandle')
 
 const canvasEl = useTemplateRef('canvas')
 const { width: canvasWidth, height: canvasHeight } = useElementBounding(canvasEl)
@@ -173,6 +177,7 @@ const initialClipState = computed(() => {
 			start_beat: props.clip.start_beat,
 			end_beat: props.clip.end_beat,
 			offset_seconds: props.clip.offset_seconds,
+			gain: props.clip.gain,
 		}
 
 	if (typeof props.customWidthPx !== 'number')
@@ -183,6 +188,7 @@ const initialClipState = computed(() => {
 		start_beat: 0,
 		end_beat: px_to_beats(props.customWidthPx),
 		offset_seconds: 0,
+		gain: 1,
 	}
 })
 
@@ -193,6 +199,7 @@ const displayState = computed(() => {
 			start_beat: dragSession.value.previewStartBeat,
 			end_beat: dragSession.value.previewEndBeat,
 			offset_seconds: dragSession.value.previewOffsetSec,
+			gain: dragSession.value.previewGain,
 		}
 	}
 	return initialClipState.value
@@ -228,7 +235,7 @@ const textStyles = computed((): CSSProperties => {
 	return { color: L > 0.5 ? '#000' : '#fff' }
 })
 
-type DragMode = 'left' | 'right' | 'move'
+type DragMode = 'left' | 'right' | 'move' | 'gain'
 
 const dragSession = ref<{
 	side: DragMode
@@ -236,9 +243,11 @@ const dragSession = ref<{
 	origStartBeat: number
 	origEndBeat: number
 	origOffsetSec: number
+	origGain: number
 	previewStartBeat: number
 	previewEndBeat: number
 	previewOffsetSec: number
+	previewGain: number
 	startY: number
 	currentY: number
 	previewTrackId: string | null
@@ -308,9 +317,11 @@ onMounted(() => {
 				origStartBeat: initialClipState.value.start_beat,
 				origEndBeat: initialClipState.value.end_beat,
 				origOffsetSec: initialClipState.value.offset_seconds,
+				origGain: initialClipState.value.gain,
 				previewStartBeat: initialClipState.value.start_beat,
 				previewEndBeat: initialClipState.value.end_beat,
 				previewOffsetSec: initialClipState.value.offset_seconds,
+				previewGain: initialClipState.value.gain,
 				startY: event.clientY,
 				currentY: event.clientY,
 				previewTrackId: props.clip!.track_id,
@@ -433,9 +444,11 @@ onMounted(() => {
 				origStartBeat: initialClipState.value.start_beat,
 				origEndBeat: initialClipState.value.end_beat,
 				origOffsetSec: initialClipState.value.offset_seconds,
+				origGain: initialClipState.value.gain,
 				previewStartBeat: initialClipState.value.start_beat,
 				previewEndBeat: initialClipState.value.end_beat,
 				previewOffsetSec: initialClipState.value.offset_seconds,
+				previewGain: initialClipState.value.gain,
 				startY: event.clientY,
 				currentY: event.clientY,
 				previewTrackId: props.clip!.track_id, // We know clip exists if not withinAudioPool
@@ -557,9 +570,11 @@ onMounted(() => {
 				origStartBeat: initialClipState.value.start_beat,
 				origEndBeat: initialClipState.value.end_beat,
 				origOffsetSec: initialClipState.value.offset_seconds,
+				origGain: initialClipState.value.gain,
 				previewStartBeat: initialClipState.value.start_beat,
 				previewEndBeat: initialClipState.value.end_beat,
 				previewOffsetSec: initialClipState.value.offset_seconds,
+				previewGain: initialClipState.value.gain,
 				startY: event.clientY,
 				currentY: event.clientY,
 				previewTrackId: props.clip!.track_id,
@@ -637,6 +652,124 @@ onMounted(() => {
 		{ passive: false },
 	)
 
+	useEventListener(
+		gainHandleEl,
+		'pointerdown',
+		(event) => {
+			if (user.value?.banned_at) return
+			if (event.button === 2) {
+				return rip()
+			}
+
+			if (event.button !== 0) return
+			event.preventDefault()
+			event.stopPropagation()
+
+			dragSession.value = {
+				side: 'gain',
+				startX: event.clientX,
+				origStartBeat: initialClipState.value.start_beat,
+				origEndBeat: initialClipState.value.end_beat,
+				origOffsetSec: initialClipState.value.offset_seconds,
+				origGain: initialClipState.value.gain,
+				previewStartBeat: initialClipState.value.start_beat,
+				previewEndBeat: initialClipState.value.end_beat,
+				previewOffsetSec: initialClipState.value.offset_seconds,
+				previewGain: initialClipState.value.gain,
+				startY: event.clientY,
+				currentY: event.clientY,
+				previewTrackId: props.clip!.track_id,
+				verticalOffsetPx: 0,
+			}
+
+			const el = event.currentTarget as HTMLElement
+			el.setPointerCapture(event.pointerId)
+
+			const onMove = (e: PointerEvent) => {
+				const sesh = dragSession.value
+				if (!sesh || sesh.side !== 'gain') return
+				e.preventDefault()
+
+				// Calculate gain delta based on vertical movement
+				const deltaY = sesh.startY - e.clientY
+				// Sensitivity: e.g. 100px move = 1.0 gain change
+				const gainSensitivity = 1 / 100
+				let newGain = sesh.origGain + deltaY * gainSensitivity
+
+				// Clamp to reasonable values (e.g. 0 to 4.0)
+				newGain = Math.max(0, Math.min(newGain, 4))
+				sesh.previewGain = newGain
+
+				const clip = props.clip ? clips.get(props.clip.id) : undefined
+				if (clip) {
+					clip.gain = newGain
+				}
+			}
+
+			const onUp = async (e: PointerEvent) => {
+				el.releasePointerCapture(e.pointerId)
+				stopMove()
+				stopUp()
+
+				const sesh = dragSession.value
+				if (!sesh || !props.clip || sesh.side !== 'gain') return
+
+				const clip = clips.get(props.clip.id)
+				if (!clip) return
+
+				if (clip.id.startsWith('__temp__')) {
+					clip.gain = sesh.previewGain
+					dragSession.value = null
+					return
+				}
+
+				const res = await socket.emitWithAck('get:clip:update', {
+					id: clip.id,
+					changes: {
+						gain: sesh.previewGain,
+					},
+				})
+
+				if (res.success) {
+					clip.gain = res.data['gain'] ?? sesh.previewGain
+				} else {
+					clip.gain = sesh.origGain
+				}
+
+				dragSession.value = null
+			}
+
+			const stopMove = useEventListener(window, 'pointermove', onMove)
+			const stopUp = useEventListener(window, 'pointerup', onUp)
+		},
+		{ passive: false },
+	)
+
+	useEventListener(gainHandleEl, 'dblclick', async (event) => {
+		if (user.value?.banned_at || !props.clip) return
+		event.preventDefault()
+		event.stopPropagation()
+
+		const clip = clips.get(props.clip.id)
+		if (!clip) return
+
+		if (clip.id.startsWith('__temp__')) {
+			clip.gain = 1.0
+			return
+		}
+
+		const res = await socket.emitWithAck('get:clip:update', {
+			id: clip.id,
+			changes: {
+				gain: 1.0,
+			},
+		})
+
+		if (res.success) {
+			clip.gain = res.data['gain'] ?? 1.0
+		}
+	})
+
 	useEventListener(wrapperEl, 'pointerenter', () => {
 		if (rightMouseButtonPressedOnTimeline.value) {
 			rip()
@@ -674,6 +807,7 @@ const canvasStyles = computed((): CSSProperties => {
 		width: `${totalWidthPx}px`,
 		position: 'absolute',
 		left: `${leftPx}px`,
+		transform: `scaleY(${displayState.value.gain})`,
 	} satisfies CSSProperties
 })
 
@@ -847,6 +981,33 @@ canvas {
 .resizehandle.right {
 	left: unset;
 	right: 0;
+}
+
+.gainhandle {
+	position: absolute;
+	width: 1rem;
+	height: 1rem;
+	border-radius: 50%;
+	background-color: var(--text-color-primary);
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	z-index: 10;
+	cursor: ns-resize;
+	box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+	opacity: 0;
+	transition:
+		opacity 150ms ease,
+		transform 100ms ease;
+}
+
+.outmostClipWrapper:hover .gainhandle,
+.outmostClipWrapper.is-dragging .gainhandle {
+	opacity: 1;
+}
+
+.gainhandle:active {
+	transform: translate(-50%, -50%) scale(1.2);
 }
 
 .loading {
