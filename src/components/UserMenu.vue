@@ -84,11 +84,12 @@
 			</button>
 			<div style="padding: 0 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem">
 				<label
-					for="download-quality"
-					class="small dim"
-					style="display: block; margin-bottom: 0.2rem"
-					>Download Format</label
+				for="download-quality"
+				class="txt small dim"
+				style="display: block; margin-bottom: 0.2rem"
 				>
+				Download Format
+				</label>
 				<select
 					id="download-quality"
 					class="textInput txt mono small"
