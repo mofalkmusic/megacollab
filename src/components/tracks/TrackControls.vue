@@ -33,7 +33,7 @@
 				<template v-if="renamingTrackId === id">
 					<input
 						ref="renameInput"
-						class="rename-input small"
+						class="rename-input small track-title"
 						v-model="renameValue"
 						@blur="commitRename(id)"
 						@keydown.enter="($event.target as HTMLInputElement)?.blur()"
@@ -48,21 +48,10 @@
 				</template>
 			</div>
 
-			<!-- Hidden color input -->
-			<input
-				v-if="colorPickTrackId === id"
-				type="color"
-				class="hidden-color-input"
-				:value="track.color || '#444444'"
-				@input="onColorChange($event, id)"
-				@change="colorPickTrackId = null"
-				ref="colorInput"
-			/>
-
 			<div class="track-actions-row" style="grid-area: actions" @pointerdown.stop>
 				<button
 					class="menu-trigger-btn"
-					@click.stop="toggleContextMenu(id)"
+					@click.stop.prevent="toggleContextMenu($event, id)"
 					:class="{ active: contextMenuTrackId === id }"
 				>
 					<Ellipsis :size="16" />
@@ -111,85 +100,150 @@
 			</UseElementBounding>
 
 			<!-- context menu -->
-			<div
-				v-if="contextMenuTrackId === id"
-				v-on-click-outside="() => (contextMenuTrackId = null)"
-				class="context-menu"
-				@contextmenu.stop.prevent
-				@click.stop
-			>
-				<div class="inner-menu-wrap">
-					<div class="menu-header">
+			<Teleport to="body">
+				<div
+					v-if="contextMenuTrackId === id"
+					v-on-click-outside="closeContextMenuOutside"
+					class="context-menu"
+					:style="contextMenuStyles"
+					@contextmenu.stop.prevent
+					@pointerdown.stop
+					@click.stop
+				>
+					<div class="inner-menu-wrap">
+						<div class="menu-header">
+							<p
+								class="small bold"
+								style="
+									color: var(--text-color-primary);
+									overflow: hidden;
+									text-overflow: ellipsis;
+									white-space: nowrap;
+								"
+							>
+								{{ track.title || `Track ${index + 1}` }}
+							</p>
+							<p
+								class="small dim mono"
+								style="
+									overflow: hidden;
+									text-overflow: ellipsis;
+									white-space: nowrap;
+								"
+							>
+								@{{ track.belongs_to_display_name }}
+							</p>
+						</div>
+						<div
+							style="
+								border-top: 1px solid var(--border-primary);
+								margin-top: 0.5rem;
+								padding-bottom: 0.5rem;
+							"
+						></div>
+						<button
+							class="default-button menu-btn"
+							@click="startRenameFromMenu(id, track.title || `Track ${index + 1}`)"
+						>
+							<Pencil :size="13" style="color: var(--text-color-secondary)" />
+							<p class="small">Rename</p>
+						</button>
+						<button
+							class="default-button menu-btn"
+							@mousedown.stop.prevent="openColorPicker(id)"
+						>
+							<Palette :size="13" style="color: var(--text-color-secondary)" />
+							<p class="small">Color</p>
+						</button>
+						<div
+							style="
+								border-top: 1px solid var(--border-primary);
+								margin-top: 0.3rem;
+								padding-bottom: 0.3rem;
+							"
+						></div>
+						<button
+							class="default-button menu-btn"
+							@mousedown="insertTrack(index, 'above')"
+						>
+							<Plus :size="13" style="color: var(--text-color-secondary)" />
+							<p class="small">Insert Above</p>
+						</button>
+						<button
+							class="default-button menu-btn"
+							@mousedown="insertTrack(index, 'below')"
+						>
+							<Plus :size="13" style="color: var(--text-color-secondary)" />
+							<p class="small">Insert Below</p>
+						</button>
+						<div
+							style="
+								border-top: 1px solid var(--border-primary);
+								margin-top: 0.3rem;
+								padding-bottom: 0.3rem;
+							"
+						></div>
+						<button class="default-button menu-btn delete" @mousedown="deleteTrack(id)">
+							<Trash2 :size="13" style="color: var(--text-color-secondary)" />
+							<p class="small">Delete Track</p>
+						</button>
+					</div>
+				</div>
+			</Teleport>
+
+			<!-- color picker popup -->
+			<Teleport to="body">
+				<div
+					v-if="colorPickTrackId === id"
+					v-on-click-outside="() => (colorPickTrackId = null)"
+					class="context-menu color-picker-popup"
+					:style="colorPickerStyles"
+					@contextmenu.stop.prevent
+					@pointerdown.stop
+					@click.stop
+				>
+					<div class="inner-menu-wrap">
 						<p
 							class="small bold"
+							style="color: var(--text-color-primary); padding: 0.2rem 0.3rem"
+						>
+							Track Color
+						</p>
+						<div class="color-swatches">
+							<button
+								v-for="color in COLOR_SWATCHES"
+								:key="color ?? 'default'"
+								class="color-swatch"
+								:class="{
+									selected: track.color === color,
+									'is-default': color === null,
+								}"
+								:style="{ backgroundColor: color ?? 'var(--bg-color)' }"
+								@click="applyColor(id, color)"
+							/>
+						</div>
+						<div
 							style="
-								color: var(--text-color-primary);
-								overflow: hidden;
-								text-overflow: ellipsis;
-								white-space: nowrap;
+								border-top: 1px solid var(--border-primary);
+								margin-top: 0.4rem;
+								padding-top: 0.4rem;
 							"
 						>
-							{{ track.title || `Track ${index + 1}` }}
-						</p>
-						<p
-							class="small dim mono"
-							style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap"
-						>
-							@{{ track.belongs_to_display_name }}
-						</p>
+							<label class="custom-color-row">
+								<input
+									type="color"
+									class="inline-color-input"
+									:value="track.color || '#000000'"
+									@input="onColorChange($event, id)"
+								/>
+								<span class="small" style="color: var(--text-color-secondary)"
+									>Custom…</span
+								>
+							</label>
+						</div>
 					</div>
-					<div
-						style="
-							border-top: 1px solid var(--border-primary);
-							margin-top: 0.5rem;
-							padding-bottom: 0.5rem;
-						"
-					></div>
-					<button
-						class="default-button menu-btn"
-						@mousedown="startRenameFromMenu(id, track.title || `Track ${index + 1}`)"
-					>
-						<Pencil :size="13" style="color: var(--text-color-secondary)" />
-						<p class="small">Rename</p>
-					</button>
-					<button class="default-button menu-btn" @mousedown="openColorPicker(id)">
-						<Palette :size="13" style="color: var(--text-color-secondary)" />
-						<p class="small">Color</p>
-					</button>
-					<div
-						style="
-							border-top: 1px solid var(--border-primary);
-							margin-top: 0.3rem;
-							padding-bottom: 0.3rem;
-						"
-					></div>
-					<button
-						class="default-button menu-btn"
-						@mousedown="insertTrack(index, 'above')"
-					>
-						<Plus :size="13" style="color: var(--text-color-secondary)" />
-						<p class="small">Insert Above</p>
-					</button>
-					<button
-						class="default-button menu-btn"
-						@mousedown="insertTrack(index, 'below')"
-					>
-						<Plus :size="13" style="color: var(--text-color-secondary)" />
-						<p class="small">Insert Below</p>
-					</button>
-					<div
-						style="
-							border-top: 1px solid var(--border-primary);
-							margin-top: 0.3rem;
-							padding-bottom: 0.3rem;
-						"
-					></div>
-					<button class="default-button menu-btn delete" @mousedown="deleteTrack(id)">
-						<Trash2 :size="13" style="color: var(--text-color-secondary)" />
-						<p class="small">Delete Track</p>
-					</button>
 				</div>
-			</div>
+			</Teleport>
 
 			<!-- bottom drop indicator -->
 			<div
@@ -216,15 +270,7 @@ import {
 	soloTrackIds,
 	hoveredTrackId,
 } from '@/state'
-import {
-	computed,
-	reactive,
-	nextTick,
-	useTemplateRef,
-	watch,
-	type CSSProperties,
-	shallowRef,
-} from 'vue'
+import { computed, reactive, nextTick, watch, type CSSProperties, shallowRef } from 'vue'
 import { getTrackVolume, isPlaying, setTrackGain, unregisterTrack } from '@/audioEngine'
 import { useRafFn, useEventListener } from '@vueuse/core'
 import { UseElementBounding, vOnClickOutside } from '@vueuse/components'
@@ -323,24 +369,60 @@ async function commitRename(trackId: string) {
 
 // --- Color Logic ---
 const colorPickTrackId = shallowRef<string | null>(null)
+const colorPickerPosition = reactive({ x: 0, y: 0 })
+
+const COLOR_SWATCHES: ReadonlyArray<string | null> = [
+	null,
+	'#e74c3c',
+	'#e67e22',
+	'#f1c40f',
+	'#2ecc71',
+	'#1abc9c',
+	'#3498db',
+	'#9b59b6',
+	'#e91e63',
+	'#795548',
+	'#607d8b',
+	'#00bcd4',
+]
+
+const colorPickerStyles = computed(
+	(): CSSProperties => ({
+		left: `${colorPickerPosition.x}px`,
+		top: `${colorPickerPosition.y}px`,
+	}),
+)
 
 function onMiddleClick(e: MouseEvent, trackId: string) {
 	if (e.button !== 1) return
 	e.preventDefault()
-	openColorPicker(trackId)
+	if (colorPickTrackId.value === trackId) {
+		colorPickTrackId.value = null
+	} else {
+		openColorPicker(trackId, e)
+	}
 }
 
-function openColorPicker(trackId: string) {
+function openColorPicker(trackId: string, event?: MouseEvent) {
 	contextMenuTrackId.value = null
+
+	// Position near the track control
+	const trackEl = event?.currentTarget as HTMLElement | null
+	const rect = trackEl?.closest('.track-controls')?.getBoundingClientRect()
+	if (rect) {
+		setContextMenuPosition(rect.right + 8, rect.top)
+		colorPickerPosition.x = contextMenuPosition.x
+		colorPickerPosition.y = contextMenuPosition.y
+	} else {
+		// Fallback: use the context menu position
+		colorPickerPosition.x = contextMenuPosition.x
+		colorPickerPosition.y = contextMenuPosition.y
+	}
+
 	colorPickTrackId.value = trackId
-	nextTick(() => {
-		const input = document.querySelector<HTMLInputElement>('.hidden-color-input')
-		if (input) input.click()
-	})
 }
 
-async function onColorChange(e: Event, trackId: string) {
-	const color = (e.target as HTMLInputElement).value
+async function updateTrackColor(trackId: string, color: string | null) {
 	const track = tracks.get(trackId)
 	if (!track) return
 
@@ -356,6 +438,16 @@ async function onColorChange(e: Event, trackId: string) {
 		track.color = oldColor
 		userLog('SYSTEM', `Failed to change color: ${res.error.message}`, { textColor: 'red' })
 	}
+}
+
+function applyColor(trackId: string, color: string | null) {
+	colorPickTrackId.value = null
+	updateTrackColor(trackId, color)
+}
+
+function onColorChange(e: Event, trackId: string) {
+	const color = (e.target as HTMLInputElement).value
+	updateTrackColor(trackId, color)
 }
 
 // --- Insert Track ---
@@ -498,17 +590,73 @@ watch(isPlaying, (playing) => {
 
 // --- Context Menu Logic ---
 const contextMenuTrackId = shallowRef<string | null>(null)
+const contextMenuPosition = reactive({ x: 0, y: 0 })
+
+const CONTEXT_MENU_WIDTH_PX = 224 as const
+const CONTEXT_MENU_ESTIMATED_HEIGHT_PX = 320 as const
+const CONTEXT_MENU_VIEWPORT_MARGIN_PX = 8 as const
+
+const contextMenuStyles = computed((): CSSProperties => {
+	return {
+		left: `${contextMenuPosition.x}px`,
+		top: `${contextMenuPosition.y}px`,
+	}
+})
+
+function setContextMenuPosition(x: number, y: number) {
+	if (typeof window === 'undefined') {
+		contextMenuPosition.x = x
+		contextMenuPosition.y = y
+		return
+	}
+
+	const maxX = Math.max(
+		CONTEXT_MENU_VIEWPORT_MARGIN_PX,
+		window.innerWidth - CONTEXT_MENU_WIDTH_PX - CONTEXT_MENU_VIEWPORT_MARGIN_PX,
+	)
+	const maxY = Math.max(
+		CONTEXT_MENU_VIEWPORT_MARGIN_PX,
+		window.innerHeight - CONTEXT_MENU_ESTIMATED_HEIGHT_PX - CONTEXT_MENU_VIEWPORT_MARGIN_PX,
+	)
+
+	contextMenuPosition.x = Math.min(Math.max(CONTEXT_MENU_VIEWPORT_MARGIN_PX, x), maxX)
+	contextMenuPosition.y = Math.min(Math.max(CONTEXT_MENU_VIEWPORT_MARGIN_PX, y), maxY)
+}
 
 function openContextMenu(e: MouseEvent, trackId: string) {
+	setContextMenuPosition(e.clientX + 8, e.clientY + 8)
 	contextMenuTrackId.value = trackId
 }
 
-function toggleContextMenu(trackId: string) {
+let lastOutsideClose = { time: 0, trackId: '' }
+
+function toggleContextMenu(e: MouseEvent, trackId: string) {
+	// v-on-click-outside uses capture phase (pointerdown) and fires BEFORE this click handler.
+	// If outside-click just closed THIS track's menu, skip to avoid immediately reopening it.
+	if (lastOutsideClose.trackId === trackId && Date.now() - lastOutsideClose.time < 200) return
+
 	if (contextMenuTrackId.value === trackId) {
 		contextMenuTrackId.value = null
 	} else {
+		const trigger = e.currentTarget as HTMLElement | null
+		const rect = trigger?.getBoundingClientRect()
+		if (rect) {
+			const spaceRight = window.innerWidth - rect.right
+			const preferredX =
+				spaceRight >= CONTEXT_MENU_WIDTH_PX + CONTEXT_MENU_VIEWPORT_MARGIN_PX
+					? rect.right + 8
+					: rect.left - CONTEXT_MENU_WIDTH_PX - 8
+			setContextMenuPosition(preferredX, rect.top)
+		} else {
+			setContextMenuPosition(e.clientX + 8, e.clientY + 8)
+		}
 		contextMenuTrackId.value = trackId
 	}
+}
+
+function closeContextMenuOutside() {
+	lastOutsideClose = { time: Date.now(), trackId: contextMenuTrackId.value ?? '' }
+	contextMenuTrackId.value = null
 }
 
 async function deleteTrack(trackId: string) {
@@ -748,14 +896,74 @@ async function resetVolume(trackId: string) {
 	margin-top: auto;
 }
 
-.hidden-color-input {
-	position: absolute;
-	opacity: 0;
-	width: 0;
-	height: 0;
-	pointer-events: none;
-	top: 50%;
-	left: 50%;
+.color-picker-popup {
+	width: 13rem;
+}
+
+.color-swatches {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 6px;
+	padding: 0.3rem;
+}
+
+.color-swatch {
+	width: 100%;
+	aspect-ratio: 1;
+	border-radius: 4px;
+	border: 2px solid transparent;
+	cursor: pointer;
+	transition: all 100ms ease;
+	padding: 0;
+}
+
+.color-swatch:hover {
+	transform: scale(1.15);
+	border-color: rgba(255, 255, 255, 0.4);
+}
+
+.color-swatch.selected {
+	border-color: white;
+	box-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+}
+
+.color-swatch.is-default {
+	border-color: var(--border-primary);
+}
+
+.custom-color-row {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.2rem 0.3rem;
+	cursor: pointer;
+	border-radius: 4px;
+	transition: background-color 100ms ease;
+}
+
+.custom-color-row:hover {
+	background-color: color-mix(in lch, transparent, white 15%);
+}
+
+.inline-color-input {
+	width: 1.5rem;
+	height: 1.5rem;
+	padding: 0;
+	border: 1px solid var(--border-primary);
+	border-radius: 4px;
+	cursor: pointer;
+	background: none;
+	-webkit-appearance: none;
+	appearance: none;
+}
+
+.inline-color-input::-webkit-color-swatch-wrapper {
+	padding: 1px;
+}
+
+.inline-color-input::-webkit-color-swatch {
+	border: none;
+	border-radius: 3px;
 }
 
 .sm-btn:hover {
@@ -834,13 +1042,11 @@ async function resetVolume(trackId: string) {
 
 /* Context Menu Styles */
 .context-menu {
-	position: absolute;
-	left: calc(100% + 0.5rem);
-	top: 0.5rem;
+	position: fixed;
 	width: 14rem;
 	border-radius: 0.75rem;
 	display: grid;
-	z-index: 100;
+	z-index: 220;
 }
 
 .inner-menu-wrap {
@@ -886,32 +1092,19 @@ async function resetVolume(trackId: string) {
 
 .menu-trigger-btn {
 	background-color: transparent;
-	border: none;
+	border: 1px solid var(--border-primary);
 	color: var(--text-color-secondary);
 	opacity: 1;
 	padding: 0;
-	border-radius: 0.25rem;
+	border-radius: 3px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	cursor: pointer;
-	height: min-content;
-	width: min-content;
-
-	margin-top: auto;
-	position: relative;
-}
-
-.menu-trigger-btn::after {
-	content: '';
-	position: absolute;
-	top: -2px;
-	bottom: -2px;
-	left: -5px;
-	right: -5px;
-	background-color: inherit;
-	border-radius: 0.6rem;
-	z-index: -1;
+	height: 2rem;
+	width: 2rem;
+	flex-shrink: 0;
+	line-height: 1;
 }
 
 .menu-trigger-btn:hover,
@@ -928,7 +1121,11 @@ async function resetVolume(trackId: string) {
 	outline: none;
 	width: 100%;
 	padding: 0;
-	font: inherit;
+	font-family: inherit;
+	font-size: inherit;
+	font-weight: inherit;
+	line-height: inherit;
+	letter-spacing: inherit;
 }
 
 .track-controls.is-muted {
