@@ -823,6 +823,13 @@ async function resetVolume(trackId: string) {
 }
 
 .track-title {
+	font-family:
+		inhesystem-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji',
+		'Segoe UI Emoji', 'Segoe UI Symbol';
+	font-weight: 400;
+	font-size: 13px;
+	line-height: 140%;
+	color: #fff;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
@@ -873,8 +880,8 @@ async function resetVolume(trackId: string) {
 
 .sm-btn {
 	background: transparent;
-	border: 1px solid var(--border-primary);
-	color: var(--text-color-secondary);
+	border: 1px solid color-mix(in lch, var(--border-primary), white 25%);
+	color: #fff;
 	font-size: 0.8rem;
 	font-weight: 700;
 	width: 2rem;
@@ -1092,8 +1099,8 @@ async function resetVolume(trackId: string) {
 
 .menu-trigger-btn {
 	background-color: transparent;
-	border: 1px solid var(--border-primary);
-	color: var(--text-color-secondary);
+	border: 1px solid color-mix(in lch, var(--border-primary), white 25%);
+	color: #fff;
 	opacity: 1;
 	padding: 0;
 	border-radius: 3px;
@@ -1121,10 +1128,12 @@ async function resetVolume(trackId: string) {
 	outline: none;
 	width: 100%;
 	padding: 0;
-	font-family: inherit;
-	font-size: inherit;
-	font-weight: inherit;
-	line-height: inherit;
+	font-family:
+		inhesystem-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji',
+		'Segoe UI Emoji', 'Segoe UI Symbol';
+	font-size: 13px;
+	font-weight: 400;
+	line-height: 140%;
 	letter-spacing: inherit;
 }
 
