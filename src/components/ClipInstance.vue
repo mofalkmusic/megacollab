@@ -5,13 +5,15 @@
 			waveformsDrawn,
 			canvasStyles,
 			props.audiofile.file_name,
+			props.clip?.muted,
 			isHovered,
 			isSelected,
 			!!dragSession,
 		]"
 		ref="clipWrapper"
 		class="outmostClipWrapper clip"
-		:class="{ selected: isSelected, 'is-dragging': !!dragSession }"
+		:data-clip-id="props.clip?.id"
+		:class="{ selected: isSelected, muted: !!props.clip?.muted, 'is-dragging': !!dragSession }"
 		:style="wrapperStyles"
 		@contextmenu.prevent="rip"
 	>
@@ -60,13 +62,21 @@ import {
 import {
 	TOTAL_BEATS,
 	altKeyPressed,
+	shiftKeyPressed,
 	clips,
 	controlKeyPressed,
 	dragFromPoolState,
 	pixelRatio,
-	rightMouseButtonPressedOnTimeline,
 	user,
 	selectedClipIds,
+	activeTool,
+	brushAudioFileId,
+	brushSourceClip,
+	multiDragState,
+	tracks,
+	pxTrackHeight,
+	audioPoolPreviewOnClick,
+	cloneDragPreview,
 } from '@/state'
 import type { Clip } from '~/schema'
 import {
@@ -89,6 +99,8 @@ import type { AudioFile } from '@/types'
 import { Trash2 } from 'lucide-vue-next'
 import { deleteAudio } from '@/socket/eventHandlers/audiofile_delete'
 import { useConsole } from '@/composables/useConsole'
+import { nanoid } from 'nanoid'
+import { previewAudioFile } from '@/audioEngine'
 
 const { userLog } = useConsole()
 
@@ -137,17 +149,198 @@ const outerClipCanvasStyles = computed((): CSSProperties => {
 async function rip() {
 	if (!props.clip) return
 	if (user.value?.banned_at) return
-	const res = await socket.emitWithAck('get:clip:delete', { id: props.clip.id })
+	const clipId = props.clip.id
+	const res = await socket.emitWithAck('get:clip:delete', { id: clipId })
 
 	if (res.success) {
 		clips.delete(res.data.id)
+		selectedClipIds.delete(res.data.id)
+		return
+	}
+
+	const message = res.error?.message ?? ''
+	// Idempotent behavior for races: clip may already be deleted on server.
+	if (message.includes('Failed to delete clip')) {
+		clips.delete(clipId)
+		selectedClipIds.delete(clipId)
 	}
 }
 
-const isSelected = computed(() => {
-	if (!props.clip) return false
-	return selectedClipIds.has(props.clip.id)
-})
+async function sliceClipAtPointer(clientX: number) {
+	if (!props.clip || !wrapperEl.value) return
+	if (user.value?.banned_at) return
+
+	const clip = clips.get(props.clip.id)
+	if (!clip) return
+
+	// Let the optimistic create flow finish first for temp clips.
+	if (clip.id.startsWith('__temp__')) return
+
+	const rect = wrapperEl.value.getBoundingClientRect()
+	const localX = clientX - rect.left
+	const rawCutBeat = clip.start_beat + px_to_beats(localX)
+	let cutBeat = altKeyPressed.value ? rawCutBeat : quantize_beats(rawCutBeat)
+
+	cutBeat = Math.max(clip.start_beat, Math.min(clip.end_beat, cutBeat))
+	const epsilon = 0.0001
+	if (cutBeat <= clip.start_beat + epsilon || cutBeat >= clip.end_beat - epsilon) return
+
+	const originalStartBeat = clip.start_beat
+	const originalEndBeat = clip.end_beat
+	const originalOffsetSeconds = clip.offset_seconds
+	const originalTrackId = clip.track_id
+	const secondOffsetSeconds = originalOffsetSeconds + beats_to_sec(cutBeat - originalStartBeat)
+
+	// Optimistic split preview.
+	clip.end_beat = cutBeat
+	const tempSecondId = `__temp__${nanoid()}`
+	const tempSecondClip: Clip = {
+		...clip,
+		id: tempSecondId,
+		start_beat: cutBeat,
+		end_beat: originalEndBeat,
+		offset_seconds: secondOffsetSeconds,
+		created_at: new Date().toISOString(),
+	}
+	clips.set(tempSecondId, tempSecondClip)
+
+	const updateRes = await socket.emitWithAck('get:clip:update', {
+		id: clip.id,
+		changes: {
+			end_beat: cutBeat,
+		},
+	})
+
+	if (!updateRes.success) {
+		clip.end_beat = originalEndBeat
+		clips.delete(tempSecondId)
+		userLog('SYSTEM', `Failed to slice clip: ${updateRes.error.message}`, {
+			textColor: 'red',
+		})
+		return
+	}
+
+	const persistedCutBeat = updateRes.data['end_beat'] ?? cutBeat
+	clip.end_beat = persistedCutBeat
+	const persistedSecondOffset =
+		originalOffsetSeconds + beats_to_sec(persistedCutBeat - originalStartBeat)
+
+	const createRes = await socket.emitWithAck('get:clip:create', {
+		audio_file_id: clip.audio_file_id,
+		track_id: originalTrackId,
+		start_beat: persistedCutBeat,
+		end_beat: originalEndBeat,
+		offset_seconds: persistedSecondOffset,
+		gain: clip.gain,
+		muted: clip.muted,
+	})
+
+	if (createRes.success) {
+		clips.delete(tempSecondId)
+		clips.set(createRes.data.id, createRes.data)
+		selectedClipIds.clear()
+		return
+	}
+
+	// Roll back split if second half creation failed.
+	clips.delete(tempSecondId)
+	const restoreRes = await socket.emitWithAck('get:clip:update', {
+		id: clip.id,
+		changes: {
+			end_beat: originalEndBeat,
+		},
+	})
+
+	if (restoreRes.success) {
+		clip.end_beat = restoreRes.data['end_beat'] ?? originalEndBeat
+	} else {
+		clip.end_beat = originalEndBeat
+	}
+
+	userLog('SYSTEM', `Failed to slice clip: ${createRes.error.message}`, {
+		textColor: 'red',
+	})
+}
+
+async function createClipClone(
+	sourceClip: Clip,
+	opts: { startBeat: number; endBeat: number; trackId: string },
+) {
+	if (user.value?.banned_at) return
+	if (sourceClip.id.startsWith('__temp__')) return
+
+	const tempId = `__temp__${nanoid()}`
+	const tempClone: Clip = {
+		...sourceClip,
+		id: tempId,
+		track_id: opts.trackId,
+		start_beat: opts.startBeat,
+		end_beat: opts.endBeat,
+		creator_user_id: user.value?.id ?? sourceClip.creator_user_id,
+		creator_display_name: user.value?.display_name ?? sourceClip.creator_display_name,
+		created_at: new Date().toISOString(),
+	}
+
+	clips.set(tempId, tempClone)
+
+	const res = await socket.emitWithAck('get:clip:create', {
+		audio_file_id: sourceClip.audio_file_id,
+		track_id: opts.trackId,
+		start_beat: opts.startBeat,
+		end_beat: opts.endBeat,
+		offset_seconds: sourceClip.offset_seconds,
+		gain: sourceClip.gain,
+		muted: sourceClip.muted,
+	})
+
+	if (res.success) {
+		clips.delete(tempId)
+		clips.set(res.data.id, res.data)
+		return
+	}
+
+	clips.delete(tempId)
+	userLog('SYSTEM', `Failed to clone clip: ${res.error.message}`, {
+		textColor: 'red',
+	})
+}
+
+type ClipMoveSnapshot = {
+	startBeat: number
+	endBeat: number
+	trackId: string
+}
+
+function rollbackMoveIfUnchanged(
+	clipId: string,
+	expected: ClipMoveSnapshot,
+	previous: ClipMoveSnapshot,
+) {
+	const current = clips.get(clipId)
+	if (!current) return
+
+	if (
+		current.start_beat !== expected.startBeat ||
+		current.end_beat !== expected.endBeat ||
+		current.track_id !== expected.trackId
+	) {
+		return
+	}
+
+	current.start_beat = previous.startBeat
+	current.end_beat = previous.endBeat
+	current.track_id = previous.trackId
+}
+
+function setBrushSourceFromClip(clip: Clip) {
+	brushAudioFileId.value = clip.audio_file_id
+	brushSourceClip.value = {
+		audioFileId: clip.audio_file_id,
+		lengthBeats: Math.max(0.01, clip.end_beat - clip.start_beat),
+		offsetSeconds: clip.offset_seconds,
+		gain: clip.gain,
+	}
+}
 
 const withinAudioPool = computed(() => !props.clip && typeof props.customWidthPx === 'number')
 
@@ -187,12 +380,32 @@ const initialClipState = computed(() => {
 })
 
 // Unified state that switches to drag preview values when active
+const isSelected = computed(() => {
+	if (!props.clip) return false
+	return selectedClipIds.has(props.clip.id)
+})
+
+const isPartOfMultiDrag = computed(() => {
+	return isSelected.value && multiDragState.value !== null
+})
+
 const displayState = computed(() => {
-	if (dragSession.value) {
+	if (dragSession.value && !dragSession.value.cloneSourceClipId) {
 		return {
 			start_beat: dragSession.value.previewStartBeat,
 			end_beat: dragSession.value.previewEndBeat,
 			offset_seconds: dragSession.value.previewOffsetSec,
+		}
+	}
+	if (isPartOfMultiDrag.value && multiDragState.value) {
+		const snap = multiDragState.value.clipSnapshots.get(props.clip!.id)
+		if (snap) {
+			const start = snap.origStartBeat + multiDragState.value.deltaBeats
+			return {
+				start_beat: start,
+				end_beat: snap.origEndBeat + multiDragState.value.deltaBeats,
+				offset_seconds: props.clip!.offset_seconds,
+			}
 		}
 	}
 	return initialClipState.value
@@ -211,10 +424,36 @@ const wrapperStyles = computed((): CSSProperties => {
 		left: `${beats_to_px(displayState.value.start_beat)}px`,
 	}
 
-	if (dragSession.value && dragSession.value.side === 'move') {
+	if (
+		dragSession.value &&
+		dragSession.value.side === 'move' &&
+		!dragSession.value.cloneSourceClipId
+	) {
 		const offset = dragSession.value.verticalOffsetPx
 		if (offset !== 0) {
 			base.top = `${offset}px`
+		}
+	} else if (
+		isPartOfMultiDrag.value &&
+		multiDragState.value &&
+		multiDragState.value.trackDelta !== 0
+	) {
+		// Multi-drag vertical movement visual offset
+		const snap = multiDragState.value.clipSnapshots.get(props.clip!.id)
+		if (snap && wrapperEl.value) {
+			const sorted = [...tracks.entries()].sort((a, b) => a[1].order_index - b[1].order_index)
+			const origTrackIdx = sorted.findIndex(([id]) => id === snap.origTrackId)
+			if (origTrackIdx !== -1) {
+				let targetTrackIdx = origTrackIdx + multiDragState.value.trackDelta
+				targetTrackIdx = Math.max(0, Math.min(sorted.length - 1, targetTrackIdx))
+
+				if (targetTrackIdx !== origTrackIdx) {
+					// We need to calculate pixel offset between orig track and target track
+					// This is tricky because we are inside the original track DOM
+					const offset = (targetTrackIdx - origTrackIdx) * pxTrackHeight
+					base.top = `${offset}px`
+				}
+			}
 		}
 	}
 
@@ -243,13 +482,38 @@ const dragSession = ref<{
 	currentY: number
 	previewTrackId: string | null
 	verticalOffsetPx: number
+	cloneSourceClipId: string | null
 	sourceTrackRect?: DOMRect
 } | null>(null)
+
+function clearOwnedMultiDrag() {
+	if (!props.clip || !multiDragState.value) return
+	if (multiDragState.value.sourceClipId === props.clip.id) {
+		multiDragState.value = null
+	}
+}
+
+function clearCloneDragPreview() {
+	cloneDragPreview.visible = false
+	cloneDragPreview.trackId = null
+	cloneDragPreview.audioFileId = null
+	cloneDragPreview.muted = false
+}
+
+function getTrackTopWithinTracksWrapper(trackRect?: DOMRect): number {
+	if (!trackRect || !wrapperEl.value) return 0
+	const tracksWrapper = wrapperEl.value.closest('.all-tracks-wrapper') as HTMLElement | null
+	if (!tracksWrapper) return 0
+	const wrapperRect = tracksWrapper.getBoundingClientRect()
+	return trackRect.top - wrapperRect.top
+}
 
 const windowFocused = useWindowFocus()
 watch(windowFocused, (focused) => {
 	if (!focused) {
 		dragSession.value = null
+		clearOwnedMultiDrag()
+		clearCloneDragPreview()
 	}
 })
 
@@ -261,7 +525,9 @@ onMounted(() => {
 
 		useEventListener(wrapperEl, 'pointerdown', (event) => {
 			if (user.value?.banned_at) return
+			if (event.button !== 0) return
 			event.preventDefault()
+
 			const rect = wrapperEl.value!.getBoundingClientRect()
 			const offsetX = event.clientX - rect.left
 
@@ -271,6 +537,31 @@ onMounted(() => {
 				clientX: event.clientX,
 				clientY: event.clientY,
 			}
+
+			const startX = event.clientX
+			const startY = event.clientY
+			const dragThreshold = 5
+			const dragThresholdSq = dragThreshold * dragThreshold
+			let moved = false
+
+			const onMove = (e: PointerEvent) => {
+				if (moved) return
+				const dx = e.clientX - startX
+				const dy = e.clientY - startY
+				moved = dx * dx + dy * dy > dragThresholdSq
+			}
+
+			const onUp = () => {
+				stopMove()
+				stopUp()
+
+				if (moved) return
+				if (!audioPoolPreviewOnClick.value) return
+				void previewAudioFile(props.audiofile.id)
+			}
+
+			const stopMove = useEventListener(window, 'pointermove', onMove)
+			const stopUp = useEventListener(window, 'pointerup', onUp)
 		})
 		return
 	}
@@ -285,15 +576,78 @@ onMounted(() => {
 			if (event.defaultPrevented) return
 			if (user.value?.banned_at) return
 
-			if (event.button === 2) {
-				return rip()
+			if (event.button !== 0) return
+			if (cloneDragPreview.visible) clearCloneDragPreview()
+			if (controlKeyPressed.value) {
+				// Ctrl+click: toggle this clip in/out of selection
+				if (props.clip) {
+					if (selectedClipIds.has(props.clip.id)) {
+						selectedClipIds.delete(props.clip.id)
+					} else {
+						selectedClipIds.add(props.clip.id)
+					}
+				}
+				event.preventDefault()
+				event.stopPropagation()
+				return
 			}
 
-			if (event.button !== 0) return
-			if (controlKeyPressed.value) return // Allow bubble for selection
+			if (props.clip && activeTool.value === 'hand') {
+				setBrushSourceFromClip(props.clip)
+			}
+
+			if (activeTool.value === 'mute') {
+				return
+			}
+
+			// In brush modes, clicking an existing clip acts as an eyedropper:
+			// update brush source only on a true click (not a drag),
+			// without moving or placing on this interaction.
+			if (
+				props.clip &&
+				(activeTool.value === 'brush' || activeTool.value === 'magic-brush')
+			) {
+				event.preventDefault()
+				event.stopPropagation()
+				clearOwnedMultiDrag()
+
+				const sourceClipId = props.clip.id
+				const startX = event.clientX
+				const startY = event.clientY
+				const dragThresholdPx = 5
+				const dragThresholdSq = dragThresholdPx * dragThresholdPx
+				let moved = false
+
+				const onMove = (e: PointerEvent) => {
+					if (moved) return
+					const dx = e.clientX - startX
+					const dy = e.clientY - startY
+					moved = dx * dx + dy * dy > dragThresholdSq
+				}
+
+				const onUp = () => {
+					stopMove()
+					stopUp()
+					if (moved) return
+
+					const sourceClip = clips.get(sourceClipId)
+					if (!sourceClip) return
+					setBrushSourceFromClip(sourceClip)
+				}
+
+				const stopMove = useEventListener(window, 'pointermove', onMove)
+				const stopUp = useEventListener(window, 'pointerup', onUp)
+				return
+			}
 
 			event.preventDefault()
 			event.stopPropagation()
+			clearOwnedMultiDrag()
+
+			if (activeTool.value === 'slice') {
+				void sliceClipAtPointer(event.clientX)
+				return
+			}
 
 			const parentTrack = (event.currentTarget as HTMLElement).closest('.track')
 
@@ -301,6 +655,8 @@ onMounted(() => {
 			if (parentTrack) {
 				sRect = parentTrack.getBoundingClientRect()
 			}
+			const isShiftCloneDrag =
+				!!props.clip && activeTool.value === 'hand' && shiftKeyPressed.value
 
 			dragSession.value = {
 				side: 'move',
@@ -315,11 +671,49 @@ onMounted(() => {
 				currentY: event.clientY,
 				previewTrackId: props.clip!.track_id,
 				verticalOffsetPx: 0,
+				cloneSourceClipId: isShiftCloneDrag ? props.clip!.id : null,
 				sourceTrackRect: sRect,
+			}
+
+			if (isShiftCloneDrag && props.clip) {
+				cloneDragPreview.visible = true
+				cloneDragPreview.trackId = props.clip.track_id
+				cloneDragPreview.audioFileId = props.clip.audio_file_id
+				cloneDragPreview.startBeat = initialClipState.value.start_beat
+				cloneDragPreview.endBeat = initialClipState.value.end_beat
+				cloneDragPreview.offsetSeconds = props.clip.offset_seconds
+				cloneDragPreview.gain = props.clip.gain
+				cloneDragPreview.muted = props.clip.muted
+				cloneDragPreview.topPx = getTrackTopWithinTracksWrapper(sRect)
+			} else {
+				clearCloneDragPreview()
 			}
 
 			const el = event.currentTarget as HTMLElement
 			el.setPointerCapture(event.pointerId)
+
+			// Initialize multi-drag if this clip is part of a selection
+			if (!isShiftCloneDrag && isSelected.value && !controlKeyPressed.value) {
+				const snapshots = new Map()
+				for (const id of selectedClipIds) {
+					const c = clips.get(id)
+					if (c) {
+						snapshots.set(id, {
+							origStartBeat: c.start_beat,
+							origEndBeat: c.end_beat,
+							origTrackId: c.track_id,
+						})
+					}
+				}
+				multiDragState.value = {
+					startX: event.clientX,
+					startY: event.clientY,
+					deltaBeats: 0,
+					trackDelta: 0,
+					sourceClipId: props.clip!.id,
+					clipSnapshots: snapshots,
+				}
+			}
 
 			const onMove = (e: PointerEvent) => {
 				const sesh = dragSession.value
@@ -334,17 +728,43 @@ onMounted(() => {
 				if (!altKeyPressed.value) {
 					deltaBeats = quantize_beats(deltaBeats)
 				}
+				const isLeaderOfMultiDrag =
+					multiDragState.value && multiDragState.value.sourceClipId === props.clip!.id
+				let clampedDeltaBeats = deltaBeats
+
+				if (isLeaderOfMultiDrag && multiDragState.value) {
+					let minStartBeat = Number.POSITIVE_INFINITY
+					let maxEndBeat = Number.NEGATIVE_INFINITY
+
+					for (const snap of multiDragState.value.clipSnapshots.values()) {
+						minStartBeat = Math.min(minStartBeat, snap.origStartBeat)
+						maxEndBeat = Math.max(maxEndBeat, snap.origEndBeat)
+					}
+
+					if (
+						Number.isFinite(minStartBeat) &&
+						Number.isFinite(maxEndBeat) &&
+						minStartBeat !== Number.POSITIVE_INFINITY &&
+						maxEndBeat !== Number.NEGATIVE_INFINITY
+					) {
+						const minDelta = -minStartBeat
+						const maxDelta = TOTAL_BEATS - maxEndBeat
+						clampedDeltaBeats = Math.max(minDelta, Math.min(maxDelta, deltaBeats))
+					}
+				}
 
 				const currentDuration = sesh.origEndBeat - sesh.origStartBeat
-				let newStart = sesh.origStartBeat + deltaBeats
-
-				// Clamp start to 0
-				newStart = Math.max(0, newStart)
-
-				let newEnd = newStart + currentDuration
-
-				// Crop end to TOTAL_BEATS
-				newEnd = Math.min(newEnd, TOTAL_BEATS)
+				let newStart: number
+				let newEnd: number
+				if (isLeaderOfMultiDrag) {
+					newStart = sesh.origStartBeat + clampedDeltaBeats
+					newEnd = sesh.origEndBeat + clampedDeltaBeats
+				} else {
+					newStart = sesh.origStartBeat + clampedDeltaBeats
+					newStart = Math.max(0, newStart)
+					newEnd = newStart + currentDuration
+					newEnd = Math.min(newEnd, TOTAL_BEATS)
+				}
 
 				sesh.previewStartBeat = newStart
 				sesh.previewEndBeat = newEnd
@@ -362,6 +782,72 @@ onMounted(() => {
 
 					sesh.verticalOffsetPx = snapY
 					sesh.previewTrackId = trackEl.dataset.trackId ?? null
+
+					if (sesh.cloneSourceClipId) {
+						cloneDragPreview.topPx = getTrackTopWithinTracksWrapper(targetRect)
+					}
+				}
+
+				if (sesh.cloneSourceClipId) {
+					cloneDragPreview.visible = true
+					cloneDragPreview.trackId = sesh.previewTrackId
+					cloneDragPreview.startBeat = sesh.previewStartBeat
+					cloneDragPreview.endBeat = sesh.previewEndBeat
+				}
+
+				// Update global multi-drag state if we are the leader
+				if (isLeaderOfMultiDrag && multiDragState.value) {
+					const state = multiDragState.value
+					const sorted = [...tracks.entries()].sort(
+						(a, b) => a[1].order_index - b[1].order_index,
+					)
+					const origTrackIdx = sorted.findIndex(([id]) => id === props.clip!.track_id)
+					const hoveredTrackIdx = sesh.previewTrackId
+						? sorted.findIndex(([id]) => id === sesh.previewTrackId)
+						: -1
+					const rawTrackDelta =
+						origTrackIdx !== -1 && hoveredTrackIdx !== -1
+							? hoveredTrackIdx - origTrackIdx
+							: state.trackDelta
+
+					let minOrigTrackIdx = Number.POSITIVE_INFINITY
+					let maxOrigTrackIdx = Number.NEGATIVE_INFINITY
+					for (const snap of state.clipSnapshots.values()) {
+						const idx = sorted.findIndex(([id]) => id === snap.origTrackId)
+						if (idx === -1) continue
+						minOrigTrackIdx = Math.min(minOrigTrackIdx, idx)
+						maxOrigTrackIdx = Math.max(maxOrigTrackIdx, idx)
+					}
+
+					let clampedTrackDelta = rawTrackDelta
+					if (
+						Number.isFinite(minOrigTrackIdx) &&
+						Number.isFinite(maxOrigTrackIdx) &&
+						minOrigTrackIdx !== Number.POSITIVE_INFINITY &&
+						maxOrigTrackIdx !== Number.NEGATIVE_INFINITY
+					) {
+						const minTrackDelta = -minOrigTrackIdx
+						const maxTrackDelta = sorted.length - 1 - maxOrigTrackIdx
+						clampedTrackDelta = Math.max(
+							minTrackDelta,
+							Math.min(maxTrackDelta, rawTrackDelta),
+						)
+					}
+
+					if (origTrackIdx !== -1) {
+						const clampedLeaderIdx = origTrackIdx + clampedTrackDelta
+						if (clampedLeaderIdx >= 0 && clampedLeaderIdx < sorted.length) {
+							sesh.previewTrackId = sorted[clampedLeaderIdx]![0]
+							sesh.verticalOffsetPx =
+								(clampedLeaderIdx - origTrackIdx) * pxTrackHeight
+						}
+					}
+
+					multiDragState.value = {
+						...state,
+						deltaBeats: clampedDeltaBeats,
+						trackDelta: clampedTrackDelta,
+					}
 				}
 			}
 
@@ -371,41 +857,173 @@ onMounted(() => {
 				stopUp()
 
 				const sesh = dragSession.value
-				if (!sesh || !props.clip) return
-
-				// Commit changes
-				const clip = clips.get(props.clip.id)
-				if (!clip) return
-
-				const changes: any = {
-					start_beat: sesh.previewStartBeat,
-					end_beat: sesh.previewEndBeat,
-				}
-
-				if (sesh.previewTrackId && sesh.previewTrackId !== clip.track_id) {
-					changes.track_id = sesh.previewTrackId
-				}
-
-				if (clip.id.startsWith('__temp__')) {
-					clip.start_beat = sesh.previewStartBeat
-					clip.end_beat = sesh.previewEndBeat
-					if (sesh.previewTrackId) clip.track_id = sesh.previewTrackId
+				if (!sesh || !props.clip) {
+					clearOwnedMultiDrag()
+					clearCloneDragPreview()
 					dragSession.value = null
 					return
 				}
 
-				const res = await socket.emitWithAck('get:clip:update', {
-					id: clip.id,
-					changes,
-				})
+				const leaderClipId = props.clip.id
+				const isLeaderOfMultiDrag =
+					multiDragState.value && multiDragState.value.sourceClipId === leaderClipId
 
-				if (res.success) {
-					clip.start_beat = res.data['start_beat'] ?? sesh.previewStartBeat
-					clip.end_beat = res.data['end_beat'] ?? sesh.previewEndBeat
-					if (res.data['track_id']) clip.track_id = res.data['track_id']
+				try {
+					if (isLeaderOfMultiDrag && multiDragState.value) {
+						const state = multiDragState.value
+						const sorted = [...tracks.entries()].sort(
+							(a, b) => a[1].order_index - b[1].order_index,
+						)
+
+						// Commit changes for all clips in the selection
+						for (const [id, snap] of state.clipSnapshots) {
+							const clip = clips.get(id)
+							if (!clip) continue
+
+							const newStart = snap.origStartBeat + state.deltaBeats
+							const newEnd = snap.origEndBeat + state.deltaBeats
+
+							const origTrackIdx = sorted.findIndex(
+								([tid]) => tid === snap.origTrackId,
+							)
+							const targetTrackIdx =
+								origTrackIdx !== -1 ? origTrackIdx + state.trackDelta : -1
+							const targetTrackId =
+								sorted.length > 0 &&
+								targetTrackIdx >= 0 &&
+								targetTrackIdx < sorted.length
+									? sorted[targetTrackIdx]![0]
+									: snap.origTrackId
+							const previousSnapshot: ClipMoveSnapshot = {
+								startBeat: clip.start_beat,
+								endBeat: clip.end_beat,
+								trackId: clip.track_id,
+							}
+							const expectedSnapshot: ClipMoveSnapshot = {
+								startBeat: newStart,
+								endBeat: newEnd,
+								trackId: targetTrackId,
+							}
+
+							// Optimistic update
+							clip.start_beat = newStart
+							clip.end_beat = newEnd
+							if (targetTrackId) clip.track_id = targetTrackId
+
+							// Temp clips are local-only optimistic placeholders.
+							if (clip.id.startsWith('__temp__')) continue
+
+							const changes: any = {
+								start_beat: newStart,
+								end_beat: newEnd,
+							}
+							if (targetTrackId !== previousSnapshot.trackId) {
+								changes.track_id = targetTrackId
+							}
+
+							socket
+								.emitWithAck('get:clip:update', {
+									id: clip.id,
+									changes,
+								})
+								.then((res) => {
+									if (res.success) {
+										clip.start_beat = res.data['start_beat'] ?? newStart
+										clip.end_beat = res.data['end_beat'] ?? newEnd
+										if (res.data['track_id'])
+											clip.track_id = res.data['track_id']
+										return
+									}
+
+									rollbackMoveIfUnchanged(id, expectedSnapshot, previousSnapshot)
+									userLog('SYSTEM', `Failed to move clip: ${res.error.message}`, {
+										textColor: 'red',
+									})
+								})
+								.catch(() => {
+									rollbackMoveIfUnchanged(id, expectedSnapshot, previousSnapshot)
+									userLog('SYSTEM', 'Failed to move clip: network error.', {
+										textColor: 'red',
+									})
+								})
+						}
+					} else {
+						// Single clip commit (standard logic)
+						const clip = clips.get(props.clip.id)
+						if (!clip) return
+
+						if (sesh.cloneSourceClipId) {
+							const sourceClip = clips.get(sesh.cloneSourceClipId)
+							if (!sourceClip) return
+
+							await createClipClone(sourceClip, {
+								startBeat: sesh.previewStartBeat,
+								endBeat: sesh.previewEndBeat,
+								trackId: sesh.previewTrackId ?? sourceClip.track_id,
+							})
+							return
+						}
+
+						const changes: any = {
+							start_beat: sesh.previewStartBeat,
+							end_beat: sesh.previewEndBeat,
+						}
+
+						if (sesh.previewTrackId && sesh.previewTrackId !== clip.track_id) {
+							changes.track_id = sesh.previewTrackId
+						}
+
+						if (clip.id.startsWith('__temp__')) {
+							clip.start_beat = sesh.previewStartBeat
+							clip.end_beat = sesh.previewEndBeat
+							if (sesh.previewTrackId) clip.track_id = sesh.previewTrackId
+							return
+						}
+
+						const previousSnapshot: ClipMoveSnapshot = {
+							startBeat: clip.start_beat,
+							endBeat: clip.end_beat,
+							trackId: clip.track_id,
+						}
+						const expectedSnapshot: ClipMoveSnapshot = {
+							startBeat: sesh.previewStartBeat,
+							endBeat: sesh.previewEndBeat,
+							trackId: sesh.previewTrackId ?? clip.track_id,
+						}
+
+						// Optimistic update
+						clip.start_beat = sesh.previewStartBeat
+						clip.end_beat = sesh.previewEndBeat
+						if (sesh.previewTrackId) clip.track_id = sesh.previewTrackId
+
+						try {
+							const res = await socket.emitWithAck('get:clip:update', {
+								id: clip.id,
+								changes,
+							})
+
+							if (res.success) {
+								clip.start_beat = res.data['start_beat'] ?? sesh.previewStartBeat
+								clip.end_beat = res.data['end_beat'] ?? sesh.previewEndBeat
+								if (res.data['track_id']) clip.track_id = res.data['track_id']
+							} else {
+								rollbackMoveIfUnchanged(clip.id, expectedSnapshot, previousSnapshot)
+								userLog('SYSTEM', `Failed to move clip: ${res.error.message}`, {
+									textColor: 'red',
+								})
+							}
+						} catch {
+							rollbackMoveIfUnchanged(clip.id, expectedSnapshot, previousSnapshot)
+							userLog('SYSTEM', 'Failed to move clip: network error.', {
+								textColor: 'red',
+							})
+						}
+					}
+				} finally {
+					clearOwnedMultiDrag()
+					clearCloneDragPreview()
+					dragSession.value = null
 				}
-
-				dragSession.value = null
 			}
 
 			const stopMove = useEventListener(window, 'pointermove', onMove)
@@ -419,9 +1037,6 @@ onMounted(() => {
 		'pointerdown',
 		(event) => {
 			if (user.value?.banned_at) return
-			if (event.button === 2) {
-				return rip()
-			}
 
 			if (event.button !== 0) return
 			event.preventDefault()
@@ -440,6 +1055,7 @@ onMounted(() => {
 				currentY: event.clientY,
 				previewTrackId: props.clip!.track_id, // We know clip exists if not withinAudioPool
 				verticalOffsetPx: 0,
+				cloneSourceClipId: null,
 			}
 
 			const el = event.currentTarget as HTMLElement
@@ -543,9 +1159,6 @@ onMounted(() => {
 		'pointerdown',
 		(event) => {
 			if (user.value?.banned_at) return
-			if (event.button === 2) {
-				return rip()
-			}
 
 			if (event.button !== 0) return
 			event.preventDefault()
@@ -564,6 +1177,7 @@ onMounted(() => {
 				currentY: event.clientY,
 				previewTrackId: props.clip!.track_id,
 				verticalOffsetPx: 0,
+				cloneSourceClipId: null,
 			}
 
 			const el = event.currentTarget as HTMLElement
@@ -636,12 +1250,6 @@ onMounted(() => {
 		},
 		{ passive: false },
 	)
-
-	useEventListener(wrapperEl, 'pointerenter', () => {
-		if (rightMouseButtonPressedOnTimeline.value) {
-			rip()
-		}
-	})
 })
 
 const canvasStyles = computed((): CSSProperties => {
@@ -787,6 +1395,11 @@ function getWaveform(
 
 .outmostClipWrapper.selected .outerClipCanvasWrap {
 	background-color: rgba(255, 25, 25, 0.2) !important;
+}
+
+.outmostClipWrapper.muted:not(.selected) {
+	opacity: 0.5;
+	filter: grayscale(1) saturate(0.2);
 }
 
 .clipHeader {

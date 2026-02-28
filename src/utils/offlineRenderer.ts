@@ -70,6 +70,8 @@ export async function renderPlaylistOffline(): Promise<AudioBuffer> {
 
 	// Schedule every clip
 	for (const clip of snapshot.clips) {
+		if (clip.muted) continue
+
 		const buffer = snapshot.buffers.get(clip.audio_file_id)
 		const trackGainNode = trackGainNodes.get(clip.track_id)
 		if (!buffer || !trackGainNode) continue

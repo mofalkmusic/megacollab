@@ -409,7 +409,8 @@ io.on('connection', async (socket) => {
 				})
 				return
 			}
-			const { start_beat, end_beat, audio_file_id, track_id, offset_seconds, gain } = data
+			const { start_beat, end_beat, audio_file_id, track_id, offset_seconds, gain, muted } =
+				data
 
 			const newClip: Omit<Clip, 'created_at'> = {
 				id: nanoid(),
@@ -420,6 +421,7 @@ io.on('connection', async (socket) => {
 				audio_file_id,
 				gain: gain ?? DEFAULT_GAIN,
 				offset_seconds: offset_seconds ?? 0,
+				muted: muted ?? false,
 				track_id,
 			}
 
@@ -442,6 +444,81 @@ io.on('connection', async (socket) => {
 					userId: user.id,
 				})
 			} catch (err) {
+				const error = err instanceof Error ? err.message : 'Unknown error'
+				callback({
+					success: false,
+					error: {
+						status: 'SERVER_ERROR',
+						message: `Database error: ${error}`,
+					},
+				})
+			}
+		})
+
+		socket.on('get:clips:create:batch', async (data, callback) => {
+			if (user.banned_at) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are banned and cannot create clips.',
+					},
+				})
+				return
+			}
+
+			const { clips: inputClips } = data
+
+			const createdClips: Clip[] = []
+			try {
+				for (const input of inputClips) {
+					const newClip: Omit<Clip, 'created_at'> = {
+						id: nanoid(),
+						creator_user_id: user.id,
+						creator_display_name: user.display_name,
+						start_beat: input.start_beat,
+						end_beat: input.end_beat,
+						audio_file_id: input.audio_file_id,
+						gain: input.gain ?? DEFAULT_GAIN,
+						offset_seconds: input.offset_seconds ?? 0,
+						muted: input.muted ?? false,
+						track_id: input.track_id,
+					}
+
+					const clip = await db.createClip(newClip)
+					createdClips.push(clip)
+				}
+
+				callback({
+					success: true,
+					data: createdClips,
+				})
+
+				for (const clip of createdClips) {
+					socket.broadcast.emit('clip:create', clip)
+				}
+
+				history.push({
+					type: 'CLIP_CREATE_BATCH',
+					data: {
+						payload: {
+							clips: inputClips,
+							ids: createdClips.map((clip) => clip.id),
+						},
+						inverse: createdClips.map((clip) => clip.id),
+					},
+					userId: user.id,
+				})
+			} catch (err) {
+				// Best effort rollback for partial writes in case one insert fails.
+				for (const clip of createdClips) {
+					try {
+						await db.deleteClip(clip.id)
+					} catch {
+						// ignore rollback errors, original error below is more relevant
+					}
+				}
+
 				const error = err instanceof Error ? err.message : 'Unknown error'
 				callback({
 					success: false,

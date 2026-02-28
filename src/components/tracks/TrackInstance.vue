@@ -129,6 +129,7 @@ const { isOverDropZone } = useDropZone(trackEl, {
 			end_beat: endBeat,
 			offset_seconds: 0,
 			gain: 1,
+			muted: false,
 			created_at: new Date().toISOString(),
 		}
 
@@ -149,6 +150,7 @@ const { isOverDropZone } = useDropZone(trackEl, {
 					end_beat: currentClip.end_beat,
 					offset_seconds: currentClip.offset_seconds,
 					gain: currentClip.gain,
+					muted: currentClip.muted,
 				})
 
 				if (syncRes.success) {

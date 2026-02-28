@@ -10,6 +10,10 @@ type HistoryEventMap = {
 		payload: ClientRequestPayload<'get:clip:create'> & { id: Clip['id'] }
 		inverse: ServerEmitPayload<'clip:delete'>
 	}
+	CLIP_CREATE_BATCH: {
+		payload: ClientRequestPayload<'get:clips:create:batch'> & { ids: Clip['id'][] }
+		inverse: ServerEmitPayload<'clip:delete'>[]
+	}
 	CLIP_DELETE: {
 		payload: ClientRequestPayload<'get:clip:delete'>
 		inverse: ServerEmitPayload<'clip:create'>
@@ -108,6 +112,33 @@ class HistoryManager {
 						}
 					}
 
+					break
+				}
+
+				case 'CLIP_CREATE_BATCH': {
+					const clipIds = action.data.inverse
+
+					for (const clipId of clipIds) {
+						let current: Awaited<ReturnType<typeof db.getClip>>
+
+						try {
+							current = await db.getClip(clipId)
+						} catch {
+							return { success: false, error: 'Failed to retrieve clip status.' }
+						}
+
+						// Best-effort idempotency: if already gone, just continue.
+						if (!current) continue
+
+						try {
+							await db.deleteClip(clipId)
+							socketBroadcast('clip:delete', clipId)
+						} catch {
+							return { success: false, error: 'Failed to delete pasted clips.' }
+						}
+					}
+
+					processed = true
 					break
 				}
 

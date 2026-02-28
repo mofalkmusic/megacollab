@@ -31,6 +31,7 @@ export const ServerClipSchema = z.object({
 	end_beat: z.number(),
 	offset_seconds: z.number(),
 	gain: z.number(),
+	muted: z.boolean(),
 	created_at: z.iso.datetime({ offset: true }),
 })
 

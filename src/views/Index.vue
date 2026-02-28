@@ -77,6 +77,8 @@
 				style="width: 80px; margin-left: 1rem"
 			/>
 
+			<Toolbar />
+
 			<div style="flex-grow: 1"></div>
 
 			<button
@@ -128,6 +130,40 @@
 						zIndex: 10,
 						pointerEvents: 'none',
 						opacity: 0.7,
+					}"
+				/>
+
+				<!-- Brush hover preview -->
+				<ClipInstance
+					v-if="brushPreviewClip && brushPreviewAudioFile && brushPreview.visible"
+					:audiofile="brushPreviewAudioFile"
+					:clip="brushPreviewClip"
+					:style="{
+						position: 'absolute',
+						height: `${pxTrackHeight}px`,
+						top: `${brushPreview.topPx}px`,
+						zIndex: 10,
+						pointerEvents: 'none',
+						opacity: 0.4,
+					}"
+				/>
+
+				<!-- Shift clone drag preview -->
+				<ClipInstance
+					v-if="
+						cloneDragPreviewClip &&
+						cloneDragPreviewAudioFile &&
+						cloneDragPreview.visible
+					"
+					:audiofile="cloneDragPreviewAudioFile"
+					:clip="cloneDragPreviewClip"
+					:style="{
+						position: 'absolute',
+						height: `${pxTrackHeight}px`,
+						top: `${cloneDragPreview.topPx}px`,
+						zIndex: 10,
+						pointerEvents: 'none',
+						opacity: 0.45,
 					}"
 				/>
 
@@ -233,6 +269,10 @@ import {
 	bpm,
 	selectedClipIds,
 	showAdminPanel,
+	activeTool,
+	brushAudioFileId,
+	brushSourceClip,
+	rightMouseButtonPressedOnTimeline,
 } from '@/state'
 import TrackInstance from '@/components/tracks/TrackInstance.vue'
 import {
@@ -265,6 +305,7 @@ import {
 	altKeyPressed,
 	audiofiles,
 	clips,
+	cloneDragPreview,
 	dragFromPoolState,
 	pxTrackHeight,
 	TOTAL_BEATS,
@@ -294,6 +335,9 @@ import GlobalLoadingIndicator from '@/components/GlobalLoadingIndicator.vue'
 import { nanoid } from 'nanoid'
 import CustomMenuIcon from '@/components/CustomMenuIcon.vue'
 import { useConsole } from '@/composables/useConsole'
+import { useClipboardActions } from '@/composables/useClipboardActions'
+import { useBrushTool } from '@/composables/useBrushTool'
+import Toolbar from '@/components/Toolbar.vue'
 import AdminUserList from '@/components/AdminUserList.vue'
 import { renderPlaylistOffline } from '@/utils/offlineRenderer'
 import { encodeWav, encodeMp3 } from '@/utils/encoders'
@@ -497,6 +541,253 @@ function updateDims() {
 const tracksWrapperEl = useTemplateRef('tracksWrapper')
 const tracksContainerInnerEl = useTemplateRef('tracksContainerInner')
 useResizeObserver(tracksWrapperEl, updateDims)
+
+// Clipboard & Brush tools
+useClipboardActions()
+const { brushPreview } = useBrushTool(tracksWrapperEl)
+
+const brushPreviewAudioFile = computed(() => {
+	if (!brushPreview.visible || !brushPreview.trackId) return null
+	if (!brushAudioFileId.value) return null
+	return audiofiles.get(brushAudioFileId.value) ?? null
+})
+
+const brushPreviewClip = computed<Clip | null>(() => {
+	if (!brushPreviewAudioFile.value || !brushPreview.visible || !brushPreview.trackId) return null
+	const previewUsesCustomSource =
+		brushSourceClip.value &&
+		brushSourceClip.value.audioFileId === brushPreviewAudioFile.value.id
+
+	return {
+		id: '__brush_preview__',
+		track_id: brushPreview.trackId,
+		audio_file_id: brushPreviewAudioFile.value.id,
+		creator_user_id: 'preview',
+		creator_display_name: '',
+		start_beat: brushPreview.startBeat,
+		end_beat: brushPreview.endBeat,
+		offset_seconds: previewUsesCustomSource
+			? Math.max(0, brushSourceClip.value!.offsetSeconds)
+			: 0,
+		gain: previewUsesCustomSource ? brushSourceClip.value!.gain : 1,
+		muted: false,
+		created_at: new Date().toISOString(),
+	}
+})
+
+const cloneDragPreviewAudioFile = computed(() => {
+	if (!cloneDragPreview.visible || !cloneDragPreview.trackId || !cloneDragPreview.audioFileId)
+		return null
+	return audiofiles.get(cloneDragPreview.audioFileId) ?? null
+})
+
+const cloneDragPreviewClip = computed<Clip | null>(() => {
+	if (
+		!cloneDragPreview.visible ||
+		!cloneDragPreview.trackId ||
+		!cloneDragPreviewAudioFile.value
+	) {
+		return null
+	}
+
+	return {
+		id: '__clone_drag_preview__',
+		track_id: cloneDragPreview.trackId,
+		audio_file_id: cloneDragPreviewAudioFile.value.id,
+		creator_user_id: 'preview',
+		creator_display_name: '',
+		start_beat: cloneDragPreview.startBeat,
+		end_beat: cloneDragPreview.endBeat,
+		offset_seconds: Math.max(0, cloneDragPreview.offsetSeconds),
+		gain: cloneDragPreview.gain,
+		muted: cloneDragPreview.muted,
+		created_at: new Date().toISOString(),
+	}
+})
+
+const pendingRightSwipeDeleteIds = new Set<string>()
+const lastRightSwipePoint = shallowRef<{ x: number; y: number } | null>(null)
+
+function collectClipIdsAtPoint(x: number, y: number, ids: Set<string>) {
+	const els = document.elementsFromPoint(Math.round(x), Math.round(y))
+	for (const el of els) {
+		if (!(el instanceof HTMLElement)) continue
+		const clipEl = el.closest('.clip') as HTMLElement | null
+		if (!clipEl) continue
+		const clipId = clipEl.dataset.clipId
+		if (!clipId || clipId === '__brush_preview__' || clipId === '__clone_drag_preview__')
+			continue
+		ids.add(clipId)
+	}
+}
+
+function collectClipIdsAlongSegment(
+	from: { x: number; y: number },
+	to: { x: number; y: number },
+): Set<string> {
+	const ids = new Set<string>()
+	const dx = to.x - from.x
+	const dy = to.y - from.y
+	const dist = Math.hypot(dx, dy)
+	const steps = Math.max(1, Math.ceil(dist / 8))
+
+	for (let i = 0; i <= steps; i++) {
+		const t = i / steps
+		collectClipIdsAtPoint(from.x + dx * t, from.y + dy * t, ids)
+	}
+
+	return ids
+}
+
+async function deleteClipByRightSwipe(clipId: string) {
+	if (pendingRightSwipeDeleteIds.has(clipId)) return
+	const clip = clips.get(clipId)
+	if (!clip) return
+
+	const wasSelected = selectedClipIds.has(clipId)
+	pendingRightSwipeDeleteIds.add(clipId)
+	selectedClipIds.delete(clipId)
+	clips.delete(clipId)
+
+	if (clipId.startsWith('__temp__')) {
+		pendingRightSwipeDeleteIds.delete(clipId)
+		return
+	}
+
+	const res = await socket.emitWithAck('get:clip:delete', { id: clipId })
+	if (!res.success) {
+		const message = res.error?.message ?? ''
+		// Idempotent behavior for races: another delete path may have removed it first.
+		if (message.includes('Failed to delete clip')) {
+			pendingRightSwipeDeleteIds.delete(clipId)
+			return
+		}
+
+		clips.set(clipId, clip)
+		if (wasSelected) selectedClipIds.add(clipId)
+		userLog('SYSTEM', `Failed to delete clip: ${message}`, {
+			textColor: 'red',
+		})
+	}
+
+	pendingRightSwipeDeleteIds.delete(clipId)
+}
+
+async function setClipMutedState(clipId: string, muted: boolean) {
+	if (user.value?.banned_at) return
+	const clip = clips.get(clipId)
+	if (!clip) return
+	if (clip.muted === muted) return
+
+	const previousMuted = clip.muted
+	clip.muted = muted
+
+	if (clip.id.startsWith('__temp__')) return
+
+	const res = await socket.emitWithAck('get:clip:update', {
+		id: clip.id,
+		changes: {
+			muted,
+		},
+	})
+
+	if (!res.success) {
+		const current = clips.get(clipId)
+		if (current && current.muted === muted) {
+			current.muted = previousMuted
+		}
+		userLog('SYSTEM', `Failed to mute clip: ${res.error.message}`, {
+			textColor: 'red',
+		})
+		return
+	}
+
+	const current = clips.get(clipId)
+	if (current) {
+		current.muted = res.data.muted ?? muted
+	}
+}
+
+useEventListener(tracksWrapperEl, 'pointerdown', (e) => {
+	if (activeTool.value !== 'mute') return
+	if (e.button !== 0) return
+	if (controlKeyPressed.value) return
+	if (user.value?.banned_at) return
+
+	const target = e.target as HTMLElement
+	if (target.closest('.timeline-header-wrap')) return
+
+	e.preventDefault()
+
+	const processedClipIds = new Set<string>()
+	let targetMuted: boolean | null = null
+	let lastPoint = { x: e.clientX, y: e.clientY }
+
+	const applyClipMute = (clipId: string) => {
+		if (processedClipIds.has(clipId)) return
+		const clip = clips.get(clipId)
+		if (!clip) return
+
+		processedClipIds.add(clipId)
+		if (targetMuted === null) {
+			targetMuted = !clip.muted
+		}
+		if (targetMuted === null) return
+
+		void setClipMutedState(clipId, targetMuted)
+	}
+
+	const initialClipIds = collectClipIdsAlongSegment(lastPoint, lastPoint)
+	for (const clipId of initialClipIds) {
+		applyClipMute(clipId)
+	}
+
+	const onMove = (me: PointerEvent) => {
+		const currentPoint = { x: me.clientX, y: me.clientY }
+		const clipIds = collectClipIdsAlongSegment(lastPoint, currentPoint)
+		for (const clipId of clipIds) {
+			applyClipMute(clipId)
+		}
+		lastPoint = currentPoint
+	}
+
+	const onUp = () => {
+		stopMove()
+		stopUp()
+	}
+
+	const stopMove = useEventListener(window, 'pointermove', onMove)
+	const stopUp = useEventListener(window, 'pointerup', onUp)
+})
+
+useEventListener(window, 'pointerdown', (e) => {
+	if (e.button !== 2) return
+	lastRightSwipePoint.value = { x: e.clientX, y: e.clientY }
+})
+
+useEventListener(window, 'pointerup', (e) => {
+	if (e.button !== 2) return
+	lastRightSwipePoint.value = null
+})
+
+useEventListener(window, 'blur', () => {
+	lastRightSwipePoint.value = null
+})
+
+useEventListener(window, 'pointermove', (e) => {
+	if (!rightMouseButtonPressedOnTimeline.value) return
+	if ((e.buttons & 2) === 0) return
+	if (user.value?.banned_at) return
+
+	const currentPoint = { x: e.clientX, y: e.clientY }
+	const previousPoint = lastRightSwipePoint.value ?? currentPoint
+	const clipIds = collectClipIdsAlongSegment(previousPoint, currentPoint)
+	for (const clipId of clipIds) {
+		void deleteClipByRightSwipe(clipId)
+	}
+
+	lastRightSwipePoint.value = currentPoint
+})
 
 // Cursor Logic
 // todo: should be moved to trackinstance for better performance bc it will allow direct access to .track which here i have to get through the target.closest....
@@ -775,6 +1066,7 @@ const ghostClip = computed<Clip | null>(() => {
 		end_beat: ghostDragState.value.end_beat,
 		offset_seconds: 0,
 		gain: 1,
+		muted: false,
 		created_at: new Date().toISOString(),
 		// peaks: ghostAudioFile.value.peaks // Clip doesn't have peaks, AudioFile does.
 	}
@@ -789,6 +1081,10 @@ watch(
 			// If we want to add/remove listeners:
 			return
 		}
+
+		// Auto-set brush audio file when dragging from pool
+		brushAudioFileId.value = dragState.audioFileId
+		brushSourceClip.value = null
 
 		ghostDragState.value = {
 			start_beat: 0,
@@ -879,6 +1175,7 @@ watch(
 					end_beat: state.end_beat,
 					offset_seconds: 0,
 					gain: 1,
+					muted: false,
 					created_at: new Date().toISOString(),
 				}
 
@@ -902,6 +1199,7 @@ watch(
 						end_beat: currentClip.end_beat,
 						offset_seconds: currentClip.offset_seconds,
 						gain: currentClip.gain,
+						muted: currentClip.muted,
 					})
 
 					if (res.success) {
@@ -968,6 +1266,9 @@ useEventListener(tracksWrapperEl, 'pointerdown', (e) => {
 
 	// Don't interact if clicking on the timeline header (e.g. for loop controls)
 	if ((e.target as HTMLElement).closest('.timeline-header-wrap')) return
+
+	// Brush tools handle their own pointerdown, unless we are holding Ctrl to select
+	if (activeTool.value !== 'hand' && !controlKeyPressed.value) return
 
 	// Clear selection if clicking on empty space without Control key (Left or Right Click)
 	if (!controlKeyPressed.value && (e.button === 0 || e.button === 2)) {

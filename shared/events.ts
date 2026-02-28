@@ -179,8 +179,27 @@ export const EVENTS = Object.freeze({
 				track_id: z.string(),
 				offset_seconds: z.number().optional(),
 				gain: z.number().optional(),
+				muted: z.boolean().optional(),
 			}),
 			res: ClientClipSchema,
+		}),
+		'get:clips:create:batch': defineRequest({
+			req: z.object({
+				clips: z
+					.array(
+						z.object({
+							start_beat: z.number(),
+							end_beat: z.number(),
+							audio_file_id: z.string(),
+							track_id: z.string(),
+							offset_seconds: z.number().optional(),
+							gain: z.number().optional(),
+							muted: z.boolean().optional(),
+						}),
+					)
+					.min(1),
+			}),
+			res: z.array(ClientClipSchema),
 		}),
 		'get:clip:delete': defineRequest({
 			req: ClientClipSchema.pick({ id: true }),

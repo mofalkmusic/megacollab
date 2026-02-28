@@ -68,6 +68,7 @@ export const migrations: Migration[] = [
                     end_beat DOUBLE PRECISION NOT NULL,
                     offset_seconds DOUBLE PRECISION NOT NULL,
                     gain DOUBLE PRECISION NOT NULL,
+                    muted BOOLEAN NOT NULL DEFAULT FALSE,
                     created_at TIMESTAMPTZ DEFAULT NOW()
                 )`)
 
@@ -97,6 +98,26 @@ export const migrations: Migration[] = [
 			await queryFn(`
                 ALTER TABLE ${USERS_TABLE}
                 ADD COLUMN IF NOT EXISTS download_quality TEXT NOT NULL DEFAULT 'wav'
+            `)
+		},
+	},
+	{
+		id: 4,
+		name: 'add_muted_clips',
+		func: async (queryFn) => {
+			await queryFn(`
+                ALTER TABLE ${CLIPS_TABLE}
+                ADD COLUMN IF NOT EXISTS muted BOOLEAN NOT NULL DEFAULT FALSE
+            `)
+		},
+	},
+	{
+		id: 5,
+		name: 'ensure_muted_clips_column',
+		func: async (queryFn) => {
+			await queryFn(`
+                ALTER TABLE ${CLIPS_TABLE}
+                ADD COLUMN IF NOT EXISTS muted BOOLEAN NOT NULL DEFAULT FALSE
             `)
 		},
 	},

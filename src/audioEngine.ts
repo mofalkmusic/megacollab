@@ -9,6 +9,8 @@ const inDev = import.meta.env.MODE === 'development'
 export const audioContext = new AudioContext()
 const masterGain = audioContext.createGain()
 masterGain.connect(audioContext.destination)
+let previewSource: AudioBufferSourceNode | null = null
+let previewGain: GainNode | null = null
 
 const trackGainNodes = new Map<string, GainNode>()
 const trackAnalysers = new Map<string, AnalyserNode>()
@@ -61,7 +63,7 @@ export const loopRangeBeats = computed(() => {
 })
 
 function getClipHash(clip: Clip): string {
-	return `${clip.start_beat}:${clip.end_beat}:${clip.offset_seconds}:${clip.audio_file_id}:${clip.track_id}:${clip.gain}`
+	return `${clip.start_beat}:${clip.end_beat}:${clip.offset_seconds}:${clip.audio_file_id}:${clip.track_id}:${clip.gain}:${clip.muted}`
 }
 
 function stopSource(sourceWrapper: { source: AudioBufferSourceNode; gainNode: GainNode }) {
@@ -72,6 +74,69 @@ function stopSource(sourceWrapper: { source: AudioBufferSourceNode; gainNode: Ga
 	} catch (e) {
 		if (inDev) console.error(e)
 	}
+}
+
+export function stopAudioPreview() {
+	if (!previewSource) return
+
+	try {
+		previewSource.stop()
+	} catch (e) {
+		if (inDev) console.error(e)
+	}
+
+	previewSource.disconnect()
+	previewGain?.disconnect()
+	previewSource = null
+	previewGain = null
+}
+
+export async function previewAudioFile(
+	audioFileId: string,
+	opts?: { offsetSeconds?: number; durationSeconds?: number; gain?: number },
+) {
+	const buffer = audioBuffers.get(audioFileId)
+	if (!buffer) return false
+
+	if (audioContext.state === 'suspended') {
+		await audioContext.resume()
+	}
+
+	stopAudioPreview()
+
+	const offsetSeconds = Math.max(0, opts?.offsetSeconds ?? 0)
+	const maxDuration = Math.max(0, buffer.duration - offsetSeconds)
+	if (maxDuration <= 0) return false
+
+	const durationSeconds = Math.min(
+		maxDuration,
+		Math.max(0.01, opts?.durationSeconds ?? maxDuration),
+	)
+	const gain = Math.max(0, opts?.gain ?? 1)
+
+	const source = audioContext.createBufferSource()
+	const previewGainNode = audioContext.createGain()
+
+	source.buffer = buffer
+	previewGainNode.gain.value = gain
+	source.connect(previewGainNode)
+	// Preview should still be audible when transport is stopped and masterGain is faded out.
+	previewGainNode.connect(audioContext.destination)
+
+	previewSource = source
+	previewGain = previewGainNode
+
+	source.start(audioContext.currentTime, offsetSeconds, durationSeconds)
+
+	source.onended = () => {
+		if (previewSource !== source) return
+		source.disconnect()
+		previewGainNode.disconnect()
+		previewSource = null
+		previewGain = null
+	}
+
+	return true
 }
 
 function reconcileActiveSources() {
@@ -102,6 +167,7 @@ function reconcileActiveSources() {
 	}
 
 	for (const clip of clips.values()) {
+		if (clip.muted) continue
 		const clipStartSeconds = beats_to_sec(clip.start_beat)
 		const clipEndSeconds = beats_to_sec(clip.end_beat)
 
@@ -357,6 +423,8 @@ function scheduleClipSource(
 	iteration: number,
 	maxEndSec?: number,
 ) {
+	if (clip.muted) return
+
 	const buffer = audioBuffers.get(clip.audio_file_id)
 	const trackGainNode = trackGainNodes.get(clip.track_id)
 

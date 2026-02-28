@@ -2,6 +2,7 @@
 	<div
 		class="no-select timeline-header-wrap"
 		@dblclick="handleDoubleClick"
+		@contextmenu.prevent
 		:style="{ cursor: cursorStyle }"
 	>
 		<div class="timeline-header" ref="timelineHeaderRef">
@@ -50,7 +51,7 @@
 
 	<!-- Sticky Playhead Heads -->
 	<div class="timeline-heads-wrap">
-		<div v-if="!isPressed" class="resting-playhead-head" :style="restingPlayheadStyle" />
+		<div v-if="!isPointerDown" class="resting-playhead-head" :style="restingPlayheadStyle" />
 		<div
 			class="playhead-head"
 			:style="playheadHeadStyle"
@@ -78,23 +79,17 @@ import {
 	sec_to_beats,
 } from '@/utils/mathUtils'
 import { computed, shallowRef, useTemplateRef, watch, type CSSProperties } from 'vue'
-import { altKeyPressed, controlKeyPressed, shiftKeyPressed, pxPerBeat, TOTAL_BEATS } from '@/state'
-import { useMouseInElement, useMousePressed, useWindowFocus, watchThrottled } from '@vueuse/core'
+import { altKeyPressed, pxPerBeat, TOTAL_BEATS } from '@/state'
+import { useEventListener, useWindowFocus } from '@vueuse/core'
 
 const timelineHeaderEl = useTemplateRef('timelineHeaderRef')
-const { elementX: mouseX } = useMouseInElement(timelineHeaderEl, { handleOutside: true })
-const { pressed: isPressed } = useMousePressed({ target: timelineHeaderEl })
+const isPointerDown = shallowRef(false)
 
 const windowFocused = useWindowFocus()
 
 watch(windowFocused, (focused) => {
 	if (!focused) {
-		isPressed.value = false
-		localPlayheadBeat.value = null
-		startedScrubWithActionKey.value = null
-		activeHandle.value = null
-		loopDragStartBeat.value = null
-		loopDragEndBeat.value = null
+		clearDragState()
 	}
 })
 
@@ -127,13 +122,12 @@ const playHeadPosPx = computed(() => {
 	return beats_to_px(sec_to_beats(currentTime.value))
 })
 
-const isActionKeyPressed = computed(() => controlKeyPressed.value || shiftKeyPressed.value)
-
 // Loop Drag State
 const loopDragStartBeat = shallowRef<number | null>(null)
 const loopDragEndBeat = shallowRef<number | null>(null)
-const activeHandle = shallowRef<'start' | 'end' | null>(null)
-const startedScrubWithActionKey = shallowRef<boolean | null>(null)
+const startedLoopDrag = shallowRef(false)
+const dragStartPoint = shallowRef<{ x: number; y: number } | null>(null)
+const dragMode = shallowRef<'seek' | 'loop' | null>(null)
 
 const displayLoopRange = computed(() => {
 	if (loopDragStartBeat.value != null && loopDragEndBeat.value != null) {
@@ -154,138 +148,111 @@ const loopWidthPx = computed(() =>
 		: 0,
 )
 
-const isHoveringHandle = computed(() => {
-	if (!loopRangeBeats.value) return false
-	const startPx = beats_to_px(loopRangeBeats.value.start)
-	const endPx = beats_to_px(loopRangeBeats.value.end)
-	const distStart = Math.abs(mouseX.value - startPx)
-	const distEnd = Math.abs(mouseX.value - endPx)
-	const thresholdPx = 7
-	return distStart < thresholdPx || distEnd < thresholdPx
-})
-
 const cursorStyle = computed(() => {
-	if (startedScrubWithActionKey.value && activeHandle.value) return 'ew-resize'
-	if (isHoveringHandle.value) return 'ew-resize'
-	if (isActionKeyPressed.value) return 'text' // or 'crosshair'
+	if (isPointerDown.value && dragMode.value === 'loop') return 'ew-resize'
 	return 'default'
 })
 
-watch([isPressed, mouseX], ([pressed, newMouseX]) => {
-	if (!timelineHeaderEl.value) return
+// corx2026 throwback + Larian dedication:
+// we fixed the old scrub/loop edge cases by centralizing beat clamping
+// and driving drag state from pointer capture (down/move/up), so no more ghost states.
+const clampBeat = (beat: number) => Math.max(0, Math.min(beat, TOTAL_BEATS))
 
-	// --- RELEASED ---
-	if (!pressed) {
-		if (startedScrubWithActionKey.value) {
-			// Commit loop
-			const start = loopDragStartBeat.value
-			const end = loopDragEndBeat.value
-			if (start != null && end != null) {
-				if (Math.abs(start - end) > 0.0001) {
-					setLoopInBeats(start, end, { quantize: false })
-				} else {
-					clearLoop()
-				}
-			}
+function beatFromClientX(clientX: number): number {
+	if (!timelineHeaderEl.value) return 0
+	const rect = timelineHeaderEl.value.getBoundingClientRect()
+	const relX = clientX - rect.left
+	const rawBeat = px_to_beats(relX)
+	const beat = altKeyPressed.value ? rawBeat : quantize_beats(rawBeat)
+	return clampBeat(beat)
+}
+
+function clearDragState() {
+	isPointerDown.value = false
+	startedLoopDrag.value = false
+	dragStartPoint.value = null
+	dragMode.value = null
+	loopDragStartBeat.value = null
+	loopDragEndBeat.value = null
+	localPlayheadBeat.value = null
+}
+
+useEventListener(
+	timelineHeaderEl,
+	'pointerdown',
+	(event) => {
+		if (event.button !== 0 && event.button !== 2) return
+		if (!timelineHeaderEl.value) return
+
+		event.preventDefault()
+		event.stopPropagation()
+
+		const startBeat = beatFromClientX(event.clientX)
+		isPointerDown.value = true
+		startedLoopDrag.value = false
+		dragStartPoint.value = { x: event.clientX, y: event.clientY }
+		dragMode.value = event.button === 2 ? 'loop' : 'seek'
+		if (dragMode.value === 'loop') {
+			loopDragStartBeat.value = startBeat
+			loopDragEndBeat.value = startBeat
+			localPlayheadBeat.value = null
+		} else {
 			loopDragStartBeat.value = null
 			loopDragEndBeat.value = null
+			localPlayheadBeat.value = startBeat
 		}
 
-		localPlayheadBeat.value = null
-		startedScrubWithActionKey.value = null
-		activeHandle.value = null
-		return
-	}
+		const dragThresholdPx = 5
+		const dragThresholdSq = dragThresholdPx * dragThresholdPx
+		const el = event.currentTarget as HTMLElement
+		el.setPointerCapture(event.pointerId)
 
-	// --- PRESSED ---
+		const onMove = (e: PointerEvent) => {
+			if (!isPointerDown.value || !dragStartPoint.value) return
 
-	const beats = px_to_beats(newMouseX)
+			const dx = e.clientX - dragStartPoint.value.x
+			const dy = e.clientY - dragStartPoint.value.y
+			if (!startedLoopDrag.value && dx * dx + dy * dy > dragThresholdSq) {
+				startedLoopDrag.value = true
+			}
 
-	// Initialize drag mode on first press frame
-	if (startedScrubWithActionKey.value == null) {
-		startedScrubWithActionKey.value = isActionKeyPressed.value
-
-		// If NOT holding action key, check if we clicked a loop handle
-		if (!startedScrubWithActionKey.value && loopRangeBeats.value) {
-			const startPx = beats_to_px(loopRangeBeats.value.start)
-			const endPx = beats_to_px(loopRangeBeats.value.end)
-			const distStart = Math.abs(newMouseX - startPx)
-			const distEnd = Math.abs(newMouseX - endPx)
-			const thresholdPx = 15 // px proximity
-
-			// Prioritize the handle that is closer
-			if (distStart < thresholdPx || distEnd < thresholdPx) {
-				startedScrubWithActionKey.value = true
-
-				// Helper to set state
-				const setDragState = (handle: 'start' | 'end') => {
-					activeHandle.value = handle
-					loopDragStartBeat.value = loopRangeBeats.value!.start
-					loopDragEndBeat.value = loopRangeBeats.value!.end
-				}
-
-				if (distStart < thresholdPx && distEnd < thresholdPx) {
-					// Both minimal? Pick closest
-					if (distStart < distEnd) setDragState('start')
-					else setDragState('end')
-				} else if (distStart < thresholdPx) {
-					setDragState('start')
-				} else {
-					setDragState('end')
-				}
+			const beat = beatFromClientX(e.clientX)
+			if (dragMode.value === 'loop') {
+				loopDragEndBeat.value = beat
+			} else {
+				localPlayheadBeat.value = beat
 			}
 		}
-	}
 
-	// 1. Regular Scrub
-	if (!startedScrubWithActionKey.value) {
-		const beat = altKeyPressed.value ? beats : quantize_beats(beats)
-		localPlayheadBeat.value = Math.max(0, beat)
-		return
-	}
+		const onUp = (e: PointerEvent) => {
+			stopMove()
+			stopUp()
+			el.releasePointerCapture(event.pointerId)
 
-	// 2. Loop Dragging / Editing
+			const releaseBeat = beatFromClientX(e.clientX)
+			const start = loopDragStartBeat.value
+			const end = loopDragEndBeat.value ?? releaseBeat
 
-	// If new drag (no handle yet), decide handle or create new
-	if (loopDragStartBeat.value == null) {
-		// New loop creation
-		// (Logic for grabbing handle was done in init above, so if we are here and
-		// activeHandle is null, it's a fresh create)
+			if (dragMode.value === 'loop') {
+				if (start != null && end != null && Math.abs(start - end) > 0.0001) {
+					setLoopInBeats(start, end, { quantize: false })
+				}
+			} else {
+				seek(beats_to_sec(releaseBeat), { setAsRest: true })
+			}
 
-		const initialBeat = altKeyPressed.value ? beats : quantize_beats(beats)
-		loopDragStartBeat.value = initialBeat
-		loopDragEndBeat.value = initialBeat
+			clearDragState()
+		}
 
-		// Decide which end is moving based on direction?
-		// Actually let's just update endBeat freely, and swap min/max in computed.
-		// "activeHandle" is basically "the one I'm dragging right now".
-		// For creation, we can say we are dragging 'end' relative to 'start'.
-		activeHandle.value = 'end'
-	}
-
-	// Update the active handle
-	const currentBeat = altKeyPressed.value ? beats : quantize_beats(beats)
-	// pro fix by corx music 2026 edition
-	const clampedBeat = (beat: number) => Math.max(0, Math.min(beat, TOTAL_BEATS))
-	if (activeHandle.value === 'start') {
-		loopDragStartBeat.value = clampedBeat(currentBeat)
-	} else {
-		loopDragEndBeat.value = clampedBeat(currentBeat)
-	}
-})
+		const stopMove = useEventListener(window, 'pointermove', onMove)
+		const stopUp = useEventListener(window, 'pointerup', onUp)
+	},
+	{ passive: false },
+)
 
 function handleDoubleClick() {
 	clearLoop()
 }
-
-watchThrottled(
-	localPlayheadBeat,
-	(newBeat) => {
-		if (newBeat == null) return
-		seek(beats_to_sec(newBeat), { setAsRest: true })
-	},
-	{ throttle: 100, trailing: true },
-)
 </script>
 
 <style scoped>

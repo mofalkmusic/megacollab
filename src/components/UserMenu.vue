@@ -64,6 +64,97 @@
 					padding-bottom: 0.5rem;
 				"
 			></div>
+
+			<button class="default-button menu-btn" @click="copySelection">
+				<Copy class="dim" :size="14" :stroke-width="2" />
+				<p>Copy</p>
+				<div class="shortcut-container mono">
+					<p class="kbd">Ctrl</p>
+					<p class="kbd">C</p>
+				</div>
+			</button>
+
+			<button class="default-button menu-btn" @click="pasteClips">
+				<ClipboardPaste class="dim" :size="14" :stroke-width="2" />
+				<p>Paste</p>
+				<div class="shortcut-container mono">
+					<p class="kbd">Ctrl</p>
+					<p class="kbd">V</p>
+				</div>
+			</button>
+
+			<button class="default-button menu-btn" @click="duplicateSelection">
+				<CopyPlus class="dim" :size="14" :stroke-width="2" />
+				<p>Duplicate</p>
+				<div class="shortcut-container mono">
+					<p class="kbd">Ctrl</p>
+					<p class="kbd">D</p>
+				</div>
+			</button>
+
+			<button class="default-button menu-btn" @click="deleteSelection">
+				<Trash2 class="dim" :size="14" :stroke-width="2" />
+				<p>Delete Selection</p>
+				<div class="shortcut-container mono">
+					<p class="kbd">Del</p>
+				</div>
+			</button>
+
+			<div
+				style="
+					border-top: 1px solid var(--border-primary);
+					margin-top: 0.5rem;
+					padding-bottom: 0.5rem;
+				"
+			></div>
+
+			<button class="default-button menu-btn" @click="activeTool = 'hand'">
+				<Hand class="dim" :size="14" :stroke-width="2" />
+				<p>Hand Tool</p>
+				<div class="shortcut-container mono">
+					<p class="kbd">H</p>
+				</div>
+			</button>
+
+			<button class="default-button menu-btn" @click="activeTool = 'brush'">
+				<Paintbrush class="dim" :size="14" :stroke-width="2" />
+				<p>Brush Tool</p>
+				<div class="shortcut-container mono">
+					<p class="kbd">B</p>
+				</div>
+			</button>
+
+			<button class="default-button menu-btn" @click="activeTool = 'magic-brush'">
+				<Sparkles class="dim" :size="14" :stroke-width="2" />
+				<p>Magic Brush</p>
+				<div class="shortcut-container mono">
+					<p class="kbd">G</p>
+				</div>
+			</button>
+
+			<button class="default-button menu-btn" @click="activeTool = 'slice'">
+				<Scissors class="dim" :size="14" :stroke-width="2" />
+				<p>Slice Tool</p>
+				<div class="shortcut-container mono">
+					<p class="kbd">C</p>
+				</div>
+			</button>
+
+			<button class="default-button menu-btn" @click="activeTool = 'mute'">
+				<VolumeX class="dim" :size="14" :stroke-width="2" />
+				<p>Mute Tool</p>
+				<div class="shortcut-container mono">
+					<p class="kbd">0</p>
+				</div>
+			</button>
+
+			<div
+				style="
+					border-top: 1px solid var(--border-primary);
+					margin-top: 0.5rem;
+					padding-bottom: 0.5rem;
+				"
+			></div>
 			<button
 				class="default-button menu-btn"
 				@click="openBugReport"
@@ -78,17 +169,17 @@
 					:style="{ opacity: isBugButtonHovered ? 1 : 0 }"
 				/>
 			</button>
-			<button class="default-button menu-btn">
+			<button class="default-button menu-btn" @click="showSettingsComingSoon">
 				<Settings2 class="dim" :size="16" :stroke-width="2" />
 				<p>Settings</p>
 			</button>
 			<div style="padding: 0 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem">
 				<label
-				for="download-quality"
-				class="txt small dim"
-				style="display: block; margin-bottom: 0.2rem"
+					for="download-quality"
+					class="txt small dim"
+					style="display: block; margin-bottom: 0.2rem"
 				>
-				Download Format
+					Download Format
 				</label>
 				<select
 					id="download-quality"
@@ -177,7 +268,15 @@
 
 <script setup lang="ts">
 import { socket } from '@/socket/socket'
-import { user, controlKeyPressed, zKeyPressed, tKeyPressed, lKeyPressed } from '@/state'
+import {
+	user,
+	controlKeyPressed,
+	zKeyPressed,
+	tKeyPressed,
+	lKeyPressed,
+	activeTool,
+	showAdminPanel,
+} from '@/state'
 import {
 	UserPen,
 	Settings2,
@@ -190,6 +289,15 @@ import {
 	Repeat,
 	Shield,
 	Lock,
+	Copy,
+	ClipboardPaste,
+	CopyPlus,
+	Trash2,
+	Hand,
+	Paintbrush,
+	Sparkles,
+	Scissors,
+	VolumeX,
 } from 'lucide-vue-next'
 import { nextTick, shallowRef, useTemplateRef, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
@@ -197,7 +305,11 @@ import { sanitizeLetterUnderscoreOnly } from '~/utils'
 import { vElementHover } from '@vueuse/components'
 import { isLooping, isPlaying, reset } from '@/audioEngine'
 import { updateDisplayNamesForUser } from '@/socket/eventHandlers/user_username_change'
-import { showAdminPanel } from '@/state'
+import { useClipboardActions } from '@/composables/useClipboardActions'
+
+const { copySelection, pasteClips, duplicateSelection, deleteSelection } = useClipboardActions({
+	bindKeyboard: false,
+})
 
 const isBugButtonHovered = shallowRef(false)
 function onBugHover(hovered: boolean) {
@@ -222,6 +334,10 @@ function signout() {
 
 function openBugReport() {
 	window.open('https://github.com/mofalkmusic/megacollab/issues', '_blank')
+}
+
+function showSettingsComingSoon() {
+	window.alert('Work in progress :)')
 }
 
 const isEditingUsername = shallowRef(false)
@@ -333,7 +449,8 @@ async function updateDownloadQuality(event: Event) {
 	display: grid;
 	border-radius: inherit;
 	padding: 0.5rem;
-	max-width: 20rem;
+	min-width: 22.75rem;
+	max-width: 24.5rem;
 	box-shadow: 0px 0px 1rem 0rem var(--bg-color);
 }
 
@@ -370,6 +487,7 @@ async function updateDownloadQuality(event: Event) {
 	box-shadow: none;
 	justify-content: flex-start;
 	white-space: nowrap;
+	padding-right: 1.5rem;
 }
 
 .menu-btn:hover {
