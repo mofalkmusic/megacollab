@@ -53,6 +53,8 @@ export const pxTrackHeight = 70
 export const bpm = 128
 export const AUDIO_POOL_WIDTH = 160 as const
 
+export const trackControlsWidth = ref(110)
+
 export const audioFilePoolHeightPx = ref(0)
 
 export const timelineWidth = computed(() => TOTAL_BEATS * pxPerBeat.value)

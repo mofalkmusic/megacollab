@@ -69,15 +69,41 @@
 				/>
 			</button>
 
-			<input
-				type="range"
-				:min="minPxPerBeat"
-				:max="maxPxPerBeat"
-				v-model.number="pxPerBeat"
-				style="width: 80px; margin-left: 1rem"
-			/>
+			<div
+				style="
+					display: flex;
+					align-items: center;
+					gap: 0.5rem;
+					margin-left: 1rem;
+					margin-right: 1rem;
+				"
+			>
+				<ZoomIn :size="16" style="color: var(--text-color-primary)" />
+				<input
+					type="range"
+					:min="minPxPerBeat"
+					:max="maxPxPerBeat"
+					v-model.number="pxPerBeat"
+					style="width: 80px"
+					title="Zoom"
+				/>
+			</div>
 
 			<div style="flex-grow: 1"></div>
+
+			<div style="display: flex; align-items: center; gap: 0.5rem; margin-right: 1rem">
+				<Volume2 :size="16" style="color: var(--text-color-primary)" />
+				<input
+					type="range"
+					min="0"
+					max="1.5"
+					step="0.01"
+					v-model.number="masterGainValue"
+					@input="handleMasterGainUpdate"
+					style="width: 80px"
+					title="Master Volume"
+				/>
+			</div>
 
 			<button
 				ref="userButton"
@@ -99,7 +125,12 @@
 
 		<div class="scrollbar-dud" style="grid-area: scolldud"></div>
 
-		<div class="timeline-scroll-container" ref="timelineContainer" style="grid-area: timeline">
+		<div
+			class="timeline-scroll-container"
+			ref="timelineContainer"
+			style="grid-area: timeline"
+			:class="{ panning: isPanning }"
+		>
 			<TrackControls />
 			<div
 				class="all-tracks-wrapper"
@@ -256,6 +287,8 @@ import {
 	reset,
 	toggleLoop,
 	isLooping,
+	masterGainValue,
+	setMasterGain,
 } from '@/audioEngine'
 import UserCursors from '@/components/UserCursors.vue'
 import TimelineHeader from '@/components/TimelineHeader.vue'
@@ -285,6 +318,8 @@ import {
 	Menu,
 	Repeat,
 	Download,
+	Volume2,
+	ZoomIn,
 } from 'lucide-vue-next'
 import { offset, useFloating } from '@floating-ui/vue'
 import { useRouter } from 'vue-router'
@@ -302,6 +337,10 @@ import { useGlobalProgress } from '@/composables/useGlobalProgress'
 const { userLog } = useConsole()
 
 const { averagePing } = usePing()
+
+function handleMasterGainUpdate() {
+	setMasterGain(masterGainValue.value)
+}
 
 const minutesNseconds = computed(() => {
 	const sec = currentPlayTimeSeconds.value
@@ -469,6 +508,48 @@ useEventListener(
 		passive: false,
 	},
 )
+
+const isPanning = shallowRef(false)
+
+useEventListener(timelineContainerEl, 'pointerdown', (e) => {
+	if (e.button !== 1) return // wheel-click only
+
+	const container = timelineContainerEl.value
+	if (!container) return
+
+	// prevent default browser behavior
+	e.preventDefault()
+
+	const startX = e.clientX
+	const startY = e.clientY
+	const startScrollLeft = container.scrollLeft
+	const startScrollTop = container.scrollTop
+
+	if (!(e.target instanceof HTMLElement)) return // better pattern than type assertion
+
+	const target = e.target
+	target.setPointerCapture(e.pointerId)
+	isPanning.value = true
+
+	const onMove = (moveEvent: PointerEvent) => {
+		if (!timelineContainerEl.value) return
+		const deltaX = moveEvent.clientX - startX
+		const deltaY = moveEvent.clientY - startY
+
+		timelineContainerEl.value.scrollLeft = startScrollLeft - deltaX
+		timelineContainerEl.value.scrollTop = startScrollTop - deltaY
+	}
+
+	const onUp = (upEvent: PointerEvent) => {
+		target.releasePointerCapture(upEvent.pointerId)
+		isPanning.value = false
+		stopMove()
+		stopUp()
+	}
+
+	const stopMove = useEventListener(window, 'pointermove', onMove)
+	const stopUp = useEventListener(window, 'pointerup', onUp)
+})
 
 const { x: scrollX, y: scrollY } = useScroll(timelineContainerEl)
 const { width: timelineContainerClientWidth } = useElementSize(timelineContainerEl)
@@ -1136,6 +1217,18 @@ useEventListener(window, 'blur', () => {
 	border-radius: 50%;
 	aspect-ratio: 1/1;
 	padding: 0;
+}
+
+.timeline-scroll-container.panning {
+	cursor: grabbing !important;
+}
+
+.custom-scrollbar.is-dragging {
+	cursor: grabbing !important;
+}
+
+.custom-scrollbar.is-dragging .custom-thumb {
+	cursor: grabbing !important;
 }
 
 .outmost-container {

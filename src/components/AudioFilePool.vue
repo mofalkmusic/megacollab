@@ -11,7 +11,7 @@
 			</div>
 		</div>
 
-		<div class="clips-container">
+		<div class="clips-container" ref="clipsContainer" :class="{ panning: isPanning }">
 			<div v-for="audioFile in sortedAudioFiles" :key="audioFile.id">
 				<ClipInstance
 					:audiofile="audioFile"
@@ -62,10 +62,10 @@
 <script setup lang="ts">
 import { audiofiles, clips, user, AUDIO_POOL_WIDTH, audioFilePoolHeightPx } from '@/state'
 import UploadButton from '@/components/UploadButton.vue'
-import { computed, useTemplateRef, watchEffect } from 'vue'
+import { computed, shallowRef, useTemplateRef, watchEffect } from 'vue'
 import type { AudioFile } from '@/types'
 import ClipInstance from '@/components/ClipInstance.vue'
-import { useDropZone, useElementSize } from '@vueuse/core'
+import { useDropZone, useElementSize, useEventListener } from '@vueuse/core'
 import { File } from 'lucide-vue-next'
 import { audioMimeTypes } from '~/constants'
 import { optimisticAudioCreateUpload } from '@/utils/uploadAudio'
@@ -138,6 +138,44 @@ const sortedAudioFiles = computed(() => {
 		new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
 	return [...owned.sort(byDate), ...foreign.sort(byDate)]
 })
+
+const clipsContainerEl = useTemplateRef('clipsContainer')
+const isPanning = shallowRef(false)
+
+useEventListener(clipsContainerEl, 'pointerdown', (e) => {
+	if (e.button !== 1) return // wheel-click only
+
+	const container = clipsContainerEl.value
+	if (!container) return
+
+	// prevent default browser behavior
+	e.preventDefault()
+
+	const startX = e.clientX
+	const startScrollLeft = container.scrollLeft
+
+	if (!(e.target instanceof HTMLElement)) return // better pattern than type assertion
+
+	const target = e.target
+	target.setPointerCapture(e.pointerId)
+	isPanning.value = true
+
+	const onMove = (moveEvent: PointerEvent) => {
+		if (!clipsContainerEl.value) return
+		const deltaX = moveEvent.clientX - startX
+		clipsContainerEl.value.scrollLeft = startScrollLeft - deltaX
+	}
+
+	const onUp = (upEvent: PointerEvent) => {
+		target.releasePointerCapture(upEvent.pointerId)
+		isPanning.value = false
+		stopMove()
+		stopUp()
+	}
+
+	const stopMove = useEventListener(window, 'pointermove', onMove)
+	const stopUp = useEventListener(window, 'pointerup', onUp)
+})
 </script>
 
 <style scoped>
@@ -151,6 +189,10 @@ const sortedAudioFiles = computed(() => {
 	overflow: hidden;
 	padding: 1rem;
 	gap: 1rem;
+}
+
+.clips-container.panning {
+	cursor: grabbing !important;
 }
 
 .is-over {
