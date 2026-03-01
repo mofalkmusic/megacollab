@@ -125,7 +125,12 @@
 
 		<div class="scrollbar-dud" style="grid-area: scolldud"></div>
 
-		<div class="timeline-scroll-container" ref="timelineContainer" style="grid-area: timeline">
+		<div
+			class="timeline-scroll-container"
+			ref="timelineContainer"
+			style="grid-area: timeline"
+			:class="{ panning: isPanning }"
+		>
 			<TrackControls />
 			<div
 				class="all-tracks-wrapper"
@@ -504,6 +509,8 @@ useEventListener(
 	},
 )
 
+const isPanning = shallowRef(false)
+
 useEventListener(timelineContainerEl, 'pointerdown', (e) => {
 	if (e.button !== 1) return // wheel-click only
 
@@ -522,6 +529,7 @@ useEventListener(timelineContainerEl, 'pointerdown', (e) => {
 
 	const target = e.target
 	target.setPointerCapture(e.pointerId)
+	isPanning.value = true
 
 	const onMove = (moveEvent: PointerEvent) => {
 		if (!timelineContainerEl.value) return
@@ -534,6 +542,7 @@ useEventListener(timelineContainerEl, 'pointerdown', (e) => {
 
 	const onUp = (upEvent: PointerEvent) => {
 		target.releasePointerCapture(upEvent.pointerId)
+		isPanning.value = false
 		stopMove()
 		stopUp()
 	}
@@ -1208,6 +1217,18 @@ useEventListener(window, 'blur', () => {
 	border-radius: 50%;
 	aspect-ratio: 1/1;
 	padding: 0;
+}
+
+.timeline-scroll-container.panning {
+	cursor: grabbing !important;
+}
+
+.custom-scrollbar.is-dragging {
+	cursor: grabbing !important;
+}
+
+.custom-scrollbar.is-dragging .custom-thumb {
+	cursor: grabbing !important;
 }
 
 .outmost-container {

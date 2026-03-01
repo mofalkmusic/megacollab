@@ -261,6 +261,8 @@ onMounted(() => {
 
 		useEventListener(wrapperEl, 'pointerdown', (event) => {
 			if (user.value?.banned_at) return
+			if (event.button === 1) return // consistency -> wheel-click = drag viewport.
+
 			event.preventDefault()
 			const rect = wrapperEl.value!.getBoundingClientRect()
 			const offsetX = event.clientX - rect.left
