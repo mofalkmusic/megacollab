@@ -504,6 +504,44 @@ useEventListener(
 	},
 )
 
+useEventListener(timelineContainerEl, 'pointerdown', (e) => {
+	if (e.button !== 1) return // wheel-click only
+
+	const container = timelineContainerEl.value
+	if (!container) return
+
+	// prevent default browser behavior
+	e.preventDefault()
+
+	const startX = e.clientX
+	const startY = e.clientY
+	const startScrollLeft = container.scrollLeft
+	const startScrollTop = container.scrollTop
+
+	if (!(e.target instanceof HTMLElement)) return // better pattern than type assertion
+
+	const target = e.target
+	target.setPointerCapture(e.pointerId)
+
+	const onMove = (moveEvent: PointerEvent) => {
+		if (!timelineContainerEl.value) return
+		const deltaX = moveEvent.clientX - startX
+		const deltaY = moveEvent.clientY - startY
+
+		timelineContainerEl.value.scrollLeft = startScrollLeft - deltaX
+		timelineContainerEl.value.scrollTop = startScrollTop - deltaY
+	}
+
+	const onUp = (upEvent: PointerEvent) => {
+		target.releasePointerCapture(upEvent.pointerId)
+		stopMove()
+		stopUp()
+	}
+
+	const stopMove = useEventListener(window, 'pointermove', onMove)
+	const stopUp = useEventListener(window, 'pointerup', onUp)
+})
+
 const { x: scrollX, y: scrollY } = useScroll(timelineContainerEl)
 const { width: timelineContainerClientWidth } = useElementSize(timelineContainerEl)
 
