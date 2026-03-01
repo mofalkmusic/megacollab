@@ -12,6 +12,8 @@
 				:key="clip.id"
 				:clip="clip"
 				:audiofile="audiofiles.get(clip.audio_file_id)!"
+				:scroll-x="scrollX"
+				:timeline-window-width="timelineWindowWidth"
 				:style="{
 					position: 'absolute',
 					height: '100%',
