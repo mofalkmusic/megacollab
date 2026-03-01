@@ -330,7 +330,7 @@ async function resetVolume(trackId: string) {
 	left: 0;
 	z-index: 100;
 
-	padding-top: 2rem;
+	margin-top: 2rem;
 }
 
 .track-title {

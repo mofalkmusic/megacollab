@@ -83,7 +83,8 @@
 					type="range"
 					:min="minPxPerBeat"
 					:max="maxPxPerBeat"
-					v-model.number="pxPerBeat"
+					:value="pxPerBeat"
+					@input="handleZoomChange"
 					style="width: 80px"
 					title="Zoom"
 				/>
@@ -342,6 +343,50 @@ function handleMasterGainUpdate() {
 	setMasterGain(masterGainValue.value)
 }
 
+function handleZoomChange(e: Event) {
+	if (!(e.target instanceof HTMLInputElement)) {
+		return // todo: maybe log error?
+	}
+
+	const target = e.target
+	const newPxPerBeat = parseFloat(target.value)
+
+	const container = timelineContainerEl.value
+	const wrapper = tracksWrapperEl.value
+
+	if (!container || !wrapper) {
+		pxPerBeat.value = newPxPerBeat
+		return
+	}
+
+	// leaving comments here for future humans / agents to understand reasoning behind not using .getboundingclientrect()
+
+	// The track wrapper starts at some horizontal offset (TrackControls width + paddings).
+	// offsetLeft is exactly how far `wrapper` is from the left edge of `container`'s scrollable canvas.
+	const wrapperOffsetLeft = wrapper.offsetLeft
+
+	// Screen center X relative to the visible window
+	const viewportCenterX = timelineClientWidth.value / 2
+
+	// Position within the entire scrollable container canvas (ignoring what's currently visible)
+	const canvasCenterX = container.scrollLeft + viewportCenterX
+
+	// Position strictly within the wrapper (the actual timeline)
+	const xInWrapper = canvasCenterX - wrapperOffsetLeft
+
+	const beatAtCenter = px_to_beats(xInWrapper)
+
+	// Update zoom state
+	pxPerBeat.value = newPxPerBeat
+
+	// Calculate what the new wrapper offset WILL be after zoom
+	const newXInWrapper = beatAtCenter * newPxPerBeat
+
+	// Calculate the new scrollLeft so that `newXInWrapper` lands exactly at `viewportCenterX`
+	// newScrollLeft + viewportCenterX = wrapperOffsetLeft + newXInWrapper
+	container.scrollLeft = wrapperOffsetLeft + newXInWrapper - viewportCenterX
+}
+
 const minutesNseconds = computed(() => {
 	const sec = currentPlayTimeSeconds.value
 
@@ -493,15 +538,44 @@ function togglePlayState() {
 
 const timelineContainerEl = useTemplateRef('timelineContainer')
 
+import { useDebug } from '@/composables/useDebug'
+
 useEventListener(
 	timelineContainerEl,
 	'wheel',
 	(e) => {
 		if (e.ctrlKey) {
 			e.preventDefault()
-			const sensitivity = 0.05
+			const container = timelineContainerEl.value
+			const wrapper = tracksWrapperEl.value
+			if (!container || !wrapper) return
+
+			// beat under cursor before zoom
+			const wrapperRect = wrapper.getBoundingClientRect()
+			const xInWrapper = e.clientX - wrapperRect.left
+			const beatUnderCursor = px_to_beats(xInWrapper)
+
+			useDebug(() => beatUnderCursor, { label: 'hovered_beat' })
+
+			const sensitivity = 0.05 // todo: should be extracted to be reusable instead of hardcoded
 			const unclipped = pxPerBeat.value - e.deltaY * sensitivity
-			pxPerBeat.value = Math.max(minPxPerBeat, Math.min(maxPxPerBeat, unclipped))
+			const newPxPerBeat = Math.max(minPxPerBeat, Math.min(maxPxPerBeat, unclipped))
+			pxPerBeat.value = newPxPerBeat
+
+			// comment madness for future editors :D
+
+			// Adjust scroll so the same beat stays under the cursor
+			// Calculate new X offset for this beat in the wrapper
+			const newXInWrapper = beatUnderCursor * newPxPerBeat
+
+			// To keep the beat under the mouse (`e.clientX`), the wrapper needs to be positioned at:
+			const newWrapperLeft = e.clientX - newXInWrapper
+
+			// The difference between where the wrapper SHOULD be and where it IS:
+			const deltaWrapperLeft = newWrapperLeft - wrapperRect.left
+
+			// scrollLeft decreases wrapper.left, so we subtract the delta
+			container.scrollLeft -= deltaWrapperLeft
 		}
 	},
 	{
