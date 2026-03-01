@@ -67,7 +67,8 @@ export function useClipboardActions(options: ClipboardActionsOptions = {}) {
 	// --- PASTE ---
 	async function pasteClips() {
 		if (!clipboardClips.value || clipboardClips.value.length === 0) return
-		if (user.value?.banned_at) return
+		const currentUser = user.value
+		if (!currentUser || currentUser.banned_at) return
 
 		const entries = clipboardClips.value
 
@@ -89,30 +90,37 @@ export function useClipboardActions(options: ClipboardActionsOptions = {}) {
 		if (selectedClipIds.size > 0) {
 			const selectedTrackIndices = [...selectedClipIds]
 				.map((id) => clips.get(id))
-				.filter(Boolean)
-				.map((c) => getTrackIndex(c!.track_id))
-			baseTrackIndex = Math.min(...selectedTrackIndices)
+				.filter((clip): clip is Clip => clip != null)
+				.map((clip) => getTrackIndex(clip.track_id))
+				.filter((index) => index >= 0)
+			if (selectedTrackIndices.length > 0) {
+				baseTrackIndex = Math.min(...selectedTrackIndices)
+			}
 		}
 
 		const maxTrackIndex = sortedTrackIds.value.length - 1
+		if (maxTrackIndex < 0) return
 
-		// Clear selection and select pasted clips
-		selectedClipIds.clear()
-
-		const requests: Array<{
-			audio_file_id: string
-			track_id: string
-			start_beat: number
-			end_beat: number
-			offset_seconds: number
-			gain: number
-			muted: boolean
+		const placements: Array<{
+			request: {
+				audio_file_id: string
+				track_id: string
+				start_beat: number
+				end_beat: number
+				offset_seconds: number
+				gain: number
+				muted: boolean
+			}
+			tempClip: Clip
 		}> = []
 		const tempIds: string[] = []
 		let skippedOutOfBounds = 0
 
 		for (const entry of entries) {
-			const targetTrackIndex = Math.min(baseTrackIndex + entry.trackOffset, maxTrackIndex)
+			const targetTrackIndex = Math.max(
+				0,
+				Math.min(baseTrackIndex + entry.trackOffset, maxTrackIndex),
+			)
 			const targetTrackId = sortedTrackIds.value[targetTrackIndex]
 			if (!targetTrackId) continue
 
@@ -123,7 +131,7 @@ export function useClipboardActions(options: ClipboardActionsOptions = {}) {
 				continue
 			}
 
-			requests.push({
+			const request = {
 				audio_file_id: entry.audioFileId,
 				track_id: targetTrackId,
 				start_beat: startBeat,
@@ -131,16 +139,15 @@ export function useClipboardActions(options: ClipboardActionsOptions = {}) {
 				offset_seconds: entry.offsetSeconds,
 				gain: entry.gain,
 				muted: entry.muted ?? false,
-			})
+			}
 
-			// Optimistic temp clip
 			const tempId = `__temp__${nanoid()}`
 			const tempClip: Clip = {
 				id: tempId,
 				track_id: targetTrackId,
 				audio_file_id: entry.audioFileId,
-				creator_user_id: user.value!.id,
-				creator_display_name: user.value!.display_name,
+				creator_user_id: currentUser.id,
+				creator_display_name: currentUser.display_name,
 				start_beat: startBeat,
 				end_beat: endBeat,
 				offset_seconds: entry.offsetSeconds,
@@ -149,18 +156,27 @@ export function useClipboardActions(options: ClipboardActionsOptions = {}) {
 				created_at: new Date().toISOString(),
 			}
 
-			tempIds.push(tempId)
-			clips.set(tempId, tempClip)
-			selectedClipIds.add(tempId)
+			placements.push({ request, tempClip })
 		}
 
-		if (requests.length === 0) {
+		if (placements.length === 0) {
 			userLog('SYSTEM', 'Nothing pasted: clips would be outside timeline bounds.', {
 				textColor: 'orange',
 			})
 			return
 		}
 
+		const previousSelectionIds = [...selectedClipIds]
+		// Clear selection and select pasted clips
+		selectedClipIds.clear()
+
+		for (const { tempClip } of placements) {
+			tempIds.push(tempClip.id)
+			clips.set(tempClip.id, tempClip)
+			selectedClipIds.add(tempClip.id)
+		}
+
+		const requests = placements.map((placement) => placement.request)
 		const res = await socket.emitWithAck('get:clips:create:batch', { clips: requests })
 		let pastedCount = 0
 
@@ -180,6 +196,9 @@ export function useClipboardActions(options: ClipboardActionsOptions = {}) {
 				clips.delete(tempId)
 				selectedClipIds.delete(tempId)
 			}
+			for (const id of previousSelectionIds) {
+				if (clips.has(id)) selectedClipIds.add(id)
+			}
 			userLog('SYSTEM', `Failed to paste clips: ${res.error.message}`, {
 				textColor: 'red',
 			})
@@ -195,7 +214,8 @@ export function useClipboardActions(options: ClipboardActionsOptions = {}) {
 	// --- DUPLICATE ---
 	async function duplicateSelection() {
 		if (selectedClipIds.size === 0) return
-		if (user.value?.banned_at) return
+		const currentUser = user.value
+		if (!currentUser || currentUser.banned_at) return
 
 		const selected: Clip[] = []
 		for (const id of selectedClipIds) {
@@ -209,10 +229,19 @@ export function useClipboardActions(options: ClipboardActionsOptions = {}) {
 		const maxEnd = Math.max(...selected.map((c) => c.end_beat))
 		const selectionWidth = maxEnd - minBeat
 
-		// Clear current selection, will select duplicated clips
-		selectedClipIds.clear()
-
-		let queued = 0
+		const placements: Array<{
+			request: {
+				audio_file_id: string
+				track_id: string
+				start_beat: number
+				end_beat: number
+				offset_seconds: number
+				gain: number
+				muted: boolean
+			}
+			tempClip: Clip
+		}> = []
+		const tempIds: string[] = []
 		let skippedOutOfBounds = 0
 
 		for (const c of selected) {
@@ -223,13 +252,23 @@ export function useClipboardActions(options: ClipboardActionsOptions = {}) {
 				continue
 			}
 
+			const request = {
+				audio_file_id: c.audio_file_id,
+				track_id: c.track_id,
+				start_beat: startBeat,
+				end_beat: endBeat,
+				offset_seconds: c.offset_seconds,
+				gain: c.gain,
+				muted: c.muted,
+			}
+
 			const tempId = `__temp__${nanoid()}`
 			const tempClip: Clip = {
 				id: tempId,
 				track_id: c.track_id,
 				audio_file_id: c.audio_file_id,
-				creator_user_id: user.value!.id,
-				creator_display_name: user.value!.display_name,
+				creator_user_id: currentUser.id,
+				creator_display_name: currentUser.display_name,
 				start_beat: startBeat,
 				end_beat: endBeat,
 				offset_seconds: c.offset_seconds,
@@ -238,50 +277,60 @@ export function useClipboardActions(options: ClipboardActionsOptions = {}) {
 				created_at: new Date().toISOString(),
 			}
 
-			clips.set(tempId, tempClip)
-			selectedClipIds.add(tempId)
-			queued++
-
-			socket
-				.emitWithAck('get:clip:create', {
-					audio_file_id: c.audio_file_id,
-					track_id: c.track_id,
-					start_beat: startBeat,
-					end_beat: endBeat,
-					offset_seconds: c.offset_seconds,
-					gain: c.gain,
-					muted: c.muted,
-				})
-				.then((res) => {
-					if (res.success) {
-						clips.delete(tempId)
-						selectedClipIds.delete(tempId)
-						clips.set(res.data.id, res.data)
-						selectedClipIds.add(res.data.id)
-					} else {
-						userLog('SYSTEM', `Failed to duplicate clip: ${res.error.message}`, {
-							textColor: 'red',
-						})
-						clips.delete(tempId)
-						selectedClipIds.delete(tempId)
-					}
-				})
-				.catch(() => {
-					clips.delete(tempId)
-					selectedClipIds.delete(tempId)
-				})
+			placements.push({ request, tempClip })
 		}
 
-		if (queued === 0) {
+		if (placements.length === 0) {
 			userLog('SYSTEM', 'Nothing duplicated: clips would be outside timeline bounds.', {
 				textColor: 'orange',
 			})
 			return
 		}
 
+		const previousSelectionIds = [...selectedClipIds]
+		selectedClipIds.clear()
+
+		for (const { tempClip } of placements) {
+			tempIds.push(tempClip.id)
+			clips.set(tempClip.id, tempClip)
+			selectedClipIds.add(tempClip.id)
+		}
+
+		const requests = placements.map((placement) => placement.request)
+		const res = await socket.emitWithAck('get:clips:create:batch', { clips: requests })
+		let duplicatedCount = 0
+
+		if (res.success) {
+			for (const tempId of tempIds) {
+				clips.delete(tempId)
+				selectedClipIds.delete(tempId)
+			}
+
+			for (const clip of res.data) {
+				clips.set(clip.id, clip)
+				selectedClipIds.add(clip.id)
+			}
+			duplicatedCount = res.data.length
+		} else {
+			for (const tempId of tempIds) {
+				clips.delete(tempId)
+				selectedClipIds.delete(tempId)
+			}
+			for (const id of previousSelectionIds) {
+				if (clips.has(id)) selectedClipIds.add(id)
+			}
+			userLog('SYSTEM', `Failed to duplicate clips: ${res.error.message}`, {
+				textColor: 'red',
+			})
+		}
+
 		const skippedMsg =
 			skippedOutOfBounds > 0 ? ` (${skippedOutOfBounds} skipped out of bounds)` : ''
-		userLog('SYSTEM', `Duplicated ${queued} clip(s)${skippedMsg}`, { textColor: 'cyan' })
+		if (duplicatedCount > 0) {
+			userLog('SYSTEM', `Duplicated ${duplicatedCount} clip(s)${skippedMsg}`, {
+				textColor: 'cyan',
+			})
+		}
 	}
 
 	// --- DELETE ---

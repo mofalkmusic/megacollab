@@ -469,13 +469,11 @@ io.on('connection', async (socket) => {
 
 			const { clips: inputClips } = data
 
-			const createdClips: Clip[] = []
 			try {
-				for (const input of inputClips) {
-					const newClip: Omit<Clip, 'created_at'> = {
+				const newClips: Array<Omit<Clip, 'created_at' | 'creator_display_name'>> =
+					inputClips.map((input) => ({
 						id: nanoid(),
 						creator_user_id: user.id,
-						creator_display_name: user.display_name,
 						start_beat: input.start_beat,
 						end_beat: input.end_beat,
 						audio_file_id: input.audio_file_id,
@@ -483,11 +481,8 @@ io.on('connection', async (socket) => {
 						offset_seconds: input.offset_seconds ?? 0,
 						muted: input.muted ?? false,
 						track_id: input.track_id,
-					}
-
-					const clip = await db.createClip(newClip)
-					createdClips.push(clip)
-				}
+					}))
+				const createdClips = await db.createClipsBatch(newClips)
 
 				callback({
 					success: true,
@@ -510,15 +505,6 @@ io.on('connection', async (socket) => {
 					userId: user.id,
 				})
 			} catch (err) {
-				// Best effort rollback for partial writes in case one insert fails.
-				for (const clip of createdClips) {
-					try {
-						await db.deleteClip(clip.id)
-					} catch {
-						// ignore rollback errors, original error below is more relevant
-					}
-				}
-
 				const error = err instanceof Error ? err.message : 'Unknown error'
 				callback({
 					success: false,

@@ -111,14 +111,4 @@ export const migrations: Migration[] = [
             `)
 		},
 	},
-	{
-		id: 5,
-		name: 'ensure_muted_clips_column',
-		func: async (queryFn) => {
-			await queryFn(`
-                ALTER TABLE ${CLIPS_TABLE}
-                ADD COLUMN IF NOT EXISTS muted BOOLEAN NOT NULL DEFAULT FALSE
-            `)
-		},
-	},
 ]

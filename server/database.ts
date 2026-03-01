@@ -83,6 +83,7 @@ export const db = {
 	getTrack,
 	updateTrack,
 	createClip,
+	createClipsBatch,
 	getClips,
 	getClip,
 	deleteClip,
@@ -240,6 +241,98 @@ async function createClip(clip: Omit<Clip, 'created_at' | 'creator_display_name'
 	const result = rows[0]!
 
 	return result
+}
+
+async function createClipsBatch(
+	clipsToCreate: Array<Omit<Clip, 'created_at' | 'creator_display_name'>>,
+): Promise<Clip[]> {
+	if (clipsToCreate.length === 0) return []
+
+	const params: Array<string | number | boolean> = []
+	const valuesSql: string[] = []
+
+	for (let i = 0; i < clipsToCreate.length; i++) {
+		const clip = clipsToCreate[i]!
+		const base = i * 9
+
+		valuesSql.push(
+			`(${i + 1}, $${base + 1}::TEXT, $${base + 2}::TEXT, $${base + 3}::TEXT, $${base + 4}::TEXT, $${base + 5}::DOUBLE PRECISION, $${base + 6}::DOUBLE PRECISION, $${base + 7}::DOUBLE PRECISION, $${base + 8}::DOUBLE PRECISION, $${base + 9}::BOOLEAN)`,
+		)
+
+		params.push(
+			clip.id,
+			clip.creator_user_id,
+			clip.track_id,
+			clip.audio_file_id,
+			clip.end_beat,
+			clip.start_beat,
+			clip.gain,
+			clip.offset_seconds,
+			clip.muted,
+		)
+	}
+
+	const rows = await queryFn<Clip>(
+		`
+			WITH input_rows (
+				ord,
+				id,
+				creator_user_id,
+				track_id,
+				audio_file_id,
+				end_beat,
+				start_beat,
+				gain,
+				offset_seconds,
+				muted
+			) AS (
+				VALUES ${valuesSql.join(',\n')}
+			),
+			inserted AS (
+				INSERT INTO ${CLIPS_TABLE} (
+					id,
+					creator_user_id,
+					track_id,
+					audio_file_id,
+					end_beat,
+					start_beat,
+					gain,
+					offset_seconds,
+					muted
+				)
+				SELECT
+					id,
+					creator_user_id,
+					track_id,
+					audio_file_id,
+					end_beat,
+					start_beat,
+					gain,
+					offset_seconds,
+					muted
+				FROM input_rows
+				ORDER BY ord
+				RETURNING *
+			)
+			SELECT
+				inserted.*,
+				users.display_name AS creator_display_name
+			FROM inserted
+			JOIN input_rows ON input_rows.id = inserted.id
+			LEFT JOIN ${USERS_TABLE} AS users
+				ON inserted.creator_user_id = users.id
+			ORDER BY input_rows.ord
+		`,
+		params,
+	)
+
+	if (rows.length !== clipsToCreate.length) {
+		throw new Error(
+			`Failed to create all clips in batch (${rows.length}/${clipsToCreate.length})`,
+		)
+	}
+
+	return rows
 }
 
 async function getClips(): Promise<Clip[]> {
