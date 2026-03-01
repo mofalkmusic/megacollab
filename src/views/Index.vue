@@ -28,6 +28,17 @@
 					}"
 				/>
 			</button>
+			<button
+				@click="togglePlayheadTracking"
+				class="controls-panel-btn"
+				:class="{ tracking: isPlayheadTracking }"
+				style="border-left: none"
+				title="Playhead tracking during playback (F)"
+			>
+				<span class="tracking-icon-badge" :class="{ active: isPlayheadTracking }">
+					<ArrowRightToLine :size="14" />
+				</span>
+			</button>
 
 			<p class="small mono controls-panel-wrap">
 				{{ minutesNseconds }}<br />
@@ -115,10 +126,12 @@
 
 			<div v-if="isUserMenuOpen" ref="userMenu" style="z-index: 100" :style="floatingStyles">
 				<UserMenu
+					:is-playhead-tracking="isPlayheadTracking"
 					@on-updated="update()"
 					@on-undo="tryUndo()"
 					@on-send-chat="sendChat()"
 					@on-toggle-loop="toggleLoop()"
+					@on-toggle-playhead-tracking="togglePlayheadTracking()"
 				/>
 			</div>
 		</div>
@@ -242,6 +255,7 @@ import { _socketReady, initializeSocket, socket, socketReadyState } from '@/sock
 import {
 	computed,
 	nextTick,
+	onBeforeUnmount,
 	onMounted,
 	reactive,
 	ref,
@@ -279,6 +293,7 @@ import {
 	useElementBounding,
 } from '@vueuse/core'
 import {
+	currentTime,
 	currentPlayTimeBeats,
 	currentPlayTimeSeconds,
 	isPlaying,
@@ -320,6 +335,7 @@ import {
 	Download,
 	Volume2,
 	ZoomIn,
+	ArrowRightToLine,
 } from 'lucide-vue-next'
 import { offset, useFloating } from '@floating-ui/vue'
 import { useRouter } from 'vue-router'
@@ -475,6 +491,17 @@ useEventListener(window, 'focusin', (e) => {
 })
 
 useEventListener('keydown', (event) => {
+	const target = event.target as HTMLElement | null
+	if (
+		target &&
+		(target.tagName === 'INPUT' ||
+			target.tagName === 'TEXTAREA' ||
+			target.tagName === 'SELECT' ||
+			target.isContentEditable)
+	) {
+		return
+	}
+
 	if (event.code === 'Space') {
 		event.preventDefault()
 		if (isPlaying.value) pause()
@@ -484,6 +511,11 @@ useEventListener('keydown', (event) => {
 	if (event.code === 'KeyL') {
 		toggleLoop()
 	}
+
+	if (event.code === 'KeyF') {
+		event.preventDefault()
+		togglePlayheadTracking()
+	}
 })
 
 function togglePlayState() {
@@ -492,6 +524,87 @@ function togglePlayState() {
 }
 
 const timelineContainerEl = useTemplateRef('timelineContainer')
+const isPlayheadTracking = shallowRef(false)
+const playheadTrackingRafId = shallowRef<number | null>(null)
+const playheadTrackingLastAppliedScrollLeft = shallowRef<number | null>(null)
+const PLAYHEAD_TRACKING_BACKWARD_NOISE_PX = 1.25
+const trackingPlayheadBeat = computed(() => sec_to_beats(currentTime.value))
+
+function snapToDevicePixel(px: number) {
+	const dpr =
+		typeof window !== 'undefined' && window.devicePixelRatio > 0 ? window.devicePixelRatio : 1
+	return Math.round(px * dpr) / dpr
+}
+
+function clampTimelineScrollLeft(scrollLeft: number, container: HTMLElement) {
+	const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth)
+	return Math.max(0, Math.min(maxScrollLeft, scrollLeft))
+}
+
+function getCenteredPlayheadScrollLeft(container: HTMLElement) {
+	const playheadPx = snapToDevicePixel(trackingPlayheadBeat.value * pxPerBeat.value)
+	return clampTimelineScrollLeft(playheadPx - container.clientWidth / 2, container)
+}
+
+function centerPlayheadInViewport() {
+	const container = timelineContainerEl.value
+	if (!container) return
+	const centeredTarget = getCenteredPlayheadScrollLeft(container)
+	container.scrollLeft = centeredTarget
+	playheadTrackingLastAppliedScrollLeft.value = centeredTarget
+}
+
+function followPlayheadInViewport() {
+	const container = timelineContainerEl.value
+	if (!container) return
+
+	const targetScrollLeft = getCenteredPlayheadScrollLeft(container)
+	const previousAppliedScrollLeft = playheadTrackingLastAppliedScrollLeft.value
+	const stableTargetScrollLeft =
+		previousAppliedScrollLeft != null &&
+		targetScrollLeft < previousAppliedScrollLeft &&
+		previousAppliedScrollLeft - targetScrollLeft <= PLAYHEAD_TRACKING_BACKWARD_NOISE_PX
+			? previousAppliedScrollLeft
+			: targetScrollLeft
+
+	container.scrollLeft = stableTargetScrollLeft
+	playheadTrackingLastAppliedScrollLeft.value = container.scrollLeft
+}
+
+function stopPlayheadTrackingAnimation() {
+	if (playheadTrackingRafId.value == null) return
+	cancelAnimationFrame(playheadTrackingRafId.value)
+	playheadTrackingRafId.value = null
+	playheadTrackingLastAppliedScrollLeft.value = null
+}
+
+function runPlayheadTrackingFrame() {
+	if (!isPlayheadTracking.value || !isPlaying.value) {
+		stopPlayheadTrackingAnimation()
+		return
+	}
+
+	followPlayheadInViewport()
+	playheadTrackingRafId.value = requestAnimationFrame(runPlayheadTrackingFrame)
+}
+
+function ensurePlayheadTrackingAnimation() {
+	if (playheadTrackingRafId.value != null) return
+	playheadTrackingRafId.value = requestAnimationFrame(runPlayheadTrackingFrame)
+}
+
+function togglePlayheadTracking() {
+	isPlayheadTracking.value = !isPlayheadTracking.value
+	if (!isPlayheadTracking.value) {
+		stopPlayheadTrackingAnimation()
+		return
+	}
+	if (!isPlaying.value) return
+	nextTick(() => {
+		centerPlayheadInViewport()
+		ensurePlayheadTrackingAnimation()
+	})
+}
 
 useEventListener(
 	timelineContainerEl,
@@ -553,6 +666,25 @@ useEventListener(timelineContainerEl, 'pointerdown', (e) => {
 
 const { x: scrollX, y: scrollY } = useScroll(timelineContainerEl)
 const { width: timelineContainerClientWidth } = useElementSize(timelineContainerEl)
+
+watch(
+	[isPlayheadTracking, isPlaying],
+	([isTracking, playing]) => {
+		if (!isTracking || !playing) {
+			stopPlayheadTrackingAnimation()
+			return
+		}
+		nextTick(() => {
+			centerPlayheadInViewport()
+			ensurePlayheadTrackingAnimation()
+		})
+	},
+	{ immediate: true },
+)
+
+onBeforeUnmount(() => {
+	stopPlayheadTrackingAnimation()
+})
 
 async function handleTrackAdded() {
 	await nextTick() // awaiting repaint
@@ -1211,6 +1343,33 @@ useEventListener(window, 'blur', () => {
 	align-content: center;
 	line-height: 1.06em;
 	border-right: 1px solid var(--border-primary);
+}
+
+.controls-panel-btn.tracking {
+	box-shadow:
+		0px 0px 24px -12px hsl(var(--active-looping-hue) 100% 50% / 0.75),
+		inset 0px 0px 8px -5px hsl(var(--active-looping-hue) 100% 50% / 0.8);
+}
+
+.tracking-icon-badge {
+	width: 1.7rem;
+	height: 1.7rem;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 0.2rem;
+	background-color: transparent;
+	color: var(--text-color-primary);
+	transition:
+		background-color 120ms ease,
+		color 120ms ease,
+		box-shadow 120ms ease;
+}
+
+.tracking-icon-badge.active {
+	background-color: hsl(var(--active-looping-hue) 100% 58% / 0.95);
+	color: hsl(0 0% 12% / 1);
+	box-shadow: inset 0 0 0 1px hsl(var(--active-looping-hue) 100% 30% / 0.8);
 }
 
 .open-user-menu-btn {

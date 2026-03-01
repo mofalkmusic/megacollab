@@ -104,6 +104,12 @@ const playheadStyle = computed((): CSSProperties => {
 	}
 })
 
+function snapToDevicePixel(px: number) {
+	const dpr =
+		typeof window !== 'undefined' && window.devicePixelRatio > 0 ? window.devicePixelRatio : 1
+	return Math.round(px * dpr) / dpr
+}
+
 const playheadHeadStyle = computed((): CSSProperties => {
 	return {
 		transform: `translateX(${playHeadPosPx.value}px) translateX(-50%)`,
@@ -117,14 +123,15 @@ const restingPlayheadStyle = computed((): CSSProperties => {
 })
 
 const restingPosPx = computed(() => {
-	return beats_to_px(sec_to_beats(restingPositionSec.value))
+	return snapToDevicePixel(beats_to_px(sec_to_beats(restingPositionSec.value)))
 })
 
 const localPlayheadBeat = shallowRef<number | null>(null)
 
 const playHeadPosPx = computed(() => {
-	if (localPlayheadBeat.value != null) return beats_to_px(localPlayheadBeat.value)
-	return beats_to_px(sec_to_beats(currentTime.value))
+	if (localPlayheadBeat.value != null)
+		return snapToDevicePixel(beats_to_px(localPlayheadBeat.value))
+	return snapToDevicePixel(beats_to_px(sec_to_beats(currentTime.value)))
 })
 
 const isActionKeyPressed = computed(() => controlKeyPressed.value || shiftKeyPressed.value)
@@ -352,6 +359,11 @@ watchThrottled(
 
 .playhead-line.is-playing {
 	background-color: var(--active-playing-color);
+}
+
+.playhead-line.is-playing,
+.playhead-head.is-playing {
+	transition: none;
 }
 
 .playhead-line.is-playing::before {

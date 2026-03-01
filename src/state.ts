@@ -63,6 +63,7 @@ export const controlKeyPressed = shallowRef(false)
 export const shiftKeyPressed = shallowRef(false)
 export const zKeyPressed = shallowRef(false)
 export const tKeyPressed = shallowRef(false)
+export const fKeyPressed = shallowRef(false)
 export const lKeyPressed = shallowRef(false)
 export const rightMouseButtonPressedOnTimeline = shallowRef(false)
 
@@ -100,6 +101,8 @@ useIntervalFn(
 )
 
 useEventListener(window, 'keydown', (event) => {
+	const key = event.key.toLowerCase()
+
 	if (event.key === 'Alt') {
 		altKeyPressed.value = true
 		event.preventDefault()
@@ -116,23 +119,30 @@ useEventListener(window, 'keydown', (event) => {
 		return
 	}
 
-	if (event.key === 'z') {
+	if (key === 'z') {
 		zKeyPressed.value = true
 		return
 	}
 
-	if (event.key === 't') {
+	if (key === 't') {
 		tKeyPressed.value = true
 		return
 	}
 
-	if (event.key === 'l') {
+	if (key === 'f') {
+		fKeyPressed.value = true
+		return
+	}
+
+	if (key === 'l') {
 		lKeyPressed.value = true
 		return
 	}
 })
 
 useEventListener(window, 'keyup', (event) => {
+	const key = event.key.toLowerCase()
+
 	if (event.key === 'Alt') {
 		altKeyPressed.value = false
 		event.preventDefault()
@@ -149,17 +159,22 @@ useEventListener(window, 'keyup', (event) => {
 		return
 	}
 
-	if (event.key === 'z') {
+	if (key === 'z') {
 		zKeyPressed.value = false
 		return
 	}
 
-	if (event.key === 't') {
+	if (key === 't') {
 		tKeyPressed.value = false
 		return
 	}
 
-	if (event.key === 'l') {
+	if (key === 'f') {
+		fKeyPressed.value = false
+		return
+	}
+
+	if (key === 'l') {
 		lKeyPressed.value = false
 		return
 	}

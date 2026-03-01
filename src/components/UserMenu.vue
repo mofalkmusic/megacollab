@@ -56,6 +56,13 @@
 					<p class="kbd" :class="{ active: lKeyPressed }">L</p>
 				</div>
 			</button>
+			<button class="default-button menu-btn" @click="emits('onTogglePlayheadTracking')">
+				<ArrowRightToLine class="dim" :size="14" :stroke-width="2" />
+				<p>{{ isPlayheadTracking ? 'Disable' : 'Enable' }} Tracking</p>
+				<div class="shortcut-container mono">
+					<p class="kbd" :class="{ active: fKeyPressed }">F</p>
+				</div>
+			</button>
 
 			<div
 				style="
@@ -177,7 +184,14 @@
 
 <script setup lang="ts">
 import { socket } from '@/socket/socket'
-import { user, controlKeyPressed, zKeyPressed, tKeyPressed, lKeyPressed } from '@/state'
+import {
+	user,
+	controlKeyPressed,
+	zKeyPressed,
+	tKeyPressed,
+	fKeyPressed,
+	lKeyPressed,
+} from '@/state'
 import {
 	UserPen,
 	Settings2,
@@ -188,6 +202,7 @@ import {
 	Bug,
 	ExternalLink,
 	Repeat,
+	ArrowRightToLine,
 	Shield,
 	Lock,
 } from 'lucide-vue-next'
@@ -203,6 +218,10 @@ const isBugButtonHovered = shallowRef(false)
 function onBugHover(hovered: boolean) {
 	isBugButtonHovered.value = hovered
 }
+
+const { isPlayheadTracking } = defineProps<{
+	isPlayheadTracking: boolean
+}>()
 
 const router = useRouter()
 const inDev = import.meta.env.MODE === 'development'
@@ -230,6 +249,7 @@ const emits = defineEmits<{
 	(e: 'onUndo'): void
 	(e: 'onSendChat'): void
 	(e: 'onToggleLoop'): void
+	(e: 'onTogglePlayheadTracking'): void
 }>()
 
 async function cancelEditingUsername() {
