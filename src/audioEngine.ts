@@ -1,4 +1,4 @@
-import { computed, shallowRef, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { beats_to_sec, quantize_beats, sec_to_beats } from '@/utils/mathUtils'
 import { useIntervalFn, useRafFn, watchThrottled, useTimeoutFn } from '@vueuse/core'
 import { clips, TOTAL_BEATS, audioBuffers, bpm } from '@/state'
@@ -9,6 +9,12 @@ const inDev = import.meta.env.MODE === 'development'
 export const audioContext = new AudioContext()
 const masterGain = audioContext.createGain()
 masterGain.connect(audioContext.destination)
+export const masterGainValue = ref(1)
+
+export function setMasterGain(gain: number) {
+	masterGainValue.value = gain
+	masterGain.gain.setTargetAtTime(gain, audioContext.currentTime, 0.02)
+}
 
 const trackGainNodes = new Map<string, GainNode>()
 const trackAnalysers = new Map<string, AnalyserNode>()
@@ -485,7 +491,7 @@ export async function play() {
 	const now = audioContext.currentTime
 	masterGain.gain.cancelScheduledValues(now)
 	masterGain.gain.setValueAtTime(0, now)
-	masterGain.gain.linearRampToValueAtTime(1, now + FADE_TIME_MS / 1000)
+	masterGain.gain.linearRampToValueAtTime(masterGainValue.value, now + FADE_TIME_MS / 1000)
 
 	playbackStartTime.value = audioContext.currentTime + BACK_TRACKING_TIME_ON_PLAY
 
