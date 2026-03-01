@@ -56,7 +56,8 @@ if (!IN_DEV_MODE) {
 } else {
 	print.db('Using PGlite')
 
-	const dataDir = join(import.meta.dir, '..', DEV_DATABASE_FOLDER)
+	const devDatabaseFolder = Bun.env['DEV_DATABASE_FOLDER'] || DEV_DATABASE_FOLDER
+	const dataDir = join(import.meta.dir, '..', devDatabaseFolder)
 	const client = new PGlite(dataDir)
 
 	queryFn = async (query, params = []) => {
