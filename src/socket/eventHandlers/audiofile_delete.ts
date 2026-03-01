@@ -1,5 +1,5 @@
 import { defineSocketHandler } from '@/socket/socket'
-import { audioBuffers, audiofiles, clips } from '@/state'
+import { audioBuffers, audiofiles, clips, poolFilePlaying, poolFilePreviewAudio } from '@/state'
 import type { AudioFile } from '@/types'
 import { deleteAudioFile, deleteBitmaps } from '@/utils/workerPool'
 import type { Clip } from '~/schema'
@@ -18,6 +18,12 @@ export async function deleteAudio(audio_file_id: AudioFile['id'], deleted_clip_i
 
 	audiofiles.delete(audio_file_id)
 	audioBuffers.delete(audio_file_id)
+
+	if (poolFilePlaying.value == audio_file_id && poolFilePreviewAudio.value) {
+		poolFilePreviewAudio.value.pause()
+		poolFilePreviewAudio.value.currentTime = 0
+		poolFilePreviewAudio.value = null
+	}
 
 	await Promise.allSettled([
 		deleteAudioFile(audio_file_id, audio_file_id),

@@ -8,6 +8,7 @@
 			isHovered,
 			isSelected,
 			!!dragSession,
+			poolFilePlaying,
 		]"
 		ref="clipWrapper"
 		class="outmostClipWrapper clip"
@@ -37,8 +38,17 @@
 		<div v-if="!withinAudioPool" ref="rightHandle" class="resizehandle right"></div>
 
 		<button
+			v-if="withinAudioPool && (isHovered || poolFilePlaying == props.audiofile.id)"
+			class="file-pool-button play-button"
+			@click="playAudioFile"
+			@pointerdown.stop
+		>
+			<Play :size="13" v-if="poolFilePlaying != props.audiofile.id" />
+			<Pause :size="13" v-else />
+		</button>
+		<button
 			v-if="withinAudioPool && isHovered && props.deletable === true"
-			class="trash-button"
+			class="file-pool-button trash-button"
 			@click="deleteAudioFile"
 			@pointerdown.stop
 		>
@@ -52,6 +62,7 @@ import {
 	computed,
 	onMounted,
 	ref,
+	render,
 	shallowRef,
 	useTemplateRef,
 	watch,
@@ -67,6 +78,8 @@ import {
 	rightMouseButtonPressedOnTimeline,
 	user,
 	selectedClipIds,
+	poolFilePlaying,
+	poolFilePreviewAudio,
 } from '@/state'
 import type { Clip } from '~/schema'
 import {
@@ -75,6 +88,7 @@ import {
 	watchThrottled,
 	useElementHover,
 	useWindowFocus,
+	useRafFn,
 } from '@vueuse/core'
 import { formatHex, interpolate, parse, wcagLuminance } from 'culori'
 import {
@@ -86,9 +100,10 @@ import {
 } from '@/utils/mathUtils'
 import { socket } from '@/socket/socket'
 import type { AudioFile } from '@/types'
-import { Trash2 } from 'lucide-vue-next'
+import { Pause, Play, Trash2 } from 'lucide-vue-next'
 import { deleteAudio } from '@/socket/eventHandlers/audiofile_delete'
 import { useConsole } from '@/composables/useConsole'
+import { fa } from 'zod/v4/locales'
 
 const { userLog } = useConsole()
 
@@ -165,6 +180,41 @@ async function deleteAudioFile() {
 		})
 	}
 }
+
+const { pause: pauseWaveformUpdate, resume: resumeWaveformUpdate } = useRafFn(drawWaveform)
+pauseWaveformUpdate()
+
+async function playAudioFile() {
+	if (poolFilePreviewAudio.value) {
+		poolFilePreviewAudio.value.pause()
+		poolFilePreviewAudio.value.currentTime = 0
+	}
+
+	if (poolFilePlaying.value != props.audiofile.id) {
+		poolFilePlaying.value = props.audiofile.id
+		poolFilePreviewAudio.value = new Audio(props.audiofile.public_url)
+		console.log(poolFilePreviewAudio.value.duration)
+
+		poolFilePreviewAudio.value.onended = () => {
+			poolFilePlaying.value = null
+		}
+		poolFilePreviewAudio.value.play()
+		resumeWaveformUpdate()
+	} else {
+		poolFilePreviewAudio.value = null
+		poolFilePlaying.value = null
+		pauseWaveformUpdate()
+	}
+}
+
+watch(
+	() => props.audiofile.public_url,
+	() => {
+		if (poolFilePlaying.value == props.audiofile.id) {
+			poolFilePreviewAudio.value = new Audio(props.audiofile.public_url)
+		}
+	},
+)
 
 const initialClipState = computed(() => {
 	if (!props.audiofile) throw new Error(`No audio file prop provided`)
@@ -712,14 +762,36 @@ async function drawWaveform() {
 
 		ctx.globalCompositeOperation = 'source-in'
 
-		// Mix with black (0.2 = 20% black)
-		const mixed = interpolate([
-			isSelected.value ? '#ff4444' : props.audiofile.color,
-			'#000000',
-		])(0.2)
-		const finalColor = formatHex(mixed) ?? props.audiofile.color
-		ctx.fillStyle = finalColor
-		ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
+		const isCurrentPoolFile =
+			withinAudioPool.value == true &&
+			poolFilePlaying.value == props.audiofile.id &&
+			poolFilePreviewAudio.value
+
+		const color = isSelected.value ? '#ff4444' : props.audiofile.color
+
+		if (!isCurrentPoolFile) {
+			// Mix with black (0.2 = 20% black)
+			const mixed = interpolate([color, '#000000'])(0.2)
+			const finalColor = formatHex(mixed) ?? props.audiofile.color
+			ctx.fillStyle = finalColor
+			ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
+		} else {
+			const audio = poolFilePreviewAudio.value!
+			const progress = audio?.duration ? audio.currentTime / audio.duration : 0
+			console.log(progress, audio?.duration)
+
+			//gradient because composite stuff
+			const grad = ctx.createLinearGradient(0, 0, canvasWidth.value, 0)
+
+			grad.addColorStop(0, color)
+			grad.addColorStop(progress, color)
+			grad.addColorStop(progress, formatHex(interpolate([color, '#000000'])(0.4)) ?? color)
+			grad.addColorStop(1, formatHex(interpolate([color, '#000000'])(0.4)) ?? color)
+
+			ctx.fillStyle = grad
+			ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
+		}
+
 		ctx.globalCompositeOperation = 'source-over'
 
 		waveformsDrawn.value = true
@@ -734,8 +806,12 @@ watchThrottled(
 		() => props.audiofile.waveforms,
 		() => props.audiofile.color,
 		pixelRatio,
+		poolFilePlaying,
 	],
 	() => {
+		if (poolFilePlaying.value != props.audiofile.id) {
+			pauseWaveformUpdate()
+		}
 		drawWaveform()
 	},
 	{ immediate: false, throttle: 200 },
@@ -871,7 +947,7 @@ canvas {
 	}
 }
 
-.trash-button {
+.file-pool-button {
 	grid-area: canvas;
 	right: 0;
 	top: 0;
@@ -882,9 +958,6 @@ canvas {
 	width: 2.1rem;
 
 	aspect-ratio: 1/1;
-
-	justify-self: flex-end;
-	align-self: flex-end;
 
 	display: flex;
 	align-items: center;
@@ -901,5 +974,14 @@ canvas {
 	border-radius: 0.4rem;
 
 	background-color: color-mix(in lch, transparent, black 60%);
+}
+/* both flex properties since we may want to have top buttons in the future */
+.trash-button {
+	justify-self: flex-end;
+	align-self: flex-end;
+}
+.play-button {
+	justify-self: flex-start;
+	align-self: flex-end;
 }
 </style>

@@ -128,9 +128,20 @@ export async function optimisticAudioCreateUpload(
 
 				if (!res.success) {
 					return handleUploadFailure(file_id, res.error)
-				} else {
-					onProgress?.(100)
 				}
+				onProgress?.(100)
+
+				// set audiofile to shared version to ensure url is correct
+				audiofiles.set(res.data.id, {
+					...res.data,
+					waveforms,
+					sampleRate,
+					hash: makeAudioFileHash({
+						duration: res.data.duration,
+						file_name: res.data.file_name,
+						creator_user_id: user.value!.id,
+					}),
+				})
 
 				// nothing to do, server will broadcast audiofile:create event
 			} catch (err) {
