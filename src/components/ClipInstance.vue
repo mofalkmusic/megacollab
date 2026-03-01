@@ -193,7 +193,6 @@ async function playAudioFile() {
 	if (poolFilePlaying.value != props.audiofile.id) {
 		poolFilePlaying.value = props.audiofile.id
 		poolFilePreviewAudio.value = new Audio(props.audiofile.public_url)
-		console.log(poolFilePreviewAudio.value.duration)
 
 		poolFilePreviewAudio.value.onended = () => {
 			poolFilePlaying.value = null
@@ -778,7 +777,6 @@ async function drawWaveform() {
 		} else {
 			const audio = poolFilePreviewAudio.value!
 			const progress = audio?.duration ? audio.currentTime / audio.duration : 0
-			console.log(progress, audio?.duration)
 
 			//gradient because composite stuff
 			const grad = ctx.createLinearGradient(0, 0, canvasWidth.value, 0)
