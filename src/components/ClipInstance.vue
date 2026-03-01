@@ -261,7 +261,8 @@ const gainHandleStyle = computed((): CSSProperties | undefined => {
 		const relativeLeft = centerAbs - clipLeft
 		return {
 			left: `${relativeLeft}px`,
-		}
+			'--relative-left': `${relativeLeft}px`,
+		} as any
 	}
 
 	return undefined
@@ -1024,31 +1025,59 @@ canvas {
 
 .gainhandle {
 	position: absolute;
-	width: 1rem;
-	height: 1rem;
 
-	--_mod-distance: 2px;
+	height: 1.6rem;
+	width: 2.2rem;
+	max-width: calc(
+		2 *
+			min(
+				var(--relative-left, 50%) - min(1rem, 30%),
+				100% - var(--relative-left, 50%) - min(1rem, 30%)
+			)
+	);
+	min-width: 1rem;
+
+	--_mod-distance: 0.3rem;
 	--_bottom-pad: 1px;
 
-	border-radius: 50%;
-	background-color: var(--text-color-primary);
-	left: 50%;
-	top: calc(100% - var(--_bottom-pad) - var(--_mod-distance));
-	transform: translate(-50%, -50%);
+	left: var(--relative-left, 50%);
+	bottom: 0;
+	transform: translateX(-50%);
 	z-index: 10;
 	cursor: ns-resize;
-	box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
 	opacity: 0;
-	transition:
-		opacity 150ms ease,
-		transform 120ms ease;
+	transition: opacity 150ms ease;
+
+	background-color: transparent;
+
+	/* border: 1px solid purple; */
+
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
 
 	clip-path: polygon(
 		0 0,
 		100% 0,
-		100% calc(50% + var(--_mod-distance)),
-		0 calc(50% + var(--_mod-distance))
+		100% calc(100% - var(--_bottom-pad)),
+		0 calc(100% - var(--_bottom-pad))
 	);
+}
+
+.gainhandle::after {
+	content: '';
+	display: block;
+
+	width: 1rem;
+	height: 1rem;
+
+	border-radius: 50%;
+	background-color: var(--text-color-primary);
+	box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+
+	margin-bottom: calc(-1 * var(--_mod-distance));
+
+	transition: transform 120ms ease;
 }
 
 .outmostClipWrapper:hover .gainhandle,
@@ -1056,8 +1085,8 @@ canvas {
 	opacity: 1;
 }
 
-.gainhandle:active {
-	transform: translate(-50%, -55%) scale(1.2);
+.gainhandle:active::after {
+	transform: scale(1.2);
 }
 
 .loading {
