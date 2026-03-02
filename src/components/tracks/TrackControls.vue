@@ -10,37 +10,46 @@
 			<p v-if="track.title" class="small no-select">{{ track.title }}</p>
 			<p v-else class="small dim track-title no-select">Track {{ index + 1 }}</p>
 
-			<UseElementBounding v-slot="{ top, height }" style="grid-area: vol">
+			<div style="grid-area: vol" class="volumeSlider" @click.stop>
 				<div
-					class="volumeSlider"
-					@pointerdown="startVolumeDrag($event, id, top, height)"
-					@click.stop
-					@contextmenu.prevent.stop="resetVolume(id)"
-				>
-					<div
-						class="volume-meter-fill"
-						:style="{
-							height: `${(trackVolumes.get(id) ?? 0) * 100}%`,
-						}"
-					></div>
-					<div
-						class="volume-thumb"
-						:style="{
-							bottom: `${track.gain * 50}%`,
-						}"
-					></div>
-					<div class="volume-zero-marker"></div>
-				</div>
-			</UseElementBounding>
+					class="volume-meter-fill"
+					:style="{
+						height: `${(trackVolumes.get(id) ?? 0) * 100}%`,
+					}"
+				></div>
+			</div>
 
-			<button
-				class="menu-trigger-btn"
-				@click.stop="toggleContextMenu(id)"
-				:class="{ active: contextMenuTrackId === id }"
-				style="grid-area: menu"
+			<div
+				style="
+					grid-area: menu;
+					display: flex;
+					align-items: center;
+					justify-content: flex-start;
+					gap: calc(2 * 3px);
+				"
 			>
-				<Ellipsis :size="16" />
-			</button>
+				<button
+					class="menu-trigger-btn mute"
+					@click.stop="toggleMute(id)"
+					:class="{ active: mutedTrackIds.has(id) }"
+				>
+					<p class="small" style="color: inherit">M</p>
+				</button>
+				<button
+					class="menu-trigger-btn solo"
+					@click.stop="toggleSolo(id)"
+					:class="{ active: soloTrackIds.has(id) }"
+				>
+					<p class="small" style="color: inherit">S</p>
+				</button>
+				<button
+					class="menu-trigger-btn"
+					@click.stop="toggleContextMenu(id)"
+					:class="{ active: contextMenuTrackId === id }"
+				>
+					<Ellipsis :size="16" />
+				</button>
+			</div>
 
 			<!-- context menu -->
 			<div
@@ -98,7 +107,15 @@ import {
 	trackControlsWidth,
 } from '@/state'
 import { computed, reactive, useTemplateRef, watch, type CSSProperties, shallowRef } from 'vue'
-import { getTrackVolume, isPlaying, setTrackGain, unregisterTrack } from '@/audioEngine'
+import {
+	getTrackVolume,
+	isPlaying,
+	unregisterTrack,
+	mutedTrackIds,
+	soloTrackIds,
+	toggleMute,
+	toggleSolo,
+} from '@/audioEngine'
 import { useRafFn, useEventListener, onClickOutside, useElementSize } from '@vueuse/core'
 import { UseElementBounding, vOnClickOutside } from '@vueuse/components'
 import { socket } from '@/socket/socket'
@@ -203,123 +220,6 @@ async function deleteTrack(trackId: string) {
 		})
 	}
 }
-
-function startVolumeDrag(e: PointerEvent, trackId: string, top: number, height: number) {
-	if (user.value?.banned_at) return
-	if (e.button !== 0) return
-
-	const target = e.currentTarget as HTMLElement
-	target.setPointerCapture(e.pointerId)
-
-	const track = tracks.get(trackId)
-	if (!track) {
-		userLog('SYSTEM', 'This track has been deleted.', {
-			textColor: 'yellow',
-		})
-		return
-	}
-	const initialGain = track.gain
-
-	const SENSITIVITY = 0.2
-
-	const range = 2
-	const min = 0
-
-	const startY = e.clientY
-	let currentClientY = e.clientY
-	const startRelativeY = Math.max(0, Math.min(1, 1 - (e.clientY - top) / height))
-
-	function update(clientY: number) {
-		const deltaY = startY - clientY
-		const relativeDelta = (deltaY / height) * SENSITIVITY
-		const relativeY = Math.max(0, Math.min(1, startRelativeY + relativeDelta))
-
-		let gain: number = min + relativeY * range
-
-		if (altKeyPressed.value || controlKeyPressed.value) {
-			gain = 1
-		}
-
-		// update local state optimistically
-		const track = tracks.get(trackId)
-
-		if (track) {
-			track.gain = gain
-			setTrackGain(trackId, gain)
-		}
-	}
-
-	// Initial click update
-	update(currentClientY)
-
-	function onMove(e: PointerEvent) {
-		currentClientY = e.clientY
-		update(currentClientY)
-	}
-
-	const { stop: stopKeys } = watch([altKeyPressed, controlKeyPressed], () => {
-		update(currentClientY)
-	})
-
-	async function onEnd() {
-		// Cleanup listeners
-		stopMove()
-		stopUp()
-		stopLostCapture()
-		stopKeys()
-
-		if (target.hasPointerCapture(e.pointerId)) {
-			target.releasePointerCapture(e.pointerId)
-		}
-
-		// Final sync
-		const track = tracks.get(trackId)
-		if (track) {
-			const res = await socket.emitWithAck('get:track:update', {
-				id: trackId,
-				changes: { gain: track.gain },
-			})
-
-			if (!res.success) {
-				track.gain = initialGain
-				setTrackGain(trackId, initialGain)
-				userLog('SYSTEM', `Failed to update track gain: ${res.error.message}`, {
-					textColor: 'red',
-				})
-			}
-		}
-	}
-
-	const stopMove = useEventListener(window, 'pointermove', onMove)
-	const stopUp = useEventListener(window, 'pointerup', onEnd)
-	const stopLostCapture = useEventListener(target, 'lostpointercapture', onEnd)
-}
-
-async function resetVolume(trackId: string) {
-	if (user.value?.banned_at) return
-	const track = tracks.get(trackId)
-	if (!track) return
-
-	const initialGain = track.gain
-	const newGain = DEFAULT_GAIN
-
-	track.gain = newGain // todo: this should be done automatically by settrackgain
-	setTrackGain(trackId, newGain)
-
-	const res = await socket.emitWithAck('get:track:update', {
-		id: trackId,
-		changes: { gain: newGain },
-	})
-
-	if (!res.success) {
-		// Revert
-		track.gain = initialGain
-		setTrackGain(trackId, initialGain)
-		userLog('SYSTEM', `Failed to reset track gain: ${res.error.message}`, {
-			textColor: 'yellow',
-		})
-	}
-}
 </script>
 
 <style scoped>
@@ -386,8 +286,6 @@ async function resetVolume(trackId: string) {
 	flex-direction: column;
 	justify-content: flex-end;
 	touch-action: none;
-	/* prevent scroll while dragging */
-	cursor: ns-resize;
 }
 
 .volume-meter-fill {
@@ -401,28 +299,6 @@ async function resetVolume(trackId: string) {
 	transition: height 0.1s linear;
 }
 
-.volume-thumb {
-	position: absolute;
-	left: 0;
-	right: 0;
-	height: 1px;
-	background-color: white;
-	pointer-events: none;
-	box-shadow: 0 0 2px black;
-}
-
-.volume-zero-marker {
-	position: absolute;
-	top: 50%;
-	left: 0;
-	right: 0;
-	height: 1px;
-	background-color: color-mix(in lch, var(--border-primary), white 20%);
-	opacity: 0.5;
-	pointer-events: none;
-}
-
-/* Context Menu Styles */
 .context-menu {
 	position: absolute;
 	left: calc(100% + 0.5rem);
@@ -485,20 +361,19 @@ async function resetVolume(trackId: string) {
 	align-items: center;
 	justify-content: center;
 	cursor: pointer;
-	height: min-content;
-	width: min-content;
 
 	margin-top: auto;
 	position: relative;
+
+	--_size: 1.6rem;
+	height: var(--_size);
+	width: var(--_size);
 }
 
 .menu-trigger-btn::after {
 	content: '';
 	position: absolute;
-	top: -2px;
-	bottom: -2px;
-	left: -5px;
-	right: -5px;
+	inset: -2px;
 	background-color: inherit;
 	border-radius: 0.6rem;
 	z-index: -1;
@@ -508,5 +383,26 @@ async function resetVolume(trackId: string) {
 .menu-trigger-btn.active {
 	background-color: color-mix(in lch, var(--bg-color), white 15%);
 	color: var(--text-color-primary);
+}
+
+.menu-trigger-btn.mute.active {
+	--_col: #ff4444;
+	color: var(--_col);
+	font-weight: bold;
+	background-color: color-mix(in lch, var(--_col), var(--bg-color) 80%);
+}
+
+.menu-trigger-btn.mute.active::after {
+	box-shadow: inset 0px 0px 7px -3px var(--_col);
+}
+
+.menu-trigger-btn.solo.active {
+	background-color: color-mix(in lch, var(--solo-color), var(--bg-color) 40%);
+	color: white;
+	font-weight: bold;
+}
+.menu-trigger-btn.solo.active::after {
+	border: 1px solid color-mix(in lch, var(--solo-color), transparent 50%);
+	box-shadow: inset 0px 0px 7px -3px var(--solo-color);
 }
 </style>

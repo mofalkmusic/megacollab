@@ -1,5 +1,5 @@
 import { clips, tracks } from '@/state'
-import { setTrackGain, unregisterTrack } from '@/audioEngine'
+import { unregisterTrack } from '@/audioEngine'
 import { defineSocketHandler } from '@/socket/socket'
 
 export default defineSocketHandler({

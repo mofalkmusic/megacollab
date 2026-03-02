@@ -1,5 +1,4 @@
 import { tracks } from '@/state'
-import { setTrackGain } from '@/audioEngine'
 import { defineSocketHandler } from '@/socket/socket'
 
 export default defineSocketHandler({
@@ -13,6 +12,5 @@ export default defineSocketHandler({
 		}
 
 		Object.assign(existing, updatedTrack)
-		setTrackGain(updatedTrack.id, updatedTrack.gain)
 	},
 })

@@ -1,8 +1,9 @@
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, reactive, ref, shallowRef, watch } from 'vue'
 import { beats_to_sec, quantize_beats, sec_to_beats } from '@/utils/mathUtils'
 import { useIntervalFn, useRafFn, watchThrottled, useTimeoutFn } from '@vueuse/core'
 import { clips, TOTAL_BEATS, audioBuffers, bpm } from '@/state'
 import type { Clip, ServerTrack } from '~/schema'
+import { DEFAULT_GAIN } from '~/constants'
 
 const inDev = import.meta.env.MODE === 'development'
 
@@ -15,6 +16,42 @@ export function setMasterGain(gain: number) {
 	masterGainValue.value = gain
 	masterGain.gain.setTargetAtTime(gain, audioContext.currentTime, 0.02)
 }
+
+export const mutedTrackIds = reactive<Set<string>>(new Set())
+export const soloTrackIds = reactive<Set<string>>(new Set())
+
+export function toggleMute(trackId: string) {
+	if (mutedTrackIds.has(trackId)) {
+		mutedTrackIds.delete(trackId)
+	} else {
+		mutedTrackIds.add(trackId)
+	}
+}
+
+export function toggleSolo(trackId: string) {
+	if (soloTrackIds.has(trackId)) {
+		soloTrackIds.delete(trackId)
+	} else {
+		soloTrackIds.add(trackId)
+	}
+}
+
+export function updateTrackMutes() {
+	const now = audioContext.currentTime
+	for (const [trackId, gainNode] of trackGainNodes.entries()) {
+		let targetGain = 1
+		if (soloTrackIds.size > 0) {
+			targetGain = soloTrackIds.has(trackId) ? 1 : 0
+		} else if (mutedTrackIds.has(trackId)) {
+			targetGain = 0
+		}
+
+		gainNode.gain.setTargetAtTime(targetGain, now, 0.02)
+	}
+}
+
+watch(mutedTrackIds, updateTrackMutes, { deep: true })
+watch(soloTrackIds, updateTrackMutes, { deep: true })
 
 const trackGainNodes = new Map<string, GainNode>()
 const trackAnalysers = new Map<string, AnalyserNode>()
@@ -203,13 +240,22 @@ watch(isLooping, (looping, wasLooping) => {
 	}
 })
 
-export function registerTrack(trackId: ServerTrack['id'], initialGain: number = 1) {
+export function registerTrack(trackId: ServerTrack['id']) {
 	if (trackGainNodes.has(trackId)) return
 
 	const gainNode = audioContext.createGain()
 	gainNode.connect(masterGain)
 
-	gainNode.gain.value = initialGain
+	let targetGain = DEFAULT_GAIN as number
+
+	if (soloTrackIds.size > 0) {
+		targetGain = soloTrackIds.has(trackId) ? 1 : 0
+	} else if (mutedTrackIds.has(trackId)) {
+		targetGain = 0
+	}
+
+	gainNode.gain.value = targetGain
+
 	trackGainNodes.set(trackId, gainNode)
 
 	// sidechained vol analyser
@@ -217,15 +263,6 @@ export function registerTrack(trackId: ServerTrack['id'], initialGain: number = 
 	analyser.fftSize = FFT_SIZE_VOLUMES
 	gainNode.connect(analyser) // connect post-gain
 	trackAnalysers.set(trackId, analyser)
-}
-
-export function setTrackGain(trackId: ServerTrack['id'], gain: number) {
-	const gainNode = trackGainNodes.get(trackId)
-	if (!gainNode) return
-
-	// ramp to prevent clicks
-	const now = audioContext.currentTime
-	gainNode.gain.setTargetAtTime(gain, now, 0.02)
 }
 
 export function unregisterTrack(trackId: ServerTrack['id']) {

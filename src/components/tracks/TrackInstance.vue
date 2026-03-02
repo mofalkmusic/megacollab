@@ -16,7 +16,7 @@
 				:timeline-window-width="timelineWindowWidth"
 				:style="{
 					position: 'absolute',
-					height: '100%',
+					height: 'calc(100% - 1px)',
 				}"
 			/>
 
@@ -25,6 +25,15 @@
 				v-if="isOverDropZone && dropIndicatorX !== null"
 				class="drop-indicator"
 				:style="{ left: `${dropIndicatorX}px` }"
+			></div>
+
+			<!-- mute overlays -->
+			<div
+				v-if="
+					mutedTrackIds.has(props.track.id) ||
+					(soloTrackIds.size > 0 && !soloTrackIds.has(props.track.id))
+				"
+				class="mute-overlay"
 			></div>
 		</div>
 	</div>
@@ -35,7 +44,7 @@ import type { ServerTrack, Clip } from '~/schema'
 import ClipInstance from '@/components/ClipInstance.vue'
 import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef } from 'vue'
 import { clips, pxPerBeat, audiofiles, pxTrackHeight, TOTAL_BEATS, user } from '@/state'
-import { registerTrack, unregisterTrack } from '@/audioEngine'
+import { mutedTrackIds, registerTrack, soloTrackIds, unregisterTrack } from '@/audioEngine'
 import { useDropZone, useEventListener, useElementBounding } from '@vueuse/core'
 import { audioMimeTypes } from '~/constants'
 import { optimisticAudioCreateUpload } from '@/utils/uploadAudio'
@@ -50,7 +59,7 @@ const props = defineProps<{
 	timelineWindowWidth: number
 }>()
 
-onMounted(() => registerTrack(props.track.id, props.track.gain))
+onMounted(() => registerTrack(props.track.id))
 
 onUnmounted(() => unregisterTrack(props.track.id))
 
@@ -207,6 +216,15 @@ useEventListener(trackEl, 'dragover', (e: DragEvent) => {
 	width: 10rem;
 	background: linear-gradient(to right, yellowgreen, transparent 80%);
 	z-index: 10;
+	pointer-events: none;
+}
+
+.mute-overlay {
+	position: absolute;
+	inset: 0;
+	bottom: 1px;
+	background-color: rgba(0, 0, 0, 0.5);
+	z-index: 5;
 	pointer-events: none;
 }
 </style>

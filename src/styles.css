@@ -18,6 +18,8 @@
 	--active-playing-color: hsl(125 100% 50% / 1);
 	--active-looping-hue: 26;
 
+	--solo-color: hsl(49, 100%, 50%);
+
 	--window-w-padding: 2rem;
 
 	/* default, usually overwritten per usage */
