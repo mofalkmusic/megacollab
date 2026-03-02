@@ -8,7 +8,7 @@
 			isHovered,
 			isSelected,
 			!!dragSession,
-			poolFilePlaying,
+			previewPlaying,
 			gainHandleStyle,
 		]"
 		ref="clipWrapper"
@@ -47,12 +47,12 @@
 		></div>
 
 		<button
-			v-if="withinAudioPool && (isHovered || poolFilePlaying == props.audiofile.id)"
+			v-if="withinAudioPool && (isHovered || previewPlaying == props.audiofile.id)"
 			class="file-pool-button play-button"
 			@click="playAudioFile"
 			@pointerdown.stop
 		>
-			<Play :size="13" v-if="poolFilePlaying != props.audiofile.id" />
+			<Play :size="13" v-if="previewPlaying != props.audiofile.id" />
 			<Pause :size="13" v-else />
 		</button>
 		<button
@@ -87,8 +87,7 @@ import {
 	rightMouseButtonPressedOnTimeline,
 	user,
 	selectedClipIds,
-	poolFilePlaying,
-	poolFilePreviewAudio,
+	previewPlaying,
 	trackControlsWidth,
 } from '@/state'
 import type { Clip } from '~/schema'
@@ -114,6 +113,7 @@ import { Pause, Play, Trash2 } from 'lucide-vue-next'
 import { deleteAudio } from '@/socket/eventHandlers/audiofile_delete'
 import { useConsole } from '@/composables/useConsole'
 import { fa } from 'zod/v4/locales'
+import { getPreviewProgress, playPreview, stopPreview } from '@/utils/previewHelper'
 
 const { userLog } = useConsole()
 
@@ -198,35 +198,15 @@ const { pause: pauseWaveformUpdate, resume: resumeWaveformUpdate } = useRafFn(dr
 pauseWaveformUpdate()
 
 async function playAudioFile() {
-	if (poolFilePreviewAudio.value) {
-		poolFilePreviewAudio.value.pause()
-		poolFilePreviewAudio.value.currentTime = 0
-	}
-
-	if (poolFilePlaying.value != props.audiofile.id) {
-		poolFilePlaying.value = props.audiofile.id
-		poolFilePreviewAudio.value = new Audio(props.audiofile.public_url)
-
-		poolFilePreviewAudio.value.onended = () => {
-			poolFilePlaying.value = null
-		}
-		poolFilePreviewAudio.value.play()
+	if (previewPlaying.value != props.audiofile.id) {
+		playPreview(props.audiofile.id)
 		resumeWaveformUpdate()
 	} else {
-		poolFilePreviewAudio.value = null
-		poolFilePlaying.value = null
+		stopPreview()
 		pauseWaveformUpdate()
 	}
 }
 
-watch(
-	() => props.audiofile.public_url,
-	() => {
-		if (poolFilePlaying.value == props.audiofile.id) {
-			poolFilePreviewAudio.value = new Audio(props.audiofile.public_url)
-		}
-	},
-)
 const CLIP_PREVIEW_GAIN = 1 as const
 
 const initialClipState = computed(() => {
@@ -936,8 +916,8 @@ async function drawWaveform() {
 
 		const isCurrentPoolFile =
 			withinAudioPool.value == true &&
-			poolFilePlaying.value == props.audiofile.id &&
-			poolFilePreviewAudio.value
+			previewPlaying.value == props.audiofile.id &&
+			previewPlaying.value
 
 		const color = isSelected.value ? '#ff4444' : props.audiofile.color
 
@@ -948,8 +928,7 @@ async function drawWaveform() {
 			ctx.fillStyle = finalColor
 			ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
 		} else {
-			const audio = poolFilePreviewAudio.value!
-			const progress = audio?.duration ? audio.currentTime / audio.duration : 0
+			const progress = getPreviewProgress()
 
 			//gradient because composite stuff
 			const grad = ctx.createLinearGradient(0, 0, canvasWidth.value, 0)
@@ -977,10 +956,10 @@ watchThrottled(
 		() => props.audiofile.waveforms,
 		() => props.audiofile.color,
 		pixelRatio,
-		poolFilePlaying,
+		previewPlaying,
 	],
 	() => {
-		if (poolFilePlaying.value != props.audiofile.id) {
+		if (previewPlaying.value != props.audiofile.id) {
 			pauseWaveformUpdate()
 		}
 		drawWaveform()

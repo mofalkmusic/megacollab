@@ -42,8 +42,7 @@ export const dragFromPoolState = shallowRef<{
 	clientY: number
 } | null>(null)
 
-export const poolFilePlaying = ref<string | null>(null)
-export const poolFilePreviewAudio = ref<null | HTMLAudioElement>(null)
+export const previewPlaying = ref<string | null>(null)
 
 export const TOTAL_BEATS = 16 * 16
 export const pxPerBeat = shallowRef(40)
