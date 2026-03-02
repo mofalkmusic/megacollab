@@ -71,7 +71,6 @@ import {
 	computed,
 	onMounted,
 	ref,
-	render,
 	shallowRef,
 	useTemplateRef,
 	watch,
@@ -112,7 +111,6 @@ import type { AudioFile } from '@/types'
 import { Pause, Play, Trash2 } from 'lucide-vue-next'
 import { deleteAudio } from '@/socket/eventHandlers/audiofile_delete'
 import { useConsole } from '@/composables/useConsole'
-import { fa } from 'zod/v4/locales'
 import { getPreviewProgress, playPreview, stopPreview } from '@/utils/previewHelper'
 
 const { userLog } = useConsole()
