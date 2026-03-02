@@ -12,6 +12,7 @@ export default defineSocketHandler({
 		try {
 			audiofiles.set(data.id, {
 				...data,
+				file_name: data.file_name,
 				hash: makeAudioFileHash({
 					creator_user_id: data.creator_user_id,
 					file_name: data.file_name,

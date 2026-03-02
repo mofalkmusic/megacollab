@@ -1,5 +1,5 @@
 export function sanitizeLetterUnderscoreOnly(name: string, allowDot: boolean = true): string {
-	const pattern = allowDot ? /[^a-zA-Z0-9._]/g : /[^a-zA-Z0-9_]/g
+	const pattern = allowDot ? /[^a-zA-Z0-9\%._]/g : /[^a-zA-Z0-9\%_]/g
 	return name.replace(pattern, '_')
 }
 
