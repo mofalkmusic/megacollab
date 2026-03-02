@@ -15,7 +15,7 @@ import {
 import { migrations } from './migrations'
 import { print, randomSafeHexColor } from './utils'
 import { nanoid } from 'nanoid'
-import { DEV_DATABASE_FOLDER } from './constants'
+import { DEV_DATABASE_FOLDER, TEST_DATABASE_FOLDER } from './constants'
 import z from 'zod'
 
 // todo: update all the hanlders to not return safely when they
@@ -29,7 +29,7 @@ const SessionSchema = z.object({
 
 export type Session = z.output<typeof SessionSchema>
 
-const IN_DEV_MODE = Bun.env['ENV'] === 'development'
+const IN_DEV_MODE = Bun.env['ENV'] === 'development' || Bun.env['ENV'] === 'test'
 export type QueryHandler = <T = any>(query: string, params?: any[]) => Promise<T[]>
 
 let queryFn: QueryHandler
@@ -56,7 +56,7 @@ if (!IN_DEV_MODE) {
 } else {
 	print.db('Using PGlite')
 
-	const devDatabaseFolder = Bun.env['DEV_DATABASE_FOLDER'] || DEV_DATABASE_FOLDER
+	const devDatabaseFolder = Bun.env['ENV'] === 'test' ? TEST_DATABASE_FOLDER : DEV_DATABASE_FOLDER
 	const dataDir = join(import.meta.dir, '..', devDatabaseFolder)
 	const client = new PGlite(dataDir)
 
