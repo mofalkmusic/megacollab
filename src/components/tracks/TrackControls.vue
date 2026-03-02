@@ -88,10 +88,18 @@
 </template>
 
 <script setup lang="ts">
-import { tracks, pxTrackHeight, altKeyPressed, controlKeyPressed, clips, user } from '@/state'
+import {
+	tracks,
+	pxTrackHeight,
+	altKeyPressed,
+	controlKeyPressed,
+	clips,
+	user,
+	trackControlsWidth,
+} from '@/state'
 import { computed, reactive, useTemplateRef, watch, type CSSProperties, shallowRef } from 'vue'
 import { getTrackVolume, isPlaying, setTrackGain, unregisterTrack } from '@/audioEngine'
-import { useRafFn, useEventListener, onClickOutside } from '@vueuse/core'
+import { useRafFn, useEventListener, onClickOutside, useElementSize } from '@vueuse/core'
 import { UseElementBounding, vOnClickOutside } from '@vueuse/components'
 import { socket } from '@/socket/socket'
 import { useConsole } from '@/composables/useConsole'
@@ -103,6 +111,13 @@ const wrapperStyles = computed((): CSSProperties => {
 	return {
 		gridAutoRows: `${pxTrackHeight}px`,
 	}
+})
+
+const wrapperRef = useTemplateRef('wrapperRef')
+const { width: wrapperWidth } = useElementSize(wrapperRef)
+
+watch(wrapperWidth, (newWidth) => {
+	trackControlsWidth.value = newWidth
 })
 
 const sortedTracks = computed(() => {
@@ -315,7 +330,7 @@ async function resetVolume(trackId: string) {
 	left: 0;
 	z-index: 100;
 
-	padding-top: 2rem;
+	margin-top: 2rem;
 }
 
 .track-title {

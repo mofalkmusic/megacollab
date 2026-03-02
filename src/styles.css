@@ -374,3 +374,9 @@ svg {
 	flex-grow: 0;
 	flex-shrink: 0;
 }
+
+/* Custom Range Sliders */
+input[type='range'] {
+	accent-color: var(--text-color-primary);
+	cursor: pointer;
+}
