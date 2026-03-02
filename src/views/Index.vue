@@ -520,6 +520,15 @@ useEventListener(window, 'focusin', (e) => {
 })
 
 useEventListener('keydown', (event) => {
+	const target = event.target
+
+	if (
+		target instanceof HTMLElement &&
+		(target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+	) {
+		return
+	}
+
 	if (event.code === 'Space') {
 		event.preventDefault()
 		if (isPlaying.value) pause()
@@ -665,11 +674,11 @@ const lastEmittedPayloadHash = ref('')
 function handleCursorMove(event: PointerEvent) {
 	if (!tracksWrapperEl.value) return
 
-	const target = event.target as HTMLElement | null
-	if (!target) return
+	const target = event.target
+	if (!(target instanceof HTMLElement)) return
 
-	const trackEl = target.closest('.track') as HTMLElement | null
-	if (!trackEl) {
+	const trackEl = target.closest('.track')
+	if (!(trackEl instanceof HTMLElement)) {
 		latestCursorPayload.value = null
 		return
 	}

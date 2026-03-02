@@ -2,20 +2,29 @@
 	<div v-bind="$attrs" class="audio-file-pool-root" ref="dropZoneWrapper">
 		<div class="options-and-controls">
 			<div style="display: flex; gap: 1rem; align-items: center">
-				<UploadButton />
+				<UploadButton :disabled="!!dragFromPoolState" />
 
 				<input
 					v-model="searchQuery"
 					type="text"
 					placeholder="Search samples..."
-					class="textInput txt small"
+					class="textInput secondary txt mono small"
 					style="width: 200px"
+					:disabled="!!dragFromPoolState"
 				/>
 			</div>
 
-			<div style="display: flex; gap: 1rem" class="dim small">
-				<p>Total Files: {{ audiofiles.size }}</p>
-				<p>Total Clips: {{ clips.size }}</p>
+			<div class="pool-stats">
+				<div class="stat-group" title="Total Audio Files">
+					<AudioLines stroke-width="1.8" class="stat-icon audio-lines" />
+					<p class="no-select dim">{{ audiofiles.size }}</p>
+				</div>
+				<div class="stat-group" title="Total Clips in Playlist">
+					<LayoutDashboard stroke-width="1.8" class="stat-icon dashboard" />
+					<p class="no-select dim">
+						{{ clips.size }}
+					</p>
+				</div>
 			</div>
 		</div>
 
@@ -68,13 +77,20 @@
 </template>
 
 <script setup lang="ts">
-import { audiofiles, clips, user, AUDIO_POOL_WIDTH, audioFilePoolHeightPx } from '@/state'
+import {
+	audiofiles,
+	clips,
+	user,
+	AUDIO_POOL_WIDTH,
+	audioFilePoolHeightPx,
+	dragFromPoolState,
+} from '@/state'
 import UploadButton from '@/components/UploadButton.vue'
 import { computed, shallowRef, useTemplateRef, watchEffect } from 'vue'
 import type { AudioFile } from '@/types'
 import ClipInstance from '@/components/ClipInstance.vue'
 import { useDropZone, useElementSize, useEventListener } from '@vueuse/core'
-import { File } from 'lucide-vue-next'
+import { File, AudioLines, LayoutDashboard } from 'lucide-vue-next'
 import { audioMimeTypes } from '~/constants'
 import { optimisticAudioCreateUpload } from '@/utils/uploadAudio'
 import { useGlobalProgress } from '@/composables/useGlobalProgress'
@@ -223,6 +239,34 @@ useEventListener(clipsContainerEl, 'pointerdown', (e) => {
 	overflow: hidden;
 	padding: 1rem;
 	gap: 1rem;
+}
+
+.pool-stats {
+	display: grid;
+	grid-template-columns: auto auto;
+	align-items: center;
+	gap: 1.4rem;
+}
+
+.stat-group {
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+}
+
+.stat-icon {
+	margin-right: 0.5rem;
+}
+
+.stat-icon.audio-lines {
+	height: 1.7rem;
+	width: 1.7rem;
+}
+
+.stat-icon.dashboard {
+	transform: rotate(90deg);
+	height: 1.6rem;
+	width: 1.6rem;
 }
 
 .clips-container.panning {

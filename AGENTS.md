@@ -10,6 +10,10 @@
 - Always verify implemented changes by running `bun run typecheck`, `bun run lint`, `bun run format` before concluding the task.
 - Explicitly add these as a final step to your tasks/plans when you create them.
 
+## Tooling
+
+- Use `bun` instead of `npm` for all package management and script execution tasks (installing dependencies, running scripts, etc.).
+
 ## Import Aliases
 
 - `@/` → `src/` (Vue frontend)
@@ -21,6 +25,7 @@ Always use these aliases instead of relative paths when importing across directo
 
 - Avoid using `interface`. Use `type` for all object and component definitions to maintain consistency across the codebase.
 - Use `unknown` instead of `any` wherever possible and avoid `as any`.
+- Prefer `instanceof HTMLElement` checks over type casting (e.g., `as HTMLElement`) when dealing with DOM elements (especially `event.target`).
 
 ## Zod & Schema Patterns
 

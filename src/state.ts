@@ -45,7 +45,7 @@ export const dragFromPoolState = shallowRef<{
 export const TOTAL_BEATS = 16 * 16
 export const pxPerBeat = shallowRef(40)
 export const maxPxPerBeat = 120 as const
-export const minPxPerBeat = 12 as const
+export const minPxPerBeat = 8 as const
 export const pxTrackHeight = 70
 export const bpm = 128
 export const AUDIO_POOL_WIDTH = 160 as const
@@ -100,6 +100,14 @@ useIntervalFn(
 )
 
 useEventListener(window, 'keydown', (event) => {
+	const target = event.target
+	if (
+		target instanceof HTMLElement &&
+		(target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+	) {
+		return
+	}
+
 	if (event.key === 'Alt') {
 		altKeyPressed.value = true
 		event.preventDefault()

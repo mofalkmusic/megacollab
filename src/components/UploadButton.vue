@@ -4,7 +4,7 @@
 		@click="openFileDialog"
 		ref="uploadButton"
 		class="no-select default-button upload-button"
-		:disabled="isUploading"
+		:disabled="isDisabled"
 		:class="{ progress: progressMap.size }"
 		:style="styles"
 	>
@@ -25,9 +25,15 @@ import { useConsole } from '@/composables/useConsole'
 
 import { user } from '@/state'
 
+const props = defineProps<{
+	disabled?: boolean
+}>()
+
+const isDisabled = computed(() => isUploading.value || props.disabled)
+
 function openFileDialog() {
 	if (user.value?.banned_at) return
-	if (isUploading.value) return
+	if (isDisabled.value) return
 	open()
 }
 
