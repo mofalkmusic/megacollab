@@ -39,7 +39,7 @@ export default defineSocketHandler({
 		for (const audiofile of serverAudiofiles) {
 			audiofiles.set(audiofile.id, {
 				...audiofile,
-				file_name: decodeURI(audiofile.file_name),
+				file_name: audiofile.file_name,
 				hash: makeAudioFileHash({
 					creator_user_id: audiofile.creator_user_id,
 					file_name: audiofile.file_name,

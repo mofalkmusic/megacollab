@@ -99,8 +99,7 @@ export async function optimisticAudioCreateUpload(
 
 		const optimisticAudioFile: AudioFile = {
 			id: file_id,
-			// decodeURI here since we sent encoded version to server
-			file_name: decodeURI(file_name),
+			file_name: file_name,
 			public_url: url,
 			created_at: new Date().toISOString(),
 			color,

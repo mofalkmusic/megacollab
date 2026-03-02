@@ -43,6 +43,7 @@ import { EVENTS } from '~/events'
 import { audioMimeTypes, BACKEND_PORT, CURSOR_INACTIVE_TIMEOUT_MS, DEFAULT_GAIN } from '~/constants'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
 import { RateLimiter, getSafeIp } from './ratelimiter'
+import sanitizeHtml from 'sanitize-html'
 
 const IN_DEV_MODE = Bun.env['ENV'] === 'development'
 const BUILD_ID = nanoid(11)
@@ -173,6 +174,12 @@ io.on('connection', async (socket) => {
 			const file_id = nanoid()
 			const cleanFileName = sanitizeLetterUnderscoreOnly(filename)
 
+			const safeDisplayName =
+				sanitizeHtml(filename, {
+					allowedTags: [],
+					allowedAttributes: {},
+				}).trim() || 'unnamed_file'
+
 			const file_key = generateStorageKey(cleanFileName, user.id, file_id)
 
 			const url = store.getUploadUrl(file_key)
@@ -184,13 +191,13 @@ io.on('connection', async (socket) => {
 				expires_at: Date.now() + 59 * 60 * 1000, // almost 60 min
 				file_id,
 				file_key,
-				file_name: cleanFileName,
+				file_name: safeDisplayName,
 				color,
 			})
 
 			callback({
 				success: true,
-				data: { url: url, file_id, file_name: cleanFileName, color, file_key },
+				data: { url: url, file_id, file_name: safeDisplayName, color, file_key },
 			})
 		})
 
