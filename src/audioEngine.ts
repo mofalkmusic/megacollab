@@ -8,13 +8,13 @@ import { DEFAULT_GAIN } from '~/constants'
 const inDev = import.meta.env.MODE === 'development'
 
 export const audioContext = new AudioContext()
-const masterGain = audioContext.createGain()
-masterGain.connect(audioContext.destination)
+export const masterGainNode = audioContext.createGain()
+masterGainNode.connect(audioContext.destination)
 export const masterGainValue = ref(1)
 
 export function setMasterGain(gain: number) {
 	masterGainValue.value = gain
-	masterGain.gain.setTargetAtTime(gain, audioContext.currentTime, 0.02)
+	masterGainNode.gain.setTargetAtTime(gain, audioContext.currentTime, 0.02)
 }
 
 export const mutedTrackIds = reactive<Set<string>>(new Set())
@@ -244,7 +244,7 @@ export function registerTrack(trackId: ServerTrack['id']) {
 	if (trackGainNodes.has(trackId)) return
 
 	const gainNode = audioContext.createGain()
-	gainNode.connect(masterGain)
+	gainNode.connect(masterGainNode)
 
 	let targetGain = DEFAULT_GAIN as number
 
@@ -531,9 +531,9 @@ export async function play() {
 
 	// fade in
 	const now = audioContext.currentTime
-	masterGain.gain.cancelScheduledValues(now)
-	masterGain.gain.setValueAtTime(0, now)
-	masterGain.gain.linearRampToValueAtTime(masterGainValue.value, now + FADE_TIME_MS / 1000)
+	masterGainNode.gain.cancelScheduledValues(now)
+	masterGainNode.gain.setValueAtTime(0, now)
+	masterGainNode.gain.linearRampToValueAtTime(masterGainValue.value, now + FADE_TIME_MS / 1000)
 
 	playbackStartTime.value = audioContext.currentTime + BACK_TRACKING_TIME_ON_PLAY
 
@@ -563,9 +563,9 @@ export function pause() {
 
 	// fade out
 	const now = audioContext.currentTime
-	masterGain.gain.cancelScheduledValues(now)
-	masterGain.gain.setValueAtTime(masterGain.gain.value, now)
-	masterGain.gain.linearRampToValueAtTime(0, now + FADE_TIME_MS / 1000)
+	masterGainNode.gain.cancelScheduledValues(now)
+	masterGainNode.gain.setValueAtTime(masterGainNode.gain.value, now)
+	masterGainNode.gain.linearRampToValueAtTime(0, now + FADE_TIME_MS / 1000)
 
 	startOffset.value = restingPositionSec.value
 	currentTime.value = restingPositionSec.value
