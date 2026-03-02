@@ -42,6 +42,8 @@ export const dragFromPoolState = shallowRef<{
 	clientY: number
 } | null>(null)
 
+export const previewPlaying = ref<string | null>(null)
+
 export const TOTAL_BEATS = 16 * 16
 export const pxPerBeat = shallowRef(40)
 export const maxPxPerBeat = 120 as const
