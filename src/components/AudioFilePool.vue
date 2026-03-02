@@ -81,10 +81,7 @@ import { useGlobalProgress } from '@/composables/useGlobalProgress'
 import { useConsole } from '@/composables/useConsole'
 import Fuse from 'fuse.js'
 
-
 const { userLog } = useConsole()
-
-const searchQuery = ref('')
 
 const dropZoneEl = useTemplateRef('dropZoneWrapper')
 
@@ -139,6 +136,8 @@ const { files, isOverDropZone } = useDropZone(dropZoneEl, {
 	},
 })
 
+const searchQuery = shallowRef('')
+
 const sortedAudioFiles = computed(() => {
 	const owned: (AudioFile & { deletable: boolean })[] = []
 	const foreign: (AudioFile & { deletable: boolean })[] = []
@@ -146,13 +145,20 @@ const sortedAudioFiles = computed(() => {
 	const query = searchQuery.value.trim().toLowerCase()
 	const audioFilesList = Array.from(audiofiles.values())
 
-	// fuzzy search filtering, as request by lord mofalk
 	let filesToShow = audioFilesList
+
 	if (query) {
 		const fuse = new Fuse(audioFilesList, {
-			keys: ['file_name'],
-			threshold: 0.2,
+			keys: [
+				{ name: 'file_name', weight: 0.8 },
+				{ name: 'creator_display_name', weight: 0.2 },
+			],
+			threshold: 0.25,
+			isCaseSensitive: false,
+			shouldSort: true,
+			findAllMatches: true,
 		})
+
 		filesToShow = fuse.search(query).map((result) => result.item)
 	}
 
