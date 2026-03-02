@@ -1,14 +1,7 @@
-import { computed, reactive, ref, shallowRef, watch, watchEffect } from 'vue'
-import {
-	type Client,
-	type ClientTrack,
-	type Clip,
-	type ServerTrack,
-	type TimelinePos,
-	type User,
-} from '~/schema'
+import { computed, reactive, ref, shallowRef, watchEffect } from 'vue'
+import { type Client, type ClientTrack, type Clip, type TimelinePos, type User } from '~/schema'
 import { type DebugEntry } from '@/composables/useDebug'
-import { useDevicePixelRatio, useEventListener, useIntervalFn, useTimeoutFn } from '@vueuse/core'
+import { useDevicePixelRatio, useEventListener, useIntervalFn } from '@vueuse/core'
 import type { AudioFile } from '@/types'
 
 export const user = ref<User | null>(null)
@@ -42,7 +35,7 @@ export const dragFromPoolState = shallowRef<{
 	clientY: number
 } | null>(null)
 
-export const previewPlaying = ref<string | null>(null)
+export const poolPreviewPlayingAudioId = shallowRef<AudioFile['id'] | null>(null)
 
 export const TOTAL_BEATS = 16 * 16
 export const pxPerBeat = shallowRef(40)

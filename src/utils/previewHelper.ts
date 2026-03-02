@@ -1,9 +1,9 @@
-import { audioContext } from '@/audioEngine'
-import { audioBuffers, previewPlaying } from '@/state'
+import { audioContext, masterGainNode } from '@/audioEngine'
+import { audioBuffers, poolPreviewPlayingAudioId } from '@/state'
 
 let source: AudioBufferSourceNode | null = null
 let startTime = 0
-let buf: AudioBuffer | null = null
+let audioBuffer: AudioBuffer | null = null
 
 export function playPreview(id: string) {
 	stopPreview()
@@ -11,25 +11,29 @@ export function playPreview(id: string) {
 
 	if (!buffer) return
 
-	buf = buffer
+	audioBuffer = buffer
 
-	source = audioContext.createBufferSource()
-	source.buffer = buf
-	source.connect(audioContext.destination)
+	const currentSource = audioContext.createBufferSource()
+	source = currentSource
+
+	source.buffer = audioBuffer
+	source.connect(masterGainNode)
 
 	startTime = audioContext.currentTime
 	source.start()
 
-	previewPlaying.value = id
+	poolPreviewPlayingAudioId.value = id
 
-	source.onended = () => {
-		source = null
-		previewPlaying.value = null
+	currentSource.onended = () => {
+		if (source === currentSource) {
+			source = null
+			poolPreviewPlayingAudioId.value = null
+		}
 	}
 }
 
 export function stopPreview() {
-	previewPlaying.value = null
+	poolPreviewPlayingAudioId.value = null
 	if (!source) return
 
 	source.stop()
@@ -37,11 +41,14 @@ export function stopPreview() {
 }
 
 export function getPreviewProgress() {
-	if (!buf) return 0
+	if (!audioBuffer) return 0
 	if (!source) return 0
 
-	const duration = buf.duration
+	const duration = audioBuffer.duration
 	const time = audioContext.currentTime - startTime
 
-	return Math.min(time / duration, 1)
+	const progress = time / duration
+	if (Number.isNaN(progress)) return 0
+
+	return Math.max(0, Math.min(progress, 1))
 }

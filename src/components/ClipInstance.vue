@@ -8,7 +8,7 @@
 			isHovered,
 			isSelected,
 			!!dragSession,
-			previewPlaying,
+			poolPreviewPlayingAudioId,
 			gainHandleStyle,
 		]"
 		ref="clipWrapper"
@@ -47,12 +47,12 @@
 		></div>
 
 		<button
-			v-if="withinAudioPool && (isHovered || previewPlaying == props.audiofile.id)"
+			v-if="withinAudioPool && (isHovered || poolPreviewPlayingAudioId == props.audiofile.id)"
 			class="file-pool-button play-button"
 			@click="playAudioFile"
 			@pointerdown.stop
 		>
-			<Play :size="13" v-if="previewPlaying != props.audiofile.id" />
+			<Play :size="13" v-if="poolPreviewPlayingAudioId != props.audiofile.id" />
 			<Pause :size="13" v-else />
 		</button>
 		<button
@@ -87,8 +87,8 @@ import {
 	rightMouseButtonPressedOnTimeline,
 	user,
 	selectedClipIds,
-	previewPlaying,
 	trackControlsWidth,
+	poolPreviewPlayingAudioId,
 } from '@/state'
 import type { Clip } from '~/schema'
 import {
@@ -198,7 +198,7 @@ const { pause: pauseWaveformUpdate, resume: resumeWaveformUpdate } = useRafFn(dr
 pauseWaveformUpdate()
 
 async function playAudioFile() {
-	if (previewPlaying.value != props.audiofile.id) {
+	if (poolPreviewPlayingAudioId.value != props.audiofile.id) {
 		playPreview(props.audiofile.id)
 		resumeWaveformUpdate()
 	} else {
@@ -903,52 +903,58 @@ async function drawWaveform() {
 	if (!ctx) return
 
 	ctx.save()
-	ctx.scale(pr, pr)
 
-	// Since we are stretching LODs, we want to disable smoothing to keep it crisp
-	ctx.imageSmoothingEnabled = false
+	try {
+		ctx.scale(pr, pr)
 
-	const bitmap = getWaveform(props.audiofile, canvasWidth.value, props.audiofile.duration)
+		// Since we are stretching LODs, we want to disable smoothing to keep it crisp
+		ctx.imageSmoothingEnabled = false
 
-	if (bitmap) {
-		ctx.clearRect(0, 0, canvasWidth.value, canvasHeight.value)
-		ctx.drawImage(bitmap, 0, 0, canvasWidth.value, canvasHeight.value)
+		const bitmap = getWaveform(props.audiofile, canvasWidth.value, props.audiofile.duration)
 
-		ctx.globalCompositeOperation = 'source-in'
+		if (bitmap) {
+			ctx.clearRect(0, 0, canvasWidth.value, canvasHeight.value)
+			ctx.drawImage(bitmap, 0, 0, canvasWidth.value, canvasHeight.value)
 
-		const isCurrentPoolFile =
-			withinAudioPool.value == true &&
-			previewPlaying.value == props.audiofile.id &&
-			previewPlaying.value
+			ctx.globalCompositeOperation = 'source-in'
 
-		const color = isSelected.value ? '#ff4444' : props.audiofile.color
+			const isCurrentPoolFile =
+				withinAudioPool.value == true &&
+				poolPreviewPlayingAudioId.value == props.audiofile.id &&
+				poolPreviewPlayingAudioId.value
 
-		if (!isCurrentPoolFile) {
-			// Mix with black (0.2 = 20% black)
-			const mixed = interpolate([color, '#000000'])(0.2)
-			const finalColor = formatHex(mixed) ?? props.audiofile.color
-			ctx.fillStyle = finalColor
-			ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
-		} else {
-			const progress = getPreviewProgress()
+			const color = isSelected.value ? '#ff4444' : props.audiofile.color
 
-			//gradient because composite stuff
-			const grad = ctx.createLinearGradient(0, 0, canvasWidth.value, 0)
+			if (!isCurrentPoolFile) {
+				// Mix with black (0.2 = 20% black)
+				const mixed = interpolate([color, '#000000'])(0.2)
+				const finalColor = formatHex(mixed) ?? props.audiofile.color
+				ctx.fillStyle = finalColor
+				ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
+			} else {
+				const progress = getPreviewProgress()
 
-			grad.addColorStop(0, color)
-			grad.addColorStop(progress, color)
-			grad.addColorStop(progress, formatHex(interpolate([color, '#000000'])(0.4)) ?? color)
-			grad.addColorStop(1, formatHex(interpolate([color, '#000000'])(0.4)) ?? color)
+				const grad = ctx.createLinearGradient(0, 0, canvasWidth.value, 0)
 
-			ctx.fillStyle = grad
-			ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
+				grad.addColorStop(0, color)
+				grad.addColorStop(progress, color)
+				grad.addColorStop(
+					progress,
+					formatHex(interpolate([color, '#000000'])(0.4)) ?? color,
+				)
+				grad.addColorStop(1, formatHex(interpolate([color, '#000000'])(0.4)) ?? color)
+
+				ctx.fillStyle = grad
+				ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
+			}
+
+			ctx.globalCompositeOperation = 'source-over'
+
+			waveformsDrawn.value = true
 		}
-
-		ctx.globalCompositeOperation = 'source-over'
-
-		waveformsDrawn.value = true
+	} finally {
+		ctx.restore()
 	}
-	ctx.restore()
 }
 
 watchThrottled(
@@ -958,10 +964,10 @@ watchThrottled(
 		() => props.audiofile.waveforms,
 		() => props.audiofile.color,
 		pixelRatio,
-		previewPlaying,
+		poolPreviewPlayingAudioId,
 	],
 	() => {
-		if (previewPlaying.value != props.audiofile.id) {
+		if (poolPreviewPlayingAudioId.value != props.audiofile.id) {
 			pauseWaveformUpdate()
 		}
 		drawWaveform()

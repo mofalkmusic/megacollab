@@ -1,5 +1,5 @@
 import { defineSocketHandler } from '@/socket/socket'
-import { audioBuffers, audiofiles, clips, previewPlaying } from '@/state'
+import { audioBuffers, audiofiles, clips, poolPreviewPlayingAudioId } from '@/state'
 import type { AudioFile } from '@/types'
 import { stopPreview } from '@/utils/previewHelper'
 import { deleteAudioFile, deleteBitmaps } from '@/utils/workerPool'
@@ -20,7 +20,7 @@ export async function deleteAudio(audio_file_id: AudioFile['id'], deleted_clip_i
 	audiofiles.delete(audio_file_id)
 	audioBuffers.delete(audio_file_id)
 
-	if (previewPlaying.value == audio_file_id) {
+	if (poolPreviewPlayingAudioId.value == audio_file_id) {
 		stopPreview()
 	}
 
