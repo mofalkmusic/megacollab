@@ -310,7 +310,7 @@ io.on('connection', async (socket) => {
 			}
 		})
 
-		socket.on('get:track:create', async (_, callback) => {
+		socket.on('get:track:create', async (data, callback) => {
 			if (user.banned_at) {
 				callback({
 					success: false,
@@ -333,15 +333,16 @@ io.on('connection', async (socket) => {
 			let track: ClientTrack
 
 			try {
-				track = await db.createTrack(newTrack)
+				track = await db.createTrack(newTrack, data?.order_index)
 			} catch (err) {
 				const error = err instanceof Error ? err.message : 'Unknown error'
+				const isLimitError = error.includes('Track limit reached') // todo: create proper error handling & types. for now this is fine...
 
 				callback({
 					success: false,
 					error: {
-						status: 'SERVER_ERROR',
-						message: `Database error: ${error}`,
+						status: isLimitError ? 'BAD_REQUEST' : 'SERVER_ERROR',
+						message: isLimitError ? error : `Database error: ${error}`,
 					},
 				})
 

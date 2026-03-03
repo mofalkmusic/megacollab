@@ -4,8 +4,22 @@
 			v-for="([id, track], index) in sortedTracks"
 			:key="id"
 			class="track-controls"
-			@contextmenu.prevent="openContextMenu($event, id)"
-			:class="{ active: contextMenuTrackId === id }"
+			@contextmenu.prevent="openContextMenu(id)"
+			:class="{
+				active: contextMenuTrackId === id,
+				'drop-target-top':
+					dragState.dropTargetIndex === index && dragState.dropPosition === 'top',
+				'drop-target-bottom':
+					dragState.dropTargetIndex === index && dragState.dropPosition === 'bottom',
+				'is-dragged': dragState.draggedTrackId === id,
+			}"
+			:draggable="true"
+			@dragstart="onDragStart($event, id, index)"
+			@dragover.prevent="onDragOver($event, index)"
+			@dragenter.prevent
+			@dragleave="onDragLeave($event, index)"
+			@drop.prevent="onDrop($event, index)"
+			@dragend="onDragEnd"
 		>
 			<p v-if="track.title" class="small no-select">{{ track.title }}</p>
 			<p v-else class="small dim track-title no-select">Track {{ index + 1 }}</p>
@@ -86,6 +100,29 @@
 							padding-bottom: 0.5rem;
 						"
 					></div>
+					<button
+						class="default-button menu-btn"
+						@mousedown="reorderTrack(id, index, 'up')"
+						:disabled="index === 0"
+						:style="{ opacity: index === 0 ? 0.5 : 1 }"
+					>
+						<p class="small">Move Up</p>
+					</button>
+					<button
+						class="default-button menu-btn"
+						@mousedown="reorderTrack(id, index, 'down')"
+						:disabled="index === sortedTracks.length - 1"
+						:style="{ opacity: index === sortedTracks.length - 1 ? 0.5 : 1 }"
+					>
+						<p class="small">Move Down</p>
+					</button>
+					<div
+						style="
+							border-top: 1px solid var(--border-primary);
+							margin-top: 0.3rem;
+							padding-bottom: 0.3rem;
+						"
+					></div>
 					<button class="default-button menu-btn delete" @mousedown="deleteTrack(id)">
 						<Trash2 :size="13" style="color: var(--text-color-secondary)" />
 						<p class="small">Delete Track</p>
@@ -97,15 +134,7 @@
 </template>
 
 <script setup lang="ts">
-import {
-	tracks,
-	pxTrackHeight,
-	altKeyPressed,
-	controlKeyPressed,
-	clips,
-	user,
-	trackControlsWidth,
-} from '@/state'
+import { tracks, pxTrackHeight, clips, user, trackControlsWidth, IN_DEV_MODE } from '@/state'
 import { computed, reactive, useTemplateRef, watch, type CSSProperties, shallowRef } from 'vue'
 import {
 	getTrackVolume,
@@ -116,12 +145,11 @@ import {
 	toggleMute,
 	toggleSolo,
 } from '@/audioEngine'
-import { useRafFn, useEventListener, onClickOutside, useElementSize } from '@vueuse/core'
-import { UseElementBounding, vOnClickOutside } from '@vueuse/components'
+import { useRafFn, useElementSize } from '@vueuse/core'
+import { vOnClickOutside } from '@vueuse/components'
 import { socket } from '@/socket/socket'
 import { useConsole } from '@/composables/useConsole'
 import { Trash2, Ellipsis } from 'lucide-vue-next'
-import { DEFAULT_GAIN } from '~/constants'
 import type { Clip } from '~/schema'
 
 const wrapperStyles = computed((): CSSProperties => {
@@ -172,19 +200,181 @@ watch(isPlaying, (playing) => {
 	}
 })
 
-// --- Context Menu Logic ---
 const contextMenuTrackId = shallowRef<string | null>(null)
 
-function openContextMenu(e: MouseEvent, trackId: string) {
+function openContextMenu(trackId: string) {
 	contextMenuTrackId.value = trackId
+}
+
+function closeContextMenu() {
+	contextMenuTrackId.value = null
 }
 
 function toggleContextMenu(trackId: string) {
 	if (contextMenuTrackId.value === trackId) {
-		contextMenuTrackId.value = null
+		closeContextMenu()
 	} else {
-		contextMenuTrackId.value = trackId
+		openContextMenu(trackId)
 	}
+}
+
+const dragState = reactive<{
+	draggedTrackId: string | null
+	draggedTrackIndex: number | null
+	dropTargetIndex: number | null
+	dropPosition: 'top' | 'bottom' | null
+}>({
+	draggedTrackId: null,
+	draggedTrackIndex: null,
+	dropTargetIndex: null,
+	dropPosition: null,
+})
+
+function onDragStart(event: DragEvent, id: string, index: number) {
+	if (!(event.target instanceof HTMLElement)) return
+
+	if (
+		event.target.closest('button') ||
+		event.target.closest('.volumeSlider') ||
+		event.target.closest('.context-menu')
+	) {
+		event.preventDefault()
+		return
+	}
+
+	closeContextMenu()
+
+	dragState.draggedTrackId = id
+	dragState.draggedTrackIndex = index
+
+	if (event.dataTransfer) {
+		event.dataTransfer.effectAllowed = 'move'
+		event.dataTransfer.setData('text/plain', id)
+
+		const img = new Image()
+		img.src = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='
+		event.dataTransfer.setDragImage(img, 0, 0)
+	}
+}
+
+function onDragOver(event: DragEvent, index: number) {
+	if (dragState.draggedTrackId === null || dragState.draggedTrackIndex === null) return
+
+	if (event.dataTransfer) {
+		event.dataTransfer.dropEffect = 'move'
+	}
+
+	const target = event.currentTarget as HTMLElement
+	const rect = target.getBoundingClientRect()
+	const relY = event.clientY - rect.top
+	const isTopHalf = relY < rect.height / 2
+
+	const draggedIdx = dragState.draggedTrackIndex
+
+	const isGapBeforeDragged =
+		(index === draggedIdx && isTopHalf) || (index === draggedIdx - 1 && !isTopHalf)
+	const isGapAfterDragged =
+		(index === draggedIdx && !isTopHalf) || (index === draggedIdx + 1 && isTopHalf)
+
+	if (isGapBeforeDragged || isGapAfterDragged) {
+		dragState.dropTargetIndex = null
+		dragState.dropPosition = null
+		return
+	}
+
+	dragState.dropTargetIndex = index
+	dragState.dropPosition = isTopHalf ? 'top' : 'bottom'
+}
+
+function onDragLeave(event: DragEvent, index: number) {
+	if (dragState.draggedTrackId === null) return
+	const relatedTarget = event.relatedTarget as Node | null
+	const currentTarget = event.currentTarget as Node
+	if (relatedTarget && currentTarget.contains(relatedTarget)) {
+		return
+	}
+
+	if (dragState.dropTargetIndex === index) {
+		dragState.dropTargetIndex = null
+		dragState.dropPosition = null
+	}
+}
+
+async function onDrop(event: DragEvent, index: number) {
+	const fromId = dragState.draggedTrackId
+	const fromIndex = dragState.draggedTrackIndex
+	const toIndex = dragState.dropTargetIndex
+	const position = dragState.dropPosition
+
+	dragState.draggedTrackId = null
+	dragState.draggedTrackIndex = null
+	dragState.dropTargetIndex = null
+	dragState.dropPosition = null
+
+	if (!fromId || fromIndex === null || toIndex === null || !position) return
+
+	const targetTuple = sortedTracks.value[toIndex]
+	if (!targetTuple) return
+	if (fromId === targetTuple[0]) return
+
+	const sorted = sortedTracks.value
+	if (sorted.length <= 1) return
+
+	const track = tracks.get(fromId)
+	if (!track) return
+
+	const sortedWithoutDragged = sorted.filter((t) => t[0] !== fromId)
+	const targetId = targetTuple[0]
+	const targetIndexInNewArray = sortedWithoutDragged.findIndex((t) => t[0] === targetId)
+
+	if (targetIndexInNewArray === -1) return
+
+	let trackAboveIndex: number
+	let trackBelowIndex: number
+	let isDroppingAtTop: boolean
+
+	if (position === 'top') {
+		trackBelowIndex = targetIndexInNewArray
+		trackAboveIndex = targetIndexInNewArray - 1
+		isDroppingAtTop = true
+	} else {
+		trackAboveIndex = targetIndexInNewArray
+		trackBelowIndex = targetIndexInNewArray + 1
+		isDroppingAtTop = false
+	}
+
+	const newOrderIndex = orderIndexBetween(
+		sortedWithoutDragged,
+		trackAboveIndex,
+		trackBelowIndex,
+		() => {
+			const edgeIdx = isDroppingAtTop ? 0 : sortedWithoutDragged.length - 1
+			return sortedWithoutDragged[edgeIdx]![1].order_index + (isDroppingAtTop ? -1 : 1)
+		},
+	)
+
+	const oldOrderIndex = track.order_index
+	track.order_index = newOrderIndex
+
+	const res = await socket.emitWithAck('get:track:update', {
+		id: fromId,
+		changes: { order_index: newOrderIndex },
+	})
+
+	if (res.success) return
+
+	track.order_index = oldOrderIndex
+
+	userLog('SYSTEM', `Failed to reorder track: ${res.error.message}`, {
+		textColor: 'red',
+	})
+}
+
+function onDragEnd() {
+	dragState.draggedTrackId = null
+	dragState.draggedTrackIndex = null
+	dragState.dropTargetIndex = null
+	dragState.dropPosition = null
 }
 
 async function deleteTrack(trackId: string) {
@@ -218,6 +408,69 @@ async function deleteTrack(trackId: string) {
 			textColor: 'red',
 			isBold: true,
 		})
+	}
+}
+
+function orderIndexBetween(
+	sorted: typeof sortedTracks.value,
+	trackAboveIndex: number,
+	trackBelowIndex: number,
+	edgeFallback: () => number,
+) {
+	// puts track between two neighbors / offset from edge at boundary
+	const trackAbove = sorted[trackAboveIndex]?.[1]
+	const trackBelow = sorted[trackBelowIndex]?.[1]
+
+	if (trackAbove && trackBelow) {
+		return (trackAbove.order_index + trackBelow.order_index) / 2
+	}
+
+	return edgeFallback()
+}
+
+async function reorderTrack(trackId: string, currentIndex: number, direction: 'up' | 'down') {
+	closeContextMenu()
+
+	if (user.value?.banned_at) return
+
+	const track = tracks.get(trackId)
+	if (!track) return
+
+	const sorted = sortedTracks.value
+	if (sorted.length <= 1) return
+
+	const isUp = direction === 'up'
+
+	const atBoundary = isUp ? currentIndex === 0 : currentIndex === sorted.length - 1
+
+	if (atBoundary) return
+
+	const trackAboveIndex = isUp ? currentIndex - 2 : currentIndex + 1
+	const trackBelowIndex = isUp ? currentIndex - 1 : currentIndex + 2
+
+	const newOrderIndex = orderIndexBetween(sorted, trackAboveIndex, trackBelowIndex, () => {
+		const edgeIdx = isUp ? 0 : sorted.length - 1
+		return sorted[edgeIdx]![1].order_index + (isUp ? -1 : 1)
+	})
+
+	const oldOrderIndex = track.order_index
+	track.order_index = newOrderIndex
+
+	const res = await socket.emitWithAck('get:track:update', {
+		id: trackId,
+		changes: { order_index: newOrderIndex },
+	})
+
+	if (res.success) return // all worked out :)
+
+	track.order_index = oldOrderIndex
+
+	userLog('SYSTEM', `Failed to reorder track: ${res.error.message}`, {
+		textColor: 'red',
+	})
+
+	if (IN_DEV_MODE) {
+		userLog('SYSTEM', `You probably solve this by doing "bun cleanup" bc db migration is messy`)
 	}
 }
 </script>
@@ -404,5 +657,31 @@ async function deleteTrack(trackId: string) {
 .menu-trigger-btn.solo.active::after {
 	border: 1px solid color-mix(in lch, var(--solo-color), transparent 50%);
 	box-shadow: inset 0px 0px 7px -3px var(--solo-color);
+}
+
+.track-controls.is-dragged {
+	opacity: 0.7;
+}
+
+.track-controls.drop-target-top::before {
+	content: '';
+	position: absolute;
+	top: -2px;
+	left: 0;
+	right: 0;
+	height: 2px;
+	background-color: var(--text-color-primary);
+	z-index: 20;
+}
+
+.track-controls.drop-target-bottom::after {
+	content: '';
+	position: absolute;
+	bottom: -1px;
+	left: 0;
+	right: 0;
+	height: 2px;
+	background-color: var(--text-color-primary);
+	z-index: 20;
 }
 </style>

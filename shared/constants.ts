@@ -1,6 +1,8 @@
 export const DEFAULT_GAIN = 1 as const
 export const BACKEND_PORT = 3000 as const
 
+export const MAX_TRACKS = 512 as const
+
 // audio
 export const audioMimeTypes = ['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/mp3']
 

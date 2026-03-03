@@ -161,7 +161,11 @@ export const EVENTS = Object.freeze({
 			res: ClientAudioFileSchema,
 		}),
 		'get:track:create': defineRequest({
-			req: z.null(),
+			req: z
+				.object({
+					order_index: z.number(),
+				})
+				.nullable(),
 			res: ClientTrackScema,
 		}),
 		'get:track:update': defineRequest({

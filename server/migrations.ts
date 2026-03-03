@@ -100,4 +100,14 @@ export const migrations: Migration[] = [
             `)
 		},
 	},
+	{
+		id: 4,
+		name: 'change_order_index_to_float',
+		func: async (queryFn) => {
+			await queryFn(`
+	            ALTER TABLE ${TRACKS_TABLE}
+	            ALTER COLUMN order_index TYPE DOUBLE PRECISION
+	        `)
+		},
+	},
 ]

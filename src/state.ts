@@ -4,6 +4,8 @@ import { type DebugEntry } from '@/composables/useDebug'
 import { useDevicePixelRatio, useEventListener, useIntervalFn } from '@vueuse/core'
 import type { AudioFile } from '@/types'
 
+export const IN_DEV_MODE = import.meta.env.MODE === 'development'
+
 export const user = ref<User | null>(null)
 export const client = ref<Client | null>(null)
 export const showAdminPanel = shallowRef(false)

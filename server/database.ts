@@ -12,6 +12,7 @@ import {
 	type UpdateTrack,
 	type User,
 } from '~/schema'
+import { MAX_TRACKS } from '~/constants'
 import { migrations } from './migrations'
 import { print, randomSafeHexColor } from './utils'
 import { nanoid } from 'nanoid'
@@ -128,14 +129,55 @@ async function getAudioFile(id: string): Promise<ClientAudioFile | null> {
 	return rows[0] || null
 }
 
-async function createTrack(track: Omit<ServerTrack, 'order_index'>): Promise<ClientTrack> {
+async function createTrack(
+	track: Omit<ServerTrack, 'order_index'>,
+	orderIndex?: number,
+): Promise<ClientTrack> {
 	const { id, creator_user_id, title, belongs_to_user_id, gain } = track
 
+	let finalOrderIndex = orderIndex
+
+	if (finalOrderIndex === undefined || finalOrderIndex === null) {
+		// no index given -> max +1
+		const initialMaxQuery = await queryFn<{ max: number }>(
+			`SELECT COALESCE(MAX(order_index), 0) + 1 AS max FROM ${TRACKS_TABLE}`,
+		)
+		finalOrderIndex = initialMaxQuery[0]?.max ?? 1
+	} else {
+		// index given -> check if exists
+		const initialExistsQuery = await queryFn<{ exists: boolean }>(
+			`SELECT EXISTS(SELECT 1 FROM ${TRACKS_TABLE} WHERE order_index = $1) AS exists`,
+			[finalOrderIndex],
+		)
+
+		if (initialExistsQuery[0]?.exists) {
+			// index exists -> get next track
+			const getNextIndexQuery = await queryFn<{ order_index: number }>(
+				`SELECT order_index FROM ${TRACKS_TABLE} WHERE order_index > $1 ORDER BY order_index ASC LIMIT 1`,
+				[finalOrderIndex],
+			)
+
+			if (getNextIndexQuery.length > 0 && getNextIndexQuery[0]?.order_index !== undefined) {
+				// place it half way
+				finalOrderIndex = (finalOrderIndex + getNextIndexQuery[0].order_index) / 2
+			} else {
+				// no next track -> bump it
+				finalOrderIndex = finalOrderIndex + 1
+			}
+		}
+	}
+
+	// regular insert now :D
 	const rows = await queryFn<ClientTrack>(
 		`
-			WITH inserted AS (
+			WITH track_count AS (
+				SELECT COUNT(*) AS total FROM ${TRACKS_TABLE}
+				HAVING COUNT(*) < $6
+			),
+			inserted AS (
 				INSERT INTO ${TRACKS_TABLE} (id, creator_user_id, title, belongs_to_user_id, gain, order_index) 
-				VALUES ($1, $2, $3, $4, $5, (SELECT COALESCE(MAX(order_index), 0) + 1 FROM ${TRACKS_TABLE}))
+				SELECT $1, $2, $3, $4, $5, $7
+				FROM track_count
 				RETURNING *
 			)
 			SELECT 
@@ -145,10 +187,10 @@ async function createTrack(track: Omit<ServerTrack, 'order_index'>): Promise<Cli
 			LEFT JOIN ${USERS_TABLE} AS users
 				ON inserted.belongs_to_user_id = users.id
 		`,
-		[id, creator_user_id, title, belongs_to_user_id, gain],
+		[id, creator_user_id, title, belongs_to_user_id, gain, MAX_TRACKS, finalOrderIndex],
 	)
 
-	if (!rows.length) throw new Error('Failed to create track')
+	if (!rows.length) throw new Error(`Track limit reached (max ${MAX_TRACKS})`)
 	return rows[0]!
 }
 
