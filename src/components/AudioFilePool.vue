@@ -39,6 +39,13 @@
 			</div>
 		</div>
 
+		<!-- custom scrollbar -->
+		<CustomScrollbar
+			class="pool-scrollbar-x"
+			orientation="x"
+			:scroll-container="clipsContainerEl"
+		/>
+
 		<div v-if="isOverDropZone" class="is-over">
 			<div class="drop-zone-text">
 				<p class="big bold" style="color: yellowgreen">Drop your files here!</p>
@@ -86,10 +93,11 @@ import {
 	dragFromPoolState,
 } from '@/state'
 import UploadButton from '@/components/UploadButton.vue'
-import { computed, shallowRef, useTemplateRef, watchEffect } from 'vue'
+import { computed, shallowRef, useTemplateRef, watchEffect, ref, watch } from 'vue'
 import type { AudioFile } from '@/types'
 import ClipInstance from '@/components/ClipInstance.vue'
-import { useDropZone, useElementSize, useEventListener } from '@vueuse/core'
+import { useDropZone, useElementSize, useEventListener, useResizeObserver } from '@vueuse/core'
+import CustomScrollbar from '@/components/CustomScrollbar.vue'
 import { File, AudioLines, LayoutDashboard } from 'lucide-vue-next'
 import { audioMimeTypes } from '~/constants'
 import { optimisticAudioCreateUpload } from '@/utils/uploadAudio'
@@ -231,13 +239,14 @@ useEventListener(clipsContainerEl, 'pointerdown', (e) => {
 <style scoped>
 .audio-file-pool-root {
 	display: grid;
-	grid-template-rows: auto 1fr;
+	grid-template-rows: auto 1fr auto;
 	background-color: var(--bg-color);
 	z-index: 15;
 	border-top: 1px solid var(--border-primary);
 	position: relative;
 	overflow: hidden;
 	padding: 1rem;
+	padding-bottom: 0;
 	gap: 1rem;
 }
 
@@ -342,5 +351,12 @@ useEventListener(clipsContainerEl, 'pointerdown', (e) => {
 .clips-container::-webkit-scrollbar {
 	display: none;
 	/* Chrome, Safari, Opera */
+}
+
+.pool-scrollbar-x {
+	height: 1.2rem;
+	width: 100%;
+	margin-left: -1rem;
+	width: calc(100% + 2rem);
 }
 </style>

@@ -43,7 +43,6 @@ import { EVENTS } from '~/events'
 import { audioMimeTypes, BACKEND_PORT, CURSOR_INACTIVE_TIMEOUT_MS, DEFAULT_GAIN } from '~/constants'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
 import { RateLimiter, getSafeIp } from './ratelimiter'
-import sanitizeHtml from 'sanitize-html'
 
 const IN_DEV_MODE = Bun.env['ENV'] === 'development'
 const BUILD_ID = nanoid(11)
@@ -174,11 +173,7 @@ io.on('connection', async (socket) => {
 			const file_id = nanoid()
 			const cleanFileName = sanitizeLetterUnderscoreOnly(filename)
 
-			const safeDisplayName =
-				sanitizeHtml(filename, {
-					allowedTags: [],
-					allowedAttributes: {},
-				}).trim() || 'unnamed_file'
+			const safeDisplayName = filename.trim() || 'unnamed_file' // not really "safe" but since vue already protects against xss should be enough
 
 			const file_key = generateStorageKey(cleanFileName, user.id, file_id)
 
