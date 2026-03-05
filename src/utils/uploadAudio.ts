@@ -60,7 +60,15 @@ export async function optimisticAudioCreateUpload(
 		const { url, file_id, color, file_name, file_key } = res.data
 
 		// always copy buffer because decodeAudioData detaches it i think :P
-		const audioCtxBuffer = await audioContext.decodeAudioData(arrayBuf.slice(0))
+		let audioCtxBuffer: AudioBuffer
+		try {
+			audioCtxBuffer = await audioContext.decodeAudioData(arrayBuf.slice(0))
+		} catch {
+			return {
+				success: false,
+				reason: 'File could not be decoded - it may be corrupted or incomplete.',
+			}
+		}
 
 		const duration = audioCtxBuffer.duration
 		const sampleRate = audioCtxBuffer.sampleRate

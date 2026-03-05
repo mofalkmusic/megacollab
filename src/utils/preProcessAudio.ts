@@ -190,6 +190,8 @@ export async function ingestNewAudioFileMetadata(
 					file.file_name,
 					err,
 				)
+				audiofiles.delete(file.id)
+				audioBuffers.delete(file.id)
 				return
 			} finally {
 				fetchCompletionMap.set(file.id, 100)
@@ -220,12 +222,15 @@ export async function ingestNewAudioFileMetadata(
 					console.error('Cached file not found 2:', file.id, file.file_name)
 				}
 			} catch (err) {
-				console.error(
-					'Failed to decode cached buffer for file:',
-					file.id,
-					file.file_name,
+				console.warn(
+					'Failed to decode cached buffer for file.\nid: ' +
+						file.id +
+						'\nfile_name: ' +
+						file.file_name,
 					err,
 				)
+				audiofiles.delete(file.id)
+				audioBuffers.delete(file.id)
 				return
 			} finally {
 				cachedCompletionMap.set(file.id, 100)
