@@ -132,7 +132,7 @@
 			style="grid-area: timeline"
 			:class="{ panning: isPanning }"
 		>
-			<TrackControls />
+			<TrackControls :scroll-container="timelineContainerEl" />
 			<div
 				class="all-tracks-wrapper"
 				ref="tracksWrapper"

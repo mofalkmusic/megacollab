@@ -93,19 +93,14 @@
 							@{{ track.belongs_to_display_name }}
 						</p>
 					</div>
-					<div
-						style="
-							border-top: 1px solid var(--border-primary);
-							margin-top: 0.5rem;
-							padding-bottom: 0.5rem;
-						"
-					></div>
+					<MenuDividerLine :distance="0.5" />
 					<button
 						class="default-button menu-btn"
 						@mousedown="reorderTrack(id, index, 'up')"
 						:disabled="index === 0"
 						:style="{ opacity: index === 0 ? 0.5 : 1 }"
 					>
+						<ArrowUp :size="13" style="color: var(--text-color-secondary)" />
 						<p class="small">Move Up</p>
 					</button>
 					<button
@@ -114,15 +109,15 @@
 						:disabled="index === sortedTracks.length - 1"
 						:style="{ opacity: index === sortedTracks.length - 1 ? 0.5 : 1 }"
 					>
+						<ArrowDown :size="13" style="color: var(--text-color-secondary)" />
 						<p class="small">Move Down</p>
 					</button>
-					<div
-						style="
-							border-top: 1px solid var(--border-primary);
-							margin-top: 0.3rem;
-							padding-bottom: 0.3rem;
-						"
-					></div>
+					<MenuDividerLine :distance="0.5" />
+					<button class="default-button menu-btn" @mousedown="addTrackAbove(index)">
+						<Plus :size="13" style="color: var(--text-color-secondary)" />
+						<p class="small">Add Track</p>
+					</button>
+					<MenuDividerLine :distance="0.5" />
 					<button class="default-button menu-btn delete" @mousedown="deleteTrack(id)">
 						<Trash2 :size="13" style="color: var(--text-color-secondary)" />
 						<p class="small">Delete Track</p>
@@ -135,7 +130,15 @@
 
 <script setup lang="ts">
 import { tracks, pxTrackHeight, clips, user, trackControlsWidth, IN_DEV_MODE } from '@/state'
-import { computed, reactive, useTemplateRef, watch, type CSSProperties, shallowRef } from 'vue'
+import {
+	computed,
+	reactive,
+	useTemplateRef,
+	watch,
+	type CSSProperties,
+	shallowRef,
+	nextTick,
+} from 'vue'
 import {
 	getTrackVolume,
 	isPlaying,
@@ -149,8 +152,13 @@ import { useRafFn, useElementSize } from '@vueuse/core'
 import { vOnClickOutside } from '@vueuse/components'
 import { socket } from '@/socket/socket'
 import { useConsole } from '@/composables/useConsole'
-import { Trash2, Ellipsis } from 'lucide-vue-next'
+import { Trash2, Ellipsis, ArrowUp, ArrowDown, Plus } from 'lucide-vue-next'
 import type { Clip } from '~/schema'
+import MenuDividerLine from '../MenuDividerLine.vue'
+
+const props = defineProps<{
+	scrollContainer: HTMLElement | null
+}>()
 
 const wrapperStyles = computed((): CSSProperties => {
 	return {
@@ -429,8 +437,6 @@ function orderIndexBetween(
 }
 
 async function reorderTrack(trackId: string, currentIndex: number, direction: 'up' | 'down') {
-	closeContextMenu()
-
 	if (user.value?.banned_at) return
 
 	const track = tracks.get(trackId)
@@ -456,6 +462,14 @@ async function reorderTrack(trackId: string, currentIndex: number, direction: 'u
 	const oldOrderIndex = track.order_index
 	track.order_index = newOrderIndex
 
+	await nextTick()
+	await nextTick()
+
+	const container = props.scrollContainer
+	if (container) {
+		container.scrollTop += isUp ? -pxTrackHeight : pxTrackHeight
+	}
+
 	const res = await socket.emitWithAck('get:track:update', {
 		id: trackId,
 		changes: { order_index: newOrderIndex },
@@ -472,6 +486,42 @@ async function reorderTrack(trackId: string, currentIndex: number, direction: 'u
 	if (IN_DEV_MODE) {
 		userLog('SYSTEM', `You probably solve this by doing "bun cleanup" bc db migration is messy`)
 	}
+}
+
+async function addTrackAbove(currentIndex: number) {
+	if (user.value?.banned_at) return
+
+	const sorted = sortedTracks.value
+	const trackAboveIndex = currentIndex - 1
+	const trackBelowIndex = currentIndex
+
+	const newOrderIndex = orderIndexBetween(sorted, trackAboveIndex, trackBelowIndex, () => {
+		// edge fallback but idk if this is a good idea. keeping it for now
+		// todo: evaluate this
+		const firstTrack = sorted[0]
+		return firstTrack ? firstTrack[1].order_index / 2 : 0
+	})
+
+	const { success, data, error } = await socket.emitWithAck('get:track:create', {
+		order_index: newOrderIndex,
+	})
+
+	if (!success) {
+		userLog('SYSTEM', `Failed to create track: ${error.message}`, {
+			textColor: 'red',
+		})
+		console.error(error)
+		return
+	}
+
+	tracks.set(data.id, data)
+
+	await nextTick()
+	await nextTick() // more ticks more good :D
+
+	const container = props.scrollContainer
+
+	if (container) container.scrollTop += pxTrackHeight
 }
 </script>
 

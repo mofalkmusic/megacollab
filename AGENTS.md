@@ -47,6 +47,8 @@ Always use these aliases instead of relative paths when importing across directo
 - Use `socket.emitWithAck` for request-response flows.
 - Check the `res.success` flag in response objects and handle `false` values by reverting optimistic updates or showing toasts.
 - Client event handlers live in `src/socket/eventHandlers/` as separate files exporting a `defineSocketHandler(...)` call.
+- Always check whether the server uses `socket.broadcast.emit` or `io.emit` to determine if a local state update is needed immediately alongside the `emitWithAck`.
+- Infer from the scenario and related code whether an update should be performed optimistically or strictly sequentially.
 
 ## Snapping
 
@@ -54,7 +56,7 @@ Always use these aliases instead of relative paths when importing across directo
 
 ## Consistency
 
-- If you perform an action that contradicts this AGENTS.md, flag it immediately.
+- If you must perform an action that contradicts this AGENTS.md, notify the user.
 
 ## Continuous Improvement
 
