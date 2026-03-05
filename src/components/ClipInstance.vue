@@ -81,6 +81,7 @@ import {
 	altKeyPressed,
 	clips,
 	controlKeyPressed,
+	shiftKeyPressed,
 	dragFromPoolState,
 	pixelRatio,
 	rightMouseButtonPressedOnTimeline,
@@ -112,6 +113,7 @@ import { Pause, Play, Trash2 } from 'lucide-vue-next'
 import { deleteAudio } from '@/socket/eventHandlers/audiofile_delete'
 import { useConsole } from '@/composables/useConsole'
 import { getPreviewProgress, playPreview, stopPreview } from '@/utils/previewHelper'
+import { DEFAULT_GAIN } from '~/constants'
 
 const { userLog } = useConsole()
 
@@ -730,6 +732,26 @@ onMounted(() => {
 			}
 
 			if (event.button !== 0) return
+
+			if (altKeyPressed.value || controlKeyPressed.value || shiftKeyPressed.value) {
+				event.preventDefault()
+				event.stopPropagation()
+				dragSession.value = null
+
+				const clip = props.clip ? clips.get(props.clip.id) : undefined
+				if (clip) {
+					clip.gain = DEFAULT_GAIN
+
+					if (!clip.id.startsWith('__temp__')) {
+						socket.emitWithAck('get:clip:update', {
+							id: clip.id,
+							changes: { gain: DEFAULT_GAIN },
+						})
+					}
+				}
+				return
+			}
+
 			event.preventDefault()
 			event.stopPropagation()
 

@@ -156,7 +156,10 @@ export async function optimisticAudioCreateUpload(
 		return { success: true, id: file_id, duration, uploadPromise }
 	} catch (err) {
 		console.error('File upload failed:', err)
-		return { success: false, reason: 'Failed to upload file' }
+		return {
+			success: false,
+			reason: `Failed to upload file: ${err instanceof Error ? err.message : 'Unknown error'}`,
+		}
 	}
 }
 
@@ -196,7 +199,12 @@ function uploadFile(
 
 		xhr.onload = () => {
 			if (xhr.status >= 200 && xhr.status < 300) resolve()
-			else reject(new Error('Upload failed with status ' + xhr.status))
+			else
+				reject(
+					new Error(
+						`Upload failed with status ${xhr.status}: ${xhr.responseText || 'No response body'}`,
+					),
+				)
 		}
 		xhr.onerror = () => reject(new Error('Network error during upload'))
 		xhr.send(file)

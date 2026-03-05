@@ -28,7 +28,12 @@
 			</div>
 		</div>
 
-		<div class="clips-container" ref="clipsContainer" :class="{ panning: isPanning }">
+		<div
+			class="clips-container"
+			ref="clipsContainer"
+			:class="{ panning: isPanning }"
+			:style="{ minHeight: `calc(${pxTrackHeight * 2}px + 1rem)` }"
+		>
 			<div v-for="audioFile in sortedAudioFiles" :key="audioFile.id">
 				<ClipInstance
 					:audiofile="audioFile"
@@ -91,6 +96,7 @@ import {
 	AUDIO_POOL_WIDTH,
 	audioFilePoolHeightPx,
 	dragFromPoolState,
+	pxTrackHeight,
 } from '@/state'
 import UploadButton from '@/components/UploadButton.vue'
 import { computed, shallowRef, useTemplateRef, watchEffect, ref, watch } from 'vue'
@@ -340,7 +346,6 @@ useEventListener(clipsContainerEl, 'pointerdown', (e) => {
 	gap: 1rem;
 	overflow-x: auto;
 	overflow-y: hidden;
-	min-height: 0;
 
 	/* Hide scrollbar for all browsers */
 	scrollbar-width: none;
