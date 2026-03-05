@@ -55,7 +55,7 @@ export async function setupDevelopmentFileHandlerRoutes({
 				return c.text('Missing key parameter', 400)
 			}
 
-			const safeKey = key.replace(/[^a-zA-Z0-9._\-\%\/]/g, '_').replace(/\.\./g, '')
+			const safeKey = key.replace(/[^a-zA-Z0-9._\-\/]/g, '_').replace(/\.\./g, '')
 
 			const filePath = join(devFilesDir, safeKey)
 

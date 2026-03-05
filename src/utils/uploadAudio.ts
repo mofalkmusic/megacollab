@@ -5,7 +5,7 @@ import { audioContext } from '@/audioEngine'
 import { cacheAudioFile, cacheBitmaps, computePeaks } from '@/utils/workerPool'
 import { activeUploads, audioBuffers, audiofiles, clips, user } from '@/state'
 import { useConsole } from '@/composables/useConsole'
-import { makeAudioFileHash, sanitizeLetterUnderscoreOnly } from '~/utils'
+import { makeAudioFileHash } from '~/utils'
 
 const { userLog } = useConsole()
 
