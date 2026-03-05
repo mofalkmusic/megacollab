@@ -277,6 +277,9 @@ export function unregisterTrack(trackId: ServerTrack['id']) {
 		analyser.disconnect()
 		trackAnalysers.delete(trackId)
 	}
+
+	mutedTrackIds.delete(trackId)
+	soloTrackIds.delete(trackId)
 }
 
 const floatBuffer = new Float32Array(FFT_SIZE_VOLUMES)
