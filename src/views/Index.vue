@@ -323,6 +323,7 @@ import AdminUserList from '@/components/AdminUserList.vue'
 import { renderPlaylistOffline } from '@/utils/offlineRenderer'
 import { encodeWav, encodeMp3 } from '@/utils/encoders'
 import { useGlobalProgress } from '@/composables/useGlobalProgress'
+import { menuShortcutsActive } from '@/composables/useMenuShortcutLock'
 
 const { userLog } = useConsole()
 
@@ -517,6 +518,8 @@ useEventListener('keydown', (event) => {
 	) {
 		return
 	}
+
+	if (menuShortcutsActive.value) return
 
 	if (event.code === 'Space') {
 		event.preventDefault()

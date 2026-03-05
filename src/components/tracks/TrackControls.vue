@@ -101,7 +101,7 @@
 						:style="{ opacity: index === 0 ? 0.5 : 1 }"
 					>
 						<ArrowUp :size="13" style="color: var(--text-color-secondary)" />
-						<p class="small">Move Up</p>
+						<p class="small">Move <span class="action-key-underline">U</span>p</p>
 					</button>
 					<button
 						class="default-button menu-btn"
@@ -110,17 +110,17 @@
 						:style="{ opacity: index === sortedTracks.length - 1 ? 0.5 : 1 }"
 					>
 						<ArrowDown :size="13" style="color: var(--text-color-secondary)" />
-						<p class="small">Move Down</p>
+						<p class="small">Move D<span class="action-key-underline">o</span>wn</p>
 					</button>
 					<MenuDividerLine :distance="0.5" />
 					<button class="default-button menu-btn" @mousedown="addTrackAbove(index)">
 						<Plus :size="13" style="color: var(--text-color-secondary)" />
-						<p class="small">Add Track</p>
+						<p class="small"><span class="action-key-underline">A</span>dd Track</p>
 					</button>
 					<MenuDividerLine :distance="0.5" />
 					<button class="default-button menu-btn delete" @mousedown="deleteTrack(id)">
 						<Trash2 :size="13" style="color: var(--text-color-secondary)" />
-						<p class="small">Delete Track</p>
+						<p class="small"><span class="action-key-underline">D</span>elete Track</p>
 					</button>
 				</div>
 			</div>
@@ -138,6 +138,7 @@ import {
 	type CSSProperties,
 	shallowRef,
 	nextTick,
+	onBeforeUnmount,
 } from 'vue'
 import {
 	getTrackVolume,
@@ -148,13 +149,14 @@ import {
 	toggleMute,
 	toggleSolo,
 } from '@/audioEngine'
-import { useRafFn, useElementSize } from '@vueuse/core'
+import { useRafFn, useElementSize, useEventListener } from '@vueuse/core'
 import { vOnClickOutside } from '@vueuse/components'
 import { socket } from '@/socket/socket'
 import { useConsole } from '@/composables/useConsole'
 import { Trash2, Ellipsis, ArrowUp, ArrowDown, Plus } from 'lucide-vue-next'
 import type { Clip } from '~/schema'
 import MenuDividerLine from '../MenuDividerLine.vue'
+import { menuShortcutsActive } from '@/composables/useMenuShortcutLock'
 
 const props = defineProps<{
 	scrollContainer: HTMLElement | null
@@ -225,6 +227,51 @@ function toggleContextMenu(trackId: string) {
 		openContextMenu(trackId)
 	}
 }
+
+watch(contextMenuTrackId, (trackId, _, onCleanup) => {
+	if (!trackId) return
+	// no cleanup needed bc cleanup gets invoked before new value is set
+
+	menuShortcutsActive.value = true
+
+	function handleMenuKeydown(event: KeyboardEvent) {
+		const id = contextMenuTrackId.value
+		if (!id) return
+
+		const index = sortedTracks.value.findIndex(([tid]) => tid === id)
+		if (index === -1) return
+
+		switch (event.key.toLowerCase()) {
+			case 'u':
+				reorderTrack(id, index, 'up')
+				break
+			case 'o':
+				reorderTrack(id, index, 'down')
+				break
+			case 'a':
+				addTrackAbove(index)
+				closeContextMenu()
+				break
+			case 'd':
+				deleteTrack(id)
+				break
+			default:
+				return // don't prevent default for other keys
+		}
+
+		event.preventDefault()
+		event.stopPropagation()
+	}
+
+	const stopListener = useEventListener(window, 'keydown', handleMenuKeydown)
+
+	onCleanup(() => {
+		stopListener()
+		menuShortcutsActive.value = false
+	})
+})
+
+onBeforeUnmount(() => (menuShortcutsActive.value = false))
 
 const dragState = reactive<{
 	draggedTrackId: string | null
@@ -733,5 +780,10 @@ async function addTrackAbove(currentIndex: number) {
 	height: 2px;
 	background-color: var(--text-color-primary);
 	z-index: 20;
+}
+
+.action-key-underline {
+	text-decoration: underline;
+	text-decoration-color: var(--text-color-secondary);
 }
 </style>

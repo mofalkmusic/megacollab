@@ -3,6 +3,7 @@ import { type Client, type ClientTrack, type Clip, type TimelinePos, type User }
 import { type DebugEntry } from '@/composables/useDebug'
 import { useDevicePixelRatio, useEventListener, useIntervalFn } from '@vueuse/core'
 import type { AudioFile } from '@/types'
+import { menuShortcutsActive } from '@/composables/useMenuShortcutLock'
 
 export const IN_DEV_MODE = import.meta.env.MODE === 'development'
 
@@ -104,6 +105,8 @@ useEventListener(window, 'keydown', (event) => {
 	) {
 		return
 	}
+
+	if (menuShortcutsActive.value) return
 
 	if (event.key === 'Alt') {
 		altKeyPressed.value = true
