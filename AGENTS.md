@@ -26,6 +26,7 @@ Always use these aliases instead of relative paths when importing across directo
 - Avoid using `interface`. Use `type` for all object and component definitions to maintain consistency across the codebase.
 - Use `unknown` instead of `any` wherever possible and avoid `as any`.
 - Prefer `instanceof HTMLElement` checks over type casting (e.g., `as HTMLElement`) when dealing with DOM elements (especially `event.target`).
+- Prefer readability over conciseness/cleverness unless necessary for the task.
 
 ## Zod & Schema Patterns
 

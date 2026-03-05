@@ -14,7 +14,7 @@ export const masterGainValue = ref(1)
 
 export function setMasterGain(gain: number) {
 	masterGainValue.value = gain
-	masterGainNode.gain.setTargetAtTime(gain, audioContext.currentTime, 0.02)
+	masterGainNode.gain.setTargetAtTime(gain, audioContext.currentTime, QUICK_FADE_SEC)
 }
 
 export const mutedTrackIds = reactive<Set<string>>(new Set())
@@ -46,7 +46,7 @@ export function updateTrackMutes() {
 			targetGain = 0
 		}
 
-		gainNode.gain.setTargetAtTime(targetGain, now, 0.02)
+		gainNode.gain.setTargetAtTime(targetGain, now, QUICK_FADE_SEC)
 	}
 }
 
@@ -60,6 +60,7 @@ const SCHEDULER_LOOP_INRERVAL_MS = 100 as const
 const FFT_SIZE_VOLUMES = 256 as const
 const BACK_TRACKING_TIME_ON_PLAY = 0.05 as const
 const FADE_TIME_MS = 30 as const
+const QUICK_FADE_SEC = 0.02 as const
 
 const sortedClips = computed(() => {
 	return Array.from(clips.values()).sort((a, b) => a.start_beat - b.start_beat)
@@ -83,10 +84,18 @@ const playId = shallowRef<symbol>(Symbol())
 
 const loopIteration = shallowRef(0)
 const nextScheduleTime = shallowRef(0)
-const activeSources = new Map<
-	string, // key: `${clipId}:${iteration}:${scheduledSongTime}`
-	{ source: AudioBufferSourceNode; gainNode: GainNode; hash: string }
->()
+type ActiveSourceWrapper = {
+	source: AudioBufferSourceNode
+	gainNode: GainNode
+	hash: string
+	gain: number
+	fade_in_sec: number
+	fade_out_sec: number
+	whenToPlay: number
+	clipDurationSec: number
+}
+
+const activeSources = new Map<string, ActiveSourceWrapper>() // key: `${clipId}:${iteration}:${scheduledSongTime}`
 const scheduledClipIds = new Set<string>() // kept for loop lookahead optimization if needed, but might be redundant with activeSources check
 export const restingPositionSec = shallowRef(0)
 
@@ -116,6 +125,61 @@ function stopSource(sourceWrapper: { source: AudioBufferSourceNode; gainNode: Ga
 	}
 }
 
+function applyGainAndFadeChanges(wrapper: ActiveSourceWrapper, clip: Clip) {
+	const now = audioContext.currentTime
+	const gain = wrapper.gainNode.gain
+	const currentGainValue = gain.value
+
+	// reset
+	gain.cancelScheduledValues(now)
+	gain.setValueAtTime(currentGainValue, now)
+
+	const { whenToPlay, clipDurationSec } = wrapper
+	const fadeInEnd = whenToPlay + clip.fade_in_sec
+	const fadeOutStart = whenToPlay + clipDurationSec - clip.fade_out_sec
+	const fadeOutEnd = whenToPlay + clipDurationSec
+
+	const isInFadeInRegion = now < fadeInEnd && clip.fade_in_sec > 0
+	const isInSustainRegion = now < fadeOutStart || clip.fade_out_sec === 0
+
+	if (isInFadeInRegion) {
+		if (now <= whenToPlay) {
+			gain.setValueAtTime(0, whenToPlay)
+			gain.linearRampToValueAtTime(clip.gain, fadeInEnd)
+		} else {
+			const expectedGainNow = clip.gain * ((now - whenToPlay) / clip.fade_in_sec)
+			const rampTime = Math.min(now + QUICK_FADE_SEC, fadeInEnd)
+			gain.linearRampToValueAtTime(Math.max(0, expectedGainNow), rampTime)
+			if (rampTime < fadeInEnd) {
+				gain.linearRampToValueAtTime(clip.gain, fadeInEnd)
+			}
+		}
+	} else if (isInSustainRegion) {
+		gain.linearRampToValueAtTime(clip.gain, now + QUICK_FADE_SEC)
+	}
+
+	const hasFadeOut = clip.fade_out_sec > 0 && fadeOutEnd > now
+	if (hasFadeOut) {
+		if (now < fadeOutStart) {
+			const safeFadeOutStart = Math.max(now + QUICK_FADE_SEC, fadeOutStart)
+			gain.setValueAtTime(clip.gain, safeFadeOutStart)
+			gain.linearRampToValueAtTime(0, fadeOutEnd)
+		} else {
+			const expectedGainNow = clip.gain * Math.max(0, (fadeOutEnd - now) / clip.fade_out_sec)
+			const rampTime = Math.min(now + QUICK_FADE_SEC, fadeOutEnd)
+			gain.linearRampToValueAtTime(Math.max(0, expectedGainNow), rampTime)
+			if (rampTime < fadeOutEnd) {
+				gain.linearRampToValueAtTime(0, fadeOutEnd)
+			}
+		}
+	}
+
+	// keep wrapper in sync ofc :D
+	wrapper.gain = clip.gain
+	wrapper.fade_in_sec = clip.fade_in_sec
+	wrapper.fade_out_sec = clip.fade_out_sec
+}
+
 function reconcileActiveSources() {
 	if (!isPlaying.value) return
 
@@ -143,9 +207,13 @@ function reconcileActiveSources() {
 			continue
 		}
 
-		// dynamically update gain if it changed
-		if (wrapper.gainNode.gain.value !== clip.gain) {
-			wrapper.gainNode.gain.setTargetAtTime(clip.gain, audioContext.currentTime, 0.02)
+		// dynamically update gain or fades if changed
+		const gainChanged = wrapper.gain !== clip.gain
+		const fadesChanged =
+			wrapper.fade_in_sec !== clip.fade_in_sec || wrapper.fade_out_sec !== clip.fade_out_sec
+
+		if (gainChanged || fadesChanged) {
+			applyGainAndFadeChanges(wrapper, clip)
 		}
 	}
 
@@ -416,15 +484,30 @@ function scheduleClipSource(
 	const source = audioContext.createBufferSource()
 	const clipGainNode = audioContext.createGain()
 
-	clipGainNode.gain.value = clip.gain
+	// whenToPlay is AUDIO CONTEXT time
+	// map song time to context time
+	const whenToPlay = playbackStartTime.value + (clipStartSongTime + timeShift - startOffset.value)
+
+	const fullClipDurationSec = beats_to_sec(clip.end_beat - clip.start_beat)
+
+	clipGainNode.gain.setValueAtTime(clip.fade_in_sec > 0 ? 0 : clip.gain, whenToPlay)
+
+	const fadeInEnd = whenToPlay + clip.fade_in_sec
+	const fadeOutStart = whenToPlay + fullClipDurationSec - clip.fade_out_sec
+	const fadeOutEnd = whenToPlay + fullClipDurationSec
+
+	if (clip.fade_in_sec > 0) {
+		clipGainNode.gain.linearRampToValueAtTime(clip.gain, fadeInEnd)
+	}
+
+	if (clip.fade_out_sec > 0) {
+		clipGainNode.gain.setValueAtTime(clip.gain, fadeOutStart)
+		clipGainNode.gain.linearRampToValueAtTime(0, fadeOutEnd)
+	}
 
 	source.buffer = buffer
 	source.connect(clipGainNode)
 	clipGainNode.connect(trackGainNode)
-
-	// whenToPlay is AUDIO CONTEXT time
-	// map song time to context time
-	const whenToPlay = playbackStartTime.value + (clipStartSongTime + timeShift - startOffset.value)
 
 	let offsetSeconds = 0
 	let playAt = whenToPlay
@@ -456,7 +539,16 @@ function scheduleClipSource(
 
 	const key = `${clip.id}:${iteration}:${clipStartSongTime}`
 	const hash = getClipHash(clip)
-	const wrapper = { source, gainNode: clipGainNode, hash }
+	const wrapper = {
+		source,
+		gainNode: clipGainNode,
+		hash,
+		gain: clip.gain,
+		fade_in_sec: clip.fade_in_sec,
+		fade_out_sec: clip.fade_out_sec,
+		whenToPlay,
+		clipDurationSec: fullClipDurationSec,
+	}
 	activeSources.set(key, wrapper)
 
 	const sessionId = playId.value

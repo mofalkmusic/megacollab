@@ -110,4 +110,15 @@ export const migrations: Migration[] = [
 	        `)
 		},
 	},
+	{
+		id: 5,
+		name: 'add_fade_controls',
+		func: async (queryFn) => {
+			await queryFn(`
+	            ALTER TABLE ${CLIPS_TABLE}
+	            ADD COLUMN IF NOT EXISTS fade_in_sec DOUBLE PRECISION NOT NULL DEFAULT 0,
+	            ADD COLUMN IF NOT EXISTS fade_out_sec DOUBLE PRECISION NOT NULL DEFAULT 0
+	        `)
+		},
+	},
 ]

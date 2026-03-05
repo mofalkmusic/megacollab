@@ -248,13 +248,15 @@ async function createClip(clip: Omit<Clip, 'created_at' | 'creator_display_name'
 		start_beat,
 		gain,
 		offset_seconds,
+		fade_in_sec,
+		fade_out_sec,
 	} = clip
 
 	const rows = await queryFn<Clip>(
 		`
 			WITH inserted AS (
-				INSERT INTO ${CLIPS_TABLE} (id, creator_user_id, track_id, audio_file_id, end_beat, start_beat, gain, offset_seconds) 
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+				INSERT INTO ${CLIPS_TABLE} (id, creator_user_id, track_id, audio_file_id, end_beat, start_beat, gain, offset_seconds, fade_in_sec, fade_out_sec) 
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 				RETURNING *
 			)
 			SELECT 
@@ -264,7 +266,18 @@ async function createClip(clip: Omit<Clip, 'created_at' | 'creator_display_name'
 			LEFT JOIN ${USERS_TABLE} AS users
 				ON inserted.creator_user_id = users.id
 		`,
-		[id, creator_user_id, track_id, audio_file_id, end_beat, start_beat, gain, offset_seconds],
+		[
+			id,
+			creator_user_id,
+			track_id,
+			audio_file_id,
+			end_beat,
+			start_beat,
+			gain,
+			offset_seconds,
+			fade_in_sec,
+			fade_out_sec,
+		],
 	)
 
 	if (!rows.length) throw new Error('Failed to create clip')

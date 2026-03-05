@@ -751,6 +751,8 @@ const ghostClip = computed<Clip | null>(() => {
 		start_beat: ghostDragState.value.start_beat,
 		end_beat: ghostDragState.value.end_beat,
 		offset_seconds: 0,
+		fade_in_sec: 0,
+		fade_out_sec: 0,
 		gain: 1,
 		created_at: new Date().toISOString(),
 		// peaks: ghostAudioFile.value.peaks // Clip doesn't have peaks, AudioFile does.
@@ -856,6 +858,8 @@ watch(
 					start_beat: state.start_beat,
 					end_beat: state.end_beat,
 					offset_seconds: 0,
+					fade_in_sec: 0,
+					fade_out_sec: 0,
 					gain: 1,
 					created_at: new Date().toISOString(),
 				}

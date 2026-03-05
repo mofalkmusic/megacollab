@@ -423,6 +423,8 @@ io.on('connection', async (socket) => {
 				audio_file_id,
 				gain: gain ?? DEFAULT_GAIN,
 				offset_seconds: offset_seconds ?? 0,
+				fade_in_sec: 0,
+				fade_out_sec: 0,
 				track_id,
 			}
 
