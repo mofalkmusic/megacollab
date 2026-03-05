@@ -320,7 +320,7 @@ const dragSession = ref<{
 	currentY: number
 	previewTrackId: string | null
 	verticalOffsetPx: number
-	sourceTrackRect?: DOMRect
+	sourceTrack?: HTMLElement
 } | null>(null)
 
 const windowFocused = useWindowFocus()
@@ -376,11 +376,6 @@ onMounted(() => {
 
 			const parentTrack = (event.currentTarget as HTMLElement).closest('.track')
 
-			let sRect: DOMRect | undefined
-			if (parentTrack) {
-				sRect = parentTrack.getBoundingClientRect()
-			}
-
 			dragSession.value = {
 				side: 'move',
 				startX: event.clientX,
@@ -396,7 +391,7 @@ onMounted(() => {
 				currentY: event.clientY,
 				previewTrackId: props.clip!.track_id,
 				verticalOffsetPx: 0,
-				sourceTrackRect: sRect,
+				sourceTrack: parentTrack instanceof HTMLElement ? parentTrack : undefined,
 			}
 
 			const el = event.currentTarget as HTMLElement
@@ -436,10 +431,11 @@ onMounted(() => {
 					| HTMLElement
 					| undefined
 
-				if (trackEl && sesh.sourceTrackRect) {
+				if (trackEl && sesh.sourceTrack) {
 					const targetRect = trackEl.getBoundingClientRect()
+					const sourceRect = sesh.sourceTrack.getBoundingClientRect()
 					// Snap visual to track top difference
-					const snapY = targetRect.top - sesh.sourceTrackRect.top
+					const snapY = targetRect.top - sourceRect.top
 
 					sesh.verticalOffsetPx = snapY
 					sesh.previewTrackId = trackEl.dataset.trackId ?? null
