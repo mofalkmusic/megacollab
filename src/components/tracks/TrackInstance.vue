@@ -52,12 +52,15 @@ import { px_to_beats, quantize_beats, sec_to_beats, beats_to_px } from '@/utils/
 import { socket } from '@/socket/socket'
 import { nanoid } from 'nanoid'
 import { useGlobalProgress } from '@/composables/useGlobalProgress'
+import { useConsole } from '@/composables/useConsole'
 
 const props = defineProps<{
 	track: ServerTrack
 	scrollX: number
 	timelineWindowWidth: number
 }>()
+
+const { userLog } = useConsole()
 
 onMounted(() => registerTrack(props.track.id))
 
@@ -85,12 +88,25 @@ const trackEl = useTemplateRef('trackElement')
 const dropIndicatorX = shallowRef<number | null>(null)
 
 const { isOverDropZone } = useDropZone(trackEl, {
-	dataTypes: audioMimeTypes,
 	preventDefaultForUnhandled: false,
 	multiple: true, // but knida false :D
 	onDrop: async (files, event) => {
 		if (!files || files.length === 0) return
-		const file = files[0]
+
+		const validFiles = []
+		for (const f of files) {
+			if (audioMimeTypes.includes(f.type)) {
+				validFiles.push(f)
+			} else {
+				userLog('SYSTEM', `File format not supported: ${f.type}`, {
+					textColor: 'red',
+					isBold: true,
+				})
+			}
+		}
+
+		if (!validFiles.length) return
+		const file = validFiles[0]
 		if (!file) return
 
 		if (!user.value?.id) return

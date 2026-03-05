@@ -123,14 +123,27 @@ watchEffect(() => {
 
 const { files, isOverDropZone } = useDropZone(dropZoneEl, {
 	multiple: true,
-	dataTypes: audioMimeTypes,
 	preventDefaultForUnhandled: true,
 	onDrop: async (files) => {
 		if (user.value?.banned_at) return
 		if (!files || !files.length) return
 
+		const validFiles = []
+		for (const f of files) {
+			if (audioMimeTypes.includes(f.type)) {
+				validFiles.push(f)
+			} else {
+				userLog('SYSTEM', `File format not supported: ${f.type}`, {
+					textColor: 'red',
+					isBold: true,
+				})
+			}
+		}
+
+		if (!validFiles.length) return
+
 		const res = await Promise.all(
-			files.map(async (file) => {
+			validFiles.map(async (file) => {
 				const progress = useGlobalProgress()
 				const { success, duration, id, reason, uploadPromise } =
 					await optimisticAudioCreateUpload(file, (p) => {
