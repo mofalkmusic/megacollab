@@ -81,7 +81,7 @@ To not have to worry about setting up of external services, the development envi
 <dl>
   <dt><strong>Authentication</strong></dt>
   <dd>
-    Authentication is mocked in development. You don't need to set up Clerk; the app automatically uses a local mock user.
+    Authentication is mocked in development. You don't need to set up any authentication; the app automatically uses a local mock user.
   </dd>
 
   <dt><strong>Database</strong></dt>

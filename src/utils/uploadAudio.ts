@@ -44,7 +44,7 @@ export async function optimisticAudioCreateUpload(
 		const arrayBufPromise = file.arrayBuffer()
 
 		const uploadRequestPromise = socket.emitWithAck('get:upload:url', {
-			filename: encodeURI(file.name),
+			filename: file.name,
 			filetype: file.type,
 			filesize: file.size,
 		})
