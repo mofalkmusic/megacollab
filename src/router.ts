@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Index from '@/views/Index.vue'
 import Login from '@/views/Login.vue'
 import isMobile from 'is-mobile'
+import NotSupported from '@/views/NotSupported.vue'
 
 const inDev = import.meta.env.MODE === 'development'
 
@@ -29,7 +30,7 @@ const router = createRouter({
 		{
 			path: '/not-supported',
 			name: 'not-supported',
-			component: () => import('@/views/NotSupported.vue'),
+			component: NotSupported,
 			meta: { auth: 'none' },
 		},
 	],
