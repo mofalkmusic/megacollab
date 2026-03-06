@@ -1392,13 +1392,13 @@ canvas {
 
 .fade-in-triangle {
 	left: 0;
-	background: color-mix(in lch, black, transparent);
+	background: color-mix(in lch, var(--bg-color) 60%, transparent);
 	clip-path: polygon(0 0, 100% 0, 0 100%);
 }
 
 .fade-out-triangle {
 	right: 0;
-	background: color-mix(in lch, black, transparent);
+	background: color-mix(in lch, var(--bg-color) 60%, transparent);
 	clip-path: polygon(100% 0, 0 0, 100% 100%);
 }
 
