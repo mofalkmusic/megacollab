@@ -38,11 +38,13 @@ import {
 	type ServerTrack,
 	type ClientAudioFile,
 	type TimelinePos,
+	type User,
 } from '~/schema'
 import { EVENTS } from '~/events'
 import { audioMimeTypes, BACKEND_PORT, CURSOR_INACTIVE_TIMEOUT_MS, DEFAULT_GAIN } from '~/constants'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
 import { RateLimiter, getSafeIp } from './ratelimiter'
+import { checkPolicy, type PolicyAction } from '~/perms'
 
 const IN_DEV_MODE = Bun.env['ENV'] === 'development'
 const BUILD_ID = nanoid(11)
@@ -262,16 +264,8 @@ io.on('connection', async (socket) => {
 		})
 
 		socket.on('get:track:delete', async (data, callback) => {
-			if (user.banned_at) {
-				callback({
-					success: false,
-					error: {
-						status: 'UNAUTHORIZED',
-						message: 'You are banned and cannot delete tracks.',
-					},
-				})
-				return
-			}
+			const policyErr = getPolicyError('delete:track', user)
+			if (policyErr) return callback(policyErr)
 
 			const { id } = data
 
@@ -1095,4 +1089,19 @@ function ensureAllEventsHandled(eventNames: (string | symbol)[]) {
 	if (missingEvents.length > 0) {
 		print.server('Missing handlers for events:', missingEvents.join(', '))
 	}
+}
+
+export function getPolicyError(action: PolicyAction, user: User) {
+	const { allowed, reason } = checkPolicy(action, user)
+
+	if (!allowed) {
+		return {
+			success: false as const,
+			error: {
+				status: 'UNAUTHORIZED' as const,
+				message: reason || 'Unauthorized action.',
+			},
+		}
+	}
+	return null
 }

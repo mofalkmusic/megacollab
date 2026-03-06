@@ -255,7 +255,7 @@ import {
 	selectedClipIds,
 	showAdminPanel,
 } from '@/state'
-import TrackInstance from '@/components/tracks/TrackInstance.vue'
+import TrackInstance from '@/components/TrackInstance.vue'
 import {
 	useEventListener,
 	useMouseInElement,
@@ -282,7 +282,7 @@ import {
 } from '@/audioEngine'
 import UserCursors from '@/components/UserCursors.vue'
 import TimelineHeader from '@/components/TimelineHeader.vue'
-import TrackControls from '@/components/tracks/TrackControls.vue'
+import TrackControls from '@/components/TrackControls.vue'
 import { px_to_beats, quantize_beats, sec_to_beats } from '@/utils/mathUtils'
 import {
 	altKeyPressed,
@@ -295,7 +295,7 @@ import {
 } from '@/state'
 import type { Clip } from '~/schema'
 import ClipInstance from '@/components/ClipInstance.vue'
-import AddTrack from '@/components/tracks/AddTrack.vue'
+import AddTrack from '@/components/TrackAddButton.vue'
 import {
 	Play,
 	Pause,

@@ -2,13 +2,18 @@ import z from 'zod'
 
 // AUDIO FILES
 
+const isodatetime = z.preprocess(
+	(val) => (val instanceof Date ? val.toISOString() : val),
+	z.iso.datetime({ offset: true }),
+)
+
 export const ServerAudioFileSchema = z.object({
 	id: z.string(),
 	creator_user_id: z.string(), // foreign key
 	file_name: z.string(),
 	public_url: z.string(),
 	duration: z.number(),
-	created_at: z.iso.datetime({ offset: true }),
+	created_at: isodatetime,
 	color: z.string(),
 })
 
@@ -33,7 +38,7 @@ export const ServerClipSchema = z.object({
 	gain: z.number(),
 	fade_in_sec: z.number(),
 	fade_out_sec: z.number(),
-	created_at: z.iso.datetime({ offset: true }),
+	created_at: isodatetime,
 })
 
 export type ServerClip = z.output<typeof ServerClipSchema>
@@ -64,7 +69,7 @@ export const ServerTrackSchema = z.object({
 	title: z.string().nullable(),
 	order_index: z.number(),
 	gain: z.number(),
-	created_at: z.iso.datetime({ offset: true }),
+	created_at: isodatetime,
 })
 
 export type ServerTrack = z.output<typeof ServerTrackSchema>
@@ -96,17 +101,20 @@ export type UpdateTrack = z.output<typeof updateTrackSchema>
 
 export const UserSchema = z.object({
 	id: z.string(),
-	created_at: z.iso.datetime({ offset: true }),
+	created_at: isodatetime,
 	display_name: z.string(),
 	provider: z.enum(['twitch', 'discord', 'dev']),
 	provider_id: z.string(),
 	provider_email: z.string(),
 	color: z.string(),
 	roles: z
-		.array(z.enum(['regular', 'vip', 'mod', 'admin']))
+		.array(z.enum(['regular', 'vip', 'mod', 'admin', 'banned']))
 		.min(1)
 		.default(['regular']),
-	banned_at: z.iso.datetime({ offset: true }).nullable(),
+	banned_at: z.preprocess(
+		(val) => (val instanceof Date ? val.toISOString() : val),
+		z.iso.datetime({ offset: true }).nullable(),
+	),
 	ban_reason: z.string().nullable(),
 	download_quality: z.enum(['wav', 'mp3']),
 	// not storing refresh keys and access keys for now...

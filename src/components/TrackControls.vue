@@ -118,7 +118,12 @@
 						<p class="small"><span class="action-key-underline">A</span>dd Track</p>
 					</button>
 					<MenuDividerLine :distance="0.5" />
-					<button class="default-button menu-btn delete" @mousedown="deleteTrack(id)">
+					<button
+						class="default-button menu-btn delete"
+						@mousedown="deleteTrack(id)"
+						:disabled="!can('delete:track', track)"
+						:style="{ opacity: !can('delete:track', track) ? 0.5 : 1 }"
+					>
 						<Trash2 :size="13" style="color: var(--text-color-secondary)" />
 						<p class="small"><span class="action-key-underline">D</span>elete Track</p>
 					</button>
@@ -155,8 +160,11 @@ import { socket } from '@/socket/socket'
 import { useConsole } from '@/composables/useConsole'
 import { Trash2, Ellipsis, ArrowUp, ArrowDown, Plus } from 'lucide-vue-next'
 import type { Clip } from '~/schema'
-import MenuDividerLine from '../MenuDividerLine.vue'
+import MenuDividerLine from '@/components/MenuDividerLine.vue'
 import { menuShortcutsActive } from '@/composables/useMenuShortcutLock'
+import { usePerms } from '@/composables/usePerms'
+
+const { can, canWithInfo } = usePerms()
 
 const props = defineProps<{
 	scrollContainer: HTMLElement | null
@@ -433,11 +441,19 @@ function onDragEnd() {
 }
 
 async function deleteTrack(trackId: string) {
-	if (user.value?.banned_at) return
-	contextMenuTrackId.value = null
-
 	const track = tracks.get(trackId)
 	if (!track) return
+
+	const perms = canWithInfo('delete:track', track)
+
+	if (!perms.allowed) {
+		userLog('SYSTEM', perms.reason, {
+			textColor: 'red',
+		})
+		return
+	}
+
+	contextMenuTrackId.value = null
 
 	const clipsToDelete: Clip[] = []
 
@@ -695,7 +711,7 @@ async function addTrackAbove(currentIndex: number) {
 	color: var(--text-color-primary);
 }
 
-.menu-btn.delete:hover {
+.menu-btn.delete:not(:disabled):hover {
 	background-color: color-mix(in lch, #ff4444, black 20%);
 	color: white;
 }

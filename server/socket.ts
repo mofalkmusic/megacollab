@@ -89,7 +89,7 @@ export function validateIncomingEvents(socket: TypedSocket) {
 
 		// enforces callback for requests
 		if (isClientRequest && typeof callback !== 'function') {
-			if (IN_DEV_MODE) console.warn('no valid callback func provided for client requst.')
+			if (IN_DEV_MODE) console.warn('no valid callback func provided for client request.')
 			return
 		}
 

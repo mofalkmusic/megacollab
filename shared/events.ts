@@ -13,7 +13,7 @@ import {
 
 export type ServerAckSchape<T> =
 	| { success: true; data: T; error?: never }
-	| { success: false; error: AppError; data?: T }
+	| { success: false; error: AppError; data?: never }
 
 type EventDefinitions = {
 	/**
