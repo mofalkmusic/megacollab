@@ -69,11 +69,11 @@ export const ServerTrackSchema = z.object({
 
 export type ServerTrack = z.output<typeof ServerTrackSchema>
 
-export const ClientTrackScema = ServerTrackSchema.extend({
+export const ClientTrackSchema = ServerTrackSchema.extend({
 	belongs_to_display_name: z.string().nullable(), // from foreign key
 })
 
-export type ClientTrack = z.output<typeof ClientTrackScema>
+export type ClientTrack = z.output<typeof ClientTrackSchema>
 
 export const updateTrackSchema = ServerTrackSchema.omit({
 	id: true,

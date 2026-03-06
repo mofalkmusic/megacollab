@@ -2,7 +2,7 @@ import { AUDIO_POOL_WIDTH } from '@/state'
 import type { ImageBitmapLODs } from '@/types'
 import kleur from 'kleur'
 
-function print(type: 'log' | 'warn' | 'error', ...args: any[]) {
+function print(type: 'log' | 'warn' | 'error', ...args: unknown[]) {
 	console[type](kleur.yellow('[POOL]'), ...args)
 }
 
@@ -10,7 +10,7 @@ type Task = {
 	id: string
 	message: WorkerMessage
 	resolve: (value: WorkerResponse) => void
-	reject: (reason?: any) => void
+	reject: (reason?: unknown) => void
 	transfer?: Transferable[]
 	onProgress: (progress: number) => void
 }

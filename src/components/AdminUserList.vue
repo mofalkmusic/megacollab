@@ -187,7 +187,7 @@ type AdminUser = User & { is_active: boolean }
 type HistoryItem = {
 	type: string
 	timestamp: number
-	data: any
+	data: unknown
 	userId: string
 }
 

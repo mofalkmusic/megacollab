@@ -8,7 +8,7 @@ import {
 	type AppError,
 	updateClipSchema,
 	updateTrackSchema,
-	ClientTrackScema,
+	ClientTrackSchema,
 } from './schema'
 
 export type ServerAckSchape<T> =
@@ -69,7 +69,7 @@ export const EVENTS = Object.freeze({
 			user: UserSchema,
 			clips: z.array(ClientClipSchema),
 			audiofiles: z.array(ClientAudioFileSchema),
-			tracks: z.array(ClientTrackScema),
+			tracks: z.array(ClientTrackSchema),
 		}),
 		'server:error': AppErrorSchema,
 		'audiofile:create': ClientAudioFileSchema,
@@ -80,12 +80,12 @@ export const EVENTS = Object.freeze({
 		'clip:create': ClientClipSchema,
 		'clip:update': ClientClipSchema,
 		'clip:delete': ClientClipSchema.shape['id'],
-		'track:create': ClientTrackScema,
+		'track:create': ClientTrackSchema,
 		'track:delete': z.object({
-			track_id: ClientTrackScema.shape['id'],
+			track_id: ClientTrackSchema.shape['id'],
 			deleted_clips: z.array(ClientClipSchema.shape['id']),
 		}),
-		'track:update': ClientTrackScema,
+		'track:update': ClientTrackSchema,
 		'clients:pos_updates': z.record(
 			z.string(),
 			z.object({
@@ -166,14 +166,14 @@ export const EVENTS = Object.freeze({
 					order_index: z.number(),
 				})
 				.nullable(),
-			res: ClientTrackScema,
+			res: ClientTrackSchema,
 		}),
 		'get:track:update': defineRequest({
 			req: z.object({
-				id: ClientTrackScema.shape['id'],
+				id: ClientTrackSchema.shape['id'],
 				changes: updateTrackSchema,
 			}),
-			res: ClientTrackScema,
+			res: ClientTrackSchema,
 		}),
 		'get:clip:create': defineRequest({
 			req: z.object({
@@ -217,9 +217,9 @@ export const EVENTS = Object.freeze({
 			}),
 		}),
 		'get:track:delete': defineRequest({
-			req: ClientTrackScema.pick({ id: true }),
+			req: ClientTrackSchema.pick({ id: true }),
 			res: z.object({
-				track_id: ClientTrackScema.shape['id'],
+				track_id: ClientTrackSchema.shape['id'],
 				deleted_clips: z.array(ClientClipSchema.shape['id']),
 			}),
 		}),

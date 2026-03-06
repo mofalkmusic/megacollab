@@ -43,7 +43,15 @@
 import type { ServerTrack, Clip } from '~/schema'
 import ClipInstance from '@/components/ClipInstance.vue'
 import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef } from 'vue'
-import { clips, pxPerBeat, audiofiles, pxTrackHeight, TOTAL_BEATS, user } from '@/state'
+import {
+	clips,
+	pxPerBeat,
+	audiofiles,
+	pxTrackHeight,
+	TOTAL_BEATS,
+	user,
+	altKeyPressed,
+} from '@/state'
 import { mutedTrackIds, registerTrack, soloTrackIds, unregisterTrack } from '@/audioEngine'
 import { useDropZone, useEventListener, useElementBounding } from '@vueuse/core'
 import { audioMimeTypes } from '~/constants'
@@ -114,7 +122,7 @@ const { isOverDropZone } = useDropZone(trackEl, {
 		if (dropIndicatorX.value === null) return
 		let startBeat = px_to_beats(dropIndicatorX.value)
 
-		if (!event?.altKey) {
+		if (!altKeyPressed.value) {
 			startBeat = quantize_beats(startBeat)
 		}
 
@@ -201,7 +209,7 @@ useEventListener(trackEl, 'dragover', (e: DragEvent) => {
 
 	const rawX = e.clientX - trackLeft.value
 	const rawBeat = px_to_beats(rawX)
-	const beat = e.altKey ? rawBeat : quantize_beats(rawBeat)
+	const beat = altKeyPressed.value ? rawBeat : quantize_beats(rawBeat)
 	dropIndicatorX.value = beats_to_px(beat)
 })
 </script>

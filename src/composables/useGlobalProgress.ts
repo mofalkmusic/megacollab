@@ -1,7 +1,7 @@
 import { globalProgresses } from '@/state'
 import { nanoid } from 'nanoid'
 
-export interface StartProgressOptions {
+export type StartProgressOptions = {
 	id?: string
 	label?: string
 	ttlMs?: number
