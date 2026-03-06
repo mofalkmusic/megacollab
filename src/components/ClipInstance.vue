@@ -344,7 +344,7 @@ const gainHandleStyle = computed((): CSSProperties | undefined => {
 		return {
 			left: `${relativeLeft}px`,
 			'--relative-left': `${relativeLeft}px`,
-		} as any
+		}
 	}
 
 	return undefined
@@ -489,6 +489,21 @@ onMounted(() => {
 				sesh.previewStartBeat = newStart
 				sesh.previewEndBeat = newEnd
 
+				// Clamp fades so they don't exceed the new clip duration
+				const newDurationSec = beats_to_sec(newEnd - newStart)
+				let fadeIn = sesh.origFadeInSec
+				let fadeOut = sesh.origFadeOutSec
+				const maxTotal = newDurationSec - FADE_MARGIN_SEC
+
+				if (fadeIn + fadeOut > maxTotal) {
+					// Pushing right shrinks duration from the right side, so fade-out shrinks first.
+					fadeOut = Math.max(0, Math.min(fadeOut, maxTotal - fadeIn))
+					fadeIn = Math.max(0, Math.min(fadeIn, maxTotal - fadeOut))
+				}
+
+				sesh.previewFadeInSec = fadeIn
+				sesh.previewFadeOutSec = fadeOut
+
 				// --- VERTICAL ---
 				const els = document.elementsFromPoint(e.clientX, e.clientY)
 				const trackEl = els.find((el) => el.classList.contains('track')) as
@@ -518,9 +533,11 @@ onMounted(() => {
 				const clip = clips.get(props.clip.id)
 				if (!clip) return
 
-				const changes: any = {
+				const changes: Partial<Clip> = {
 					start_beat: sesh.previewStartBeat,
 					end_beat: sesh.previewEndBeat,
+					fade_in_sec: sesh.previewFadeInSec,
+					fade_out_sec: sesh.previewFadeOutSec,
 				}
 
 				if (sesh.previewTrackId && sesh.previewTrackId !== clip.track_id) {
@@ -530,6 +547,8 @@ onMounted(() => {
 				if (clip.id.startsWith('__temp__')) {
 					clip.start_beat = sesh.previewStartBeat
 					clip.end_beat = sesh.previewEndBeat
+					clip.fade_in_sec = sesh.previewFadeInSec
+					clip.fade_out_sec = sesh.previewFadeOutSec
 					if (sesh.previewTrackId) clip.track_id = sesh.previewTrackId
 					dragSession.value = null
 					return
@@ -543,6 +562,8 @@ onMounted(() => {
 				if (res.success) {
 					clip.start_beat = res.data['start_beat'] ?? sesh.previewStartBeat
 					clip.end_beat = res.data['end_beat'] ?? sesh.previewEndBeat
+					clip.fade_in_sec = res.data['fade_in_sec'] ?? sesh.previewFadeInSec
+					clip.fade_out_sec = res.data['fade_out_sec'] ?? sesh.previewFadeOutSec
 					if (res.data['track_id']) clip.track_id = res.data['track_id']
 				}
 

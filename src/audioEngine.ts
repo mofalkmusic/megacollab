@@ -144,32 +144,32 @@ function applyGainAndFadeChanges(wrapper: ActiveSourceWrapper, clip: Clip) {
 
 	if (isInFadeInRegion) {
 		if (now <= whenToPlay) {
-			gain.setValueAtTime(0, whenToPlay)
-			gain.linearRampToValueAtTime(clip.gain, fadeInEnd)
+			gain.setValueAtTime(0, Math.max(0, whenToPlay))
+			gain.linearRampToValueAtTime(clip.gain, Math.max(0, fadeInEnd))
 		} else {
 			const expectedGainNow = clip.gain * ((now - whenToPlay) / clip.fade_in_sec)
 			const rampTime = Math.min(now + QUICK_FADE_SEC, fadeInEnd)
-			gain.linearRampToValueAtTime(Math.max(0, expectedGainNow), rampTime)
+			gain.linearRampToValueAtTime(Math.max(0, expectedGainNow), Math.max(0, rampTime))
 			if (rampTime < fadeInEnd) {
-				gain.linearRampToValueAtTime(clip.gain, fadeInEnd)
+				gain.linearRampToValueAtTime(clip.gain, Math.max(0, fadeInEnd))
 			}
 		}
 	} else if (isInSustainRegion) {
-		gain.linearRampToValueAtTime(clip.gain, now + QUICK_FADE_SEC)
+		gain.linearRampToValueAtTime(clip.gain, Math.max(0, now + QUICK_FADE_SEC))
 	}
 
 	const hasFadeOut = clip.fade_out_sec > 0 && fadeOutEnd > now
 	if (hasFadeOut) {
 		if (now < fadeOutStart) {
 			const safeFadeOutStart = Math.max(now + QUICK_FADE_SEC, fadeOutStart)
-			gain.setValueAtTime(clip.gain, safeFadeOutStart)
-			gain.linearRampToValueAtTime(0, fadeOutEnd)
+			gain.setValueAtTime(clip.gain, Math.max(0, safeFadeOutStart))
+			gain.linearRampToValueAtTime(0, Math.max(0, fadeOutEnd))
 		} else {
 			const expectedGainNow = clip.gain * Math.max(0, (fadeOutEnd - now) / clip.fade_out_sec)
 			const rampTime = Math.min(now + QUICK_FADE_SEC, fadeOutEnd)
-			gain.linearRampToValueAtTime(Math.max(0, expectedGainNow), rampTime)
+			gain.linearRampToValueAtTime(Math.max(0, expectedGainNow), Math.max(0, rampTime))
 			if (rampTime < fadeOutEnd) {
-				gain.linearRampToValueAtTime(0, fadeOutEnd)
+				gain.linearRampToValueAtTime(0, Math.max(0, fadeOutEnd))
 			}
 		}
 	}
@@ -490,19 +490,19 @@ function scheduleClipSource(
 
 	const fullClipDurationSec = beats_to_sec(clip.end_beat - clip.start_beat)
 
-	clipGainNode.gain.setValueAtTime(clip.fade_in_sec > 0 ? 0 : clip.gain, whenToPlay)
+	clipGainNode.gain.setValueAtTime(clip.fade_in_sec > 0 ? 0 : clip.gain, Math.max(0, whenToPlay))
 
 	const fadeInEnd = whenToPlay + clip.fade_in_sec
 	const fadeOutStart = whenToPlay + fullClipDurationSec - clip.fade_out_sec
 	const fadeOutEnd = whenToPlay + fullClipDurationSec
 
 	if (clip.fade_in_sec > 0) {
-		clipGainNode.gain.linearRampToValueAtTime(clip.gain, fadeInEnd)
+		clipGainNode.gain.linearRampToValueAtTime(clip.gain, Math.max(0, fadeInEnd))
 	}
 
 	if (clip.fade_out_sec > 0) {
-		clipGainNode.gain.setValueAtTime(clip.gain, fadeOutStart)
-		clipGainNode.gain.linearRampToValueAtTime(0, fadeOutEnd)
+		clipGainNode.gain.setValueAtTime(clip.gain, Math.max(0, fadeOutStart))
+		clipGainNode.gain.linearRampToValueAtTime(0, Math.max(0, fadeOutEnd))
 	}
 
 	source.buffer = buffer
