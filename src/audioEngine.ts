@@ -394,22 +394,20 @@ const schedulerLoop = useIntervalFn(
 		const loopActive =
 			isLooping.value && loopRangeBeats.value != null && loopEndSec > loopStartSec
 
+		const activeStartSec = loopActive ? loopStartSec : 0
+		const activeEndSec = loopActive ? loopEndSec : fullDurationSeconds.value
+
 		// loop wrap-around / soft jump
-		if (loopActive && songTimeSeconds >= loopEndSec) {
-			const overshoot = songTimeSeconds - loopEndSec
+		if (songTimeSeconds >= activeEndSec) {
+			const overshoot = songTimeSeconds - activeEndSec
 			// Stop all currently playing sources before restarting the loop
 			stopAllSources()
 			playbackStartTime.value = audioContext.currentTime - overshoot
-			startOffset.value = loopStartSec
-			currentTime.value = loopStartSec + overshoot
+			startOffset.value = activeStartSec
+			currentTime.value = activeStartSec + overshoot
 			loopIteration.value++
 			// Schedule clips at the new loop position
-			scheduleInitialClips(loopStartSec + overshoot)
-		} else if (!loopActive && songTimeSeconds >= fullDurationSeconds.value) {
-			// end of song
-			playbackStartTime.value += fullDurationSeconds.value
-			currentTime.value = songTimeSeconds - fullDurationSeconds.value
-			loopIteration.value++
+			scheduleInitialClips(activeStartSec + overshoot)
 		}
 
 		// possible jump recalc
@@ -442,23 +440,21 @@ const schedulerLoop = useIntervalFn(
 			}
 		}
 
-		if (loopActive && lookAheadLimitSec > loopEndSec) {
+		if (lookAheadLimitSec > activeEndSec) {
 			// rest of current loop
-			scheduleWindow(currentSongTime, loopEndSec, 0, loopIteration.value, loopEndSec)
+			scheduleWindow(currentSongTime, activeEndSec, 0, loopIteration.value, activeEndSec)
 			// start of next loop
-			const nextLoopLookahead = lookAheadLimitSec - loopEndSec
+			const nextLoopLookahead = lookAheadLimitSec - activeEndSec
 			scheduleWindow(
-				loopStartSec,
-				loopStartSec + nextLoopLookahead,
-				loopEndSec - loopStartSec,
+				activeStartSec,
+				activeStartSec + nextLoopLookahead,
+				activeEndSec - activeStartSec,
 				loopIteration.value + 1,
-				loopEndSec,
+				activeEndSec,
 			)
-		} else if (loopActive) {
-			// inside the loop, pass loop boundary
-			scheduleWindow(currentSongTime, lookAheadLimitSec, 0, loopIteration.value, loopEndSec)
 		} else {
-			scheduleWindow(currentSongTime, lookAheadLimitSec, 0, loopIteration.value)
+			// inside the loop, pass loop boundary
+			scheduleWindow(currentSongTime, lookAheadLimitSec, 0, loopIteration.value, activeEndSec)
 		}
 
 		nextScheduleTime.value = lookAheadLimitSec
@@ -570,7 +566,9 @@ function scheduleInitialClips(startTimeSeconds: number) {
 
 	// Calculate loop boundary if looping is active
 	const loopBoundary =
-		isLooping.value && loopRangeBeats.value ? beats_to_sec(loopRangeBeats.value.end) : undefined
+		isLooping.value && loopRangeBeats.value
+			? beats_to_sec(loopRangeBeats.value.end)
+			: fullDurationSeconds.value
 
 	// start searching at current pos - longest clip duration backwards to save resources.
 

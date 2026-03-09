@@ -97,7 +97,7 @@ useIntervalFn(
 	{ immediate: true },
 )
 
-useEventListener(window, 'keydown', (event) => {
+useEventListener(window, 'keydown', (event: KeyboardEvent) => {
 	const target = event.target
 	if (
 		target instanceof HTMLElement &&
@@ -140,7 +140,7 @@ useEventListener(window, 'keydown', (event) => {
 	}
 })
 
-useEventListener(window, 'keyup', (event) => {
+useEventListener(window, 'keyup', (event: KeyboardEvent) => {
 	if (event.key === 'Alt') {
 		altKeyPressed.value = false
 		event.preventDefault()

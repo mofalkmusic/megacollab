@@ -819,11 +819,17 @@ onMounted(() => {
 
 				// Clamp to reasonable values (e.g. 0 to 4.0)
 				newGain = Math.max(0, Math.min(newGain, 4))
-				sesh.previewGain = newGain
+
+				if (altKeyPressed.value || controlKeyPressed.value || shiftKeyPressed.value) {
+					sesh.previewGain = DEFAULT_GAIN
+				} else {
+					sesh.previewGain = newGain
+				}
 
 				const clip = props.clip ? clips.get(props.clip.id) : undefined
+
 				if (clip) {
-					clip.gain = newGain
+					clip.gain = sesh.previewGain
 				}
 			}
 
@@ -1055,6 +1061,7 @@ const canvasStyles = computed((): CSSProperties => {
 })
 
 const waveformsDrawn = shallowRef<boolean>(false)
+const isSelectedWaveformColor = '#f24b4b' as const
 
 async function drawWaveform() {
 	if (!canvasEl.value || !props.audiofile) return
@@ -1096,7 +1103,7 @@ async function drawWaveform() {
 				poolPreviewPlayingAudioId.value == props.audiofile.id &&
 				poolPreviewPlayingAudioId.value
 
-			const color = isSelected.value ? '#ff4444' : props.audiofile.color
+			const color = isSelected.value ? isSelectedWaveformColor : props.audiofile.color
 
 			if (!isCurrentPoolFile) {
 				// Mix with black (0.2 = 20% black)

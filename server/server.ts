@@ -269,8 +269,6 @@ io.on('connection', async (socket) => {
 
 			const { id } = data
 
-			// todo: check authorization (creator or belongs_to_user_id)
-
 			try {
 				const result = await db.deleteTrack(id)
 				const { deleted_clips, deleted_track } = result
