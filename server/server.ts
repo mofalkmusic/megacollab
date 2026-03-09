@@ -44,7 +44,6 @@ import { EVENTS } from '~/events'
 import { audioMimeTypes, BACKEND_PORT, CURSOR_INACTIVE_TIMEOUT_MS, DEFAULT_GAIN } from '~/constants'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
 import { RateLimiter, getSafeIp } from './ratelimiter'
-import { checkPolicy, type PolicyAction } from '~/perms'
 
 const IN_DEV_MODE = Bun.env['ENV'] === 'development'
 const BUILD_ID = nanoid(11)
@@ -263,9 +262,13 @@ io.on('connection', async (socket) => {
 			socket.broadcast.emit('audiofile:create', audioFile)
 		})
 
+		// todo: actually add the banned role on ban :D
+
 		socket.on('get:track:delete', async (data, callback) => {
-			const policyErr = getPolicyError('delete:track', user)
-			if (policyErr) return callback(policyErr)
+			const banned = checkBannedStatusUser(user)
+			if (banned) return callback(banned)
+
+			// todo: mirror frontend permission check! ideally with 1 db call...
 
 			const { id } = data
 
@@ -1089,17 +1092,16 @@ function ensureAllEventsHandled(eventNames: (string | symbol)[]) {
 	}
 }
 
-export function getPolicyError(action: PolicyAction, user: User) {
-	const { allowed, reason } = checkPolicy(action, user)
-
-	if (!allowed) {
-		return {
-			success: false as const,
-			error: {
-				status: 'UNAUTHORIZED' as const,
-				message: reason || 'Unauthorized action.',
-			},
-		}
+function checkBannedStatusUser(user: User) {
+	if (!user.roles.includes('banned') || user.roles.includes('admin')) {
+		return null
 	}
-	return null
+
+	return {
+		success: false as const,
+		error: {
+			status: 'UNAUTHORIZED' as const,
+			message: 'You are banned and cannot perform this action.',
+		},
+	}
 }

@@ -100,7 +100,7 @@
 					max="1.5"
 					step="0.01"
 					v-model.number="masterGainValue"
-					@input="handleMasterGainUpdate"
+					@input="setMasterGain(masterGainValue)"
 					style="width: 80px"
 					title="Master Volume"
 				/>
@@ -312,7 +312,6 @@ import {
 	ZoomIn,
 } from 'lucide-vue-next'
 import { offset, useFloating } from '@floating-ui/vue'
-import { useRouter } from 'vue-router'
 import UserMenu from '@/components/UserMenu.vue'
 import { usePing } from '@/composables/usePing'
 import GlobalLoadingIndicator from '@/components/GlobalLoadingIndicator.vue'
@@ -328,10 +327,6 @@ import { menuShortcutsActive } from '@/composables/useMenuShortcutLock'
 const { userLog } = useConsole()
 
 const { averagePing } = usePing()
-
-function handleMasterGainUpdate() {
-	setMasterGain(masterGainValue.value)
-}
 
 function handleZoomChange(e: Event) {
 	if (!(e.target instanceof HTMLInputElement)) {

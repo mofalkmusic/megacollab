@@ -121,8 +121,12 @@
 					<button
 						class="default-button menu-btn delete"
 						@mousedown="deleteTrack(id)"
-						:disabled="!can('delete:track', track)"
-						:style="{ opacity: !can('delete:track', track) ? 0.5 : 1 }"
+						:disabled="!(user?.roles.includes('admin') || user?.roles.includes('mod'))"
+						:style="{
+							opacity: !(user?.roles.includes('admin') || user?.roles.includes('mod'))
+								? 0.5
+								: 1,
+						}"
 					>
 						<Trash2 :size="13" style="color: var(--text-color-secondary)" />
 						<p class="small"><span class="action-key-underline">D</span>elete Track</p>
@@ -162,9 +166,6 @@ import { Trash2, Ellipsis, ArrowUp, ArrowDown, Plus } from 'lucide-vue-next'
 import type { Clip } from '~/schema'
 import MenuDividerLine from '@/components/MenuDividerLine.vue'
 import { menuShortcutsActive } from '@/composables/useMenuShortcutLock'
-import { usePerms } from '@/composables/usePerms'
-
-const { can, canWithInfo } = usePerms()
 
 const props = defineProps<{
 	scrollContainer: HTMLElement | null
@@ -444,10 +445,11 @@ async function deleteTrack(trackId: string) {
 	const track = tracks.get(trackId)
 	if (!track) return
 
-	const perms = canWithInfo('delete:track', track)
+	const hasPrivilege = user.value?.roles.includes('admin') || user.value?.roles.includes('mod')
+	const isCreator = track.creator_user_id && track.creator_user_id === user.value?.id
 
-	if (!perms.allowed) {
-		userLog('SYSTEM', perms.reason, {
+	if (!hasPrivilege && !isCreator) {
+		userLog('SYSTEM', 'You do not have permission to delete this track', {
 			textColor: 'red',
 		})
 		return

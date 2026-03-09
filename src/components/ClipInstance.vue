@@ -17,7 +17,7 @@
 		class="outmostClipWrapper clip"
 		:class="{ selected: isSelected, 'is-dragging': !!dragSession }"
 		:style="wrapperStyles"
-		@contextmenu.prevent="rip"
+		@contextmenu.prevent="deleteClip"
 	>
 		<div class="clipHeader" :style="textStyles">
 			<p class="small title no-select">
@@ -146,6 +146,7 @@ import { deleteAudio } from '@/socket/eventHandlers/audiofile_delete'
 import { useConsole } from '@/composables/useConsole'
 import { getPreviewProgress, playPreview, stopPreview } from '@/utils/previewHelper'
 import { DEFAULT_GAIN } from '~/constants'
+import { delteClipLocally } from '@/socket/eventHandlers/clip_delete'
 
 const { userLog } = useConsole()
 
@@ -196,13 +197,13 @@ const outerClipCanvasStyles = computed((): CSSProperties => {
 	return base
 })
 
-async function rip() {
+async function deleteClip() {
 	if (!props.clip) return
-	if (user.value?.banned_at) return
+
 	const res = await socket.emitWithAck('get:clip:delete', { id: props.clip.id })
 
 	if (res.success) {
-		clips.delete(res.data.id)
+		delteClipLocally(res.data.id)
 	}
 }
 
@@ -425,7 +426,7 @@ onMounted(() => {
 			if (user.value?.banned_at) return
 
 			if (event.button === 2) {
-				return rip()
+				return deleteClip()
 			}
 
 			if (event.button !== 0) return
@@ -589,7 +590,7 @@ onMounted(() => {
 			(event) => {
 				if (user.value?.banned_at) return
 				if (event.button === 2) {
-					return rip()
+					return deleteClip()
 				}
 
 				if (event.button !== 0) return
@@ -755,7 +756,7 @@ onMounted(() => {
 		(event) => {
 			if (user.value?.banned_at) return
 			if (event.button === 2) {
-				return rip()
+				return deleteClip()
 			}
 
 			if (event.button !== 0) return
@@ -1021,7 +1022,7 @@ onMounted(() => {
 
 	useEventListener(wrapperEl, 'pointerenter', () => {
 		if (rightMouseButtonPressedOnTimeline.value) {
-			rip()
+			deleteClip()
 		}
 	})
 })
