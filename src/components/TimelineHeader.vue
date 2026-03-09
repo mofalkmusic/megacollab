@@ -78,7 +78,8 @@ import {
 	sec_to_beats,
 } from '@/utils/mathUtils'
 import { computed, shallowRef, useTemplateRef, watch, type CSSProperties } from 'vue'
-import { altKeyPressed, controlKeyPressed, shiftKeyPressed, pxPerBeat, TOTAL_BEATS } from '@/state'
+import { pxPerBeat, TOTAL_BEATS } from '@/state'
+import { altKeyPressed, controlKeyPressed, shiftKeyPressed } from '@/utils/globalHotKeys'
 import { useMouseInElement, useMousePressed, useWindowFocus, watchThrottled } from '@vueuse/core'
 
 const timelineHeaderEl = useTemplateRef('timelineHeaderRef')

@@ -248,18 +248,15 @@ import {
 	tracks,
 	maxPxPerBeat,
 	minPxPerBeat,
-	controlKeyPressed,
-	zKeyPressed,
 	activeUploads,
 	bpm,
 	selectedClipIds,
 	showAdminPanel,
 } from '@/state'
+import { altKeyPressed, controlKeyPressed, zKeyPressed } from '@/utils/globalHotKeys'
 import TrackInstance from '@/components/TrackInstance.vue'
 import {
 	useEventListener,
-	useMouseInElement,
-	useMousePressed,
 	useResizeObserver,
 	useScroll,
 	onClickOutside,
@@ -284,15 +281,7 @@ import UserCursors from '@/components/UserCursors.vue'
 import TimelineHeader from '@/components/TimelineHeader.vue'
 import TrackControls from '@/components/TrackControls.vue'
 import { px_to_beats, quantize_beats, sec_to_beats } from '@/utils/mathUtils'
-import {
-	altKeyPressed,
-	audiofiles,
-	clips,
-	dragFromPoolState,
-	pxTrackHeight,
-	TOTAL_BEATS,
-	user,
-} from '@/state'
+import { audiofiles, clips, dragFromPoolState, pxTrackHeight, TOTAL_BEATS, user } from '@/state'
 import type { Clip } from '~/schema'
 import ClipInstance from '@/components/ClipInstance.vue'
 import AddTrack from '@/components/TrackAddButton.vue'
@@ -300,8 +289,6 @@ import {
 	Play,
 	Pause,
 	Square,
-	User,
-	Undo2,
 	Radio,
 	WifiOff,
 	ArrowUpDown,

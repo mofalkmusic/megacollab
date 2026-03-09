@@ -110,10 +110,7 @@ import {
 } from 'vue'
 import {
 	TOTAL_BEATS,
-	altKeyPressed,
 	clips,
-	controlKeyPressed,
-	shiftKeyPressed,
 	dragFromPoolState,
 	pixelRatio,
 	rightMouseButtonPressedOnTimeline,
@@ -122,6 +119,7 @@ import {
 	trackControlsWidth,
 	poolPreviewPlayingAudioId,
 } from '@/state'
+import { altKeyPressed, controlKeyPressed, shiftKeyPressed } from '@/utils/globalHotKeys'
 import type { Clip } from '~/schema'
 import {
 	useElementBounding,

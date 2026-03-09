@@ -43,15 +43,8 @@
 import type { ServerTrack, Clip } from '~/schema'
 import ClipInstance from '@/components/ClipInstance.vue'
 import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef } from 'vue'
-import {
-	clips,
-	pxPerBeat,
-	audiofiles,
-	pxTrackHeight,
-	TOTAL_BEATS,
-	user,
-	altKeyPressed,
-} from '@/state'
+import { clips, pxPerBeat, audiofiles, pxTrackHeight, TOTAL_BEATS, user } from '@/state'
+import { altKeyPressed } from '@/utils/globalHotKeys'
 import { mutedTrackIds, registerTrack, soloTrackIds, unregisterTrack } from '@/audioEngine'
 import { useDropZone, useEventListener, useElementBounding } from '@vueuse/core'
 import { audioMimeTypes } from '~/constants'

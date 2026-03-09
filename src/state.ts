@@ -1,9 +1,14 @@
 import { computed, reactive, ref, shallowRef, watchEffect } from 'vue'
 import { type Client, type ClientTrack, type Clip, type TimelinePos, type User } from '~/schema'
 import { type DebugEntry } from '@/composables/useDebug'
-import { useDevicePixelRatio, useEventListener, useIntervalFn } from '@vueuse/core'
+import {
+	useDevicePixelRatio,
+	useEventListener,
+	useIntervalFn,
+	useLocalStorage,
+	watchDebounced,
+} from '@vueuse/core'
 import type { AudioFile } from '@/types'
-import { menuShortcutsActive } from '@/composables/useMenuShortcutLock'
 
 export const IN_DEV_MODE = import.meta.env.MODE === 'development'
 
@@ -41,7 +46,44 @@ export const dragFromPoolState = shallowRef<{
 export const poolPreviewPlayingAudioId = shallowRef<AudioFile['id'] | null>(null)
 
 export const TOTAL_BEATS = 16 * 16
-export const pxPerBeat = shallowRef(40)
+
+const DEFAULT_PX_PER_BEAT = 40 as const
+const PX_PER_BEAT_TTL_MS = 1_200_000 as const // 20 minutes
+
+type ZoomState = {
+	value: number
+	timestamp: number
+}
+
+const storedPxPerBeat = useLocalStorage<ZoomState>(
+	'megacollab-playlist-zoom-px-per-beat',
+	{
+		value: DEFAULT_PX_PER_BEAT,
+		timestamp: Date.now(),
+	},
+	{ mergeDefaults: true },
+)
+
+if (Date.now() - storedPxPerBeat.value.timestamp > PX_PER_BEAT_TTL_MS) {
+	storedPxPerBeat.value = {
+		value: DEFAULT_PX_PER_BEAT,
+		timestamp: Date.now(),
+	}
+}
+
+export const pxPerBeat = shallowRef(storedPxPerBeat.value['value'])
+
+watchDebounced(
+	pxPerBeat,
+	(newValue) => {
+		storedPxPerBeat.value = {
+			value: newValue,
+			timestamp: Date.now(),
+		}
+	},
+	{ debounce: 300 },
+)
+
 export const maxPxPerBeat = 120 as const
 export const minPxPerBeat = 8 as const
 export const pxTrackHeight = 70
@@ -56,12 +98,6 @@ export const timelineWidth = computed(() => TOTAL_BEATS * pxPerBeat.value)
 
 export const { pixelRatio } = useDevicePixelRatio()
 
-export const altKeyPressed = shallowRef(false)
-export const controlKeyPressed = shallowRef(false)
-export const shiftKeyPressed = shallowRef(false)
-export const zKeyPressed = shallowRef(false)
-export const tKeyPressed = shallowRef(false)
-export const lKeyPressed = shallowRef(false)
 export const rightMouseButtonPressedOnTimeline = shallowRef(false)
 
 useEventListener(window, 'pointerdown', (event) => {
@@ -96,79 +132,3 @@ useIntervalFn(
 	1000,
 	{ immediate: true },
 )
-
-useEventListener(window, 'keydown', (event: KeyboardEvent) => {
-	const target = event.target
-	if (
-		target instanceof HTMLElement &&
-		(target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
-	) {
-		return
-	}
-
-	if (menuShortcutsActive.value) return
-
-	if (event.key === 'Alt') {
-		altKeyPressed.value = true
-		event.preventDefault()
-		return
-	}
-
-	if (event.key === 'Control') {
-		controlKeyPressed.value = true
-		return
-	}
-
-	if (event.key === 'Shift') {
-		shiftKeyPressed.value = true
-		return
-	}
-
-	if (event.key === 'z') {
-		zKeyPressed.value = true
-		return
-	}
-
-	if (event.key === 't') {
-		tKeyPressed.value = true
-		return
-	}
-
-	if (event.key === 'l') {
-		lKeyPressed.value = true
-		return
-	}
-})
-
-useEventListener(window, 'keyup', (event: KeyboardEvent) => {
-	if (event.key === 'Alt') {
-		altKeyPressed.value = false
-		event.preventDefault()
-		return
-	}
-
-	if (event.key === 'Control') {
-		controlKeyPressed.value = false
-		return
-	}
-
-	if (event.key === 'Shift') {
-		shiftKeyPressed.value = false
-		return
-	}
-
-	if (event.key === 'z') {
-		zKeyPressed.value = false
-		return
-	}
-
-	if (event.key === 't') {
-		tKeyPressed.value = false
-		return
-	}
-
-	if (event.key === 'l') {
-		lKeyPressed.value = false
-		return
-	}
-})

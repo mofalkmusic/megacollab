@@ -65,3 +65,4 @@ Always use these aliases instead of relative paths when importing across directo
 - The user wants to improve their own abilities and workflow.
 - Proactively suggest improvements to code patterns, tooling, or processes when relevant.
 - Flag potential optimizations or better practices the user may not be aware of.
+- Explain your process for the user to learn and understand patterns and decisions.

@@ -172,7 +172,8 @@
 
 <script setup lang="ts">
 import { socket } from '@/socket/socket'
-import { user, controlKeyPressed, zKeyPressed, tKeyPressed, lKeyPressed } from '@/state'
+import { user, showAdminPanel } from '@/state'
+import { controlKeyPressed, zKeyPressed, tKeyPressed, lKeyPressed } from '@/utils/globalHotKeys'
 import {
 	UserPen,
 	Settings2,
@@ -192,7 +193,6 @@ import { sanitizeLetterUnderscoreOnly } from '~/utils'
 import { vElementHover } from '@vueuse/components'
 import { isLooping, isPlaying, reset } from '@/audioEngine'
 import { updateDisplayNamesForUser } from '@/socket/eventHandlers/user_username_change'
-import { showAdminPanel } from '@/state'
 
 const isBugButtonHovered = shallowRef(false)
 function onBugHover(hovered: boolean) {
