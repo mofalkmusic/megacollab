@@ -55,30 +55,35 @@ import { socket } from '@/socket/socket'
 import { nanoid } from 'nanoid'
 import { useGlobalProgress } from '@/composables/useGlobalProgress'
 import { useConsole } from '@/composables/useConsole'
+import { useTimelineGrid } from '@/composables/useTimelineGrid'
 
 const props = defineProps<{
 	track: TrackServer
 	scrollX: number
 	timelineWindowWidth: number
+	isLast?: boolean
 }>()
 
 const { userLog } = useConsole()
+const { gridBackground } = useTimelineGrid()
 
 onMounted(() => registerTrack(props.track.id))
 
 onUnmounted(() => unregisterTrack(props.track.id))
 
 const trackStyle = computed(() => {
-	const lineColor = 'var(--_minor-line-color)'
+	if (props.isLast) {
+		return {
+			height: `${pxTrackHeight}px`,
+			background: gridBackground.value,
+		}
+	}
+
+	const bottomBorderLayer = `linear-gradient(to top, var(--_line-color) 0px, var(--_line-color) 1px, transparent 1px)`
+
 	return {
 		height: `${pxTrackHeight}px`,
-		background: `
-            repeating-linear-gradient(
-                90deg,
-                ${lineColor} 0px 1px,
-                transparent 1px,
-                transparent ${pxPerBeat.value}px
-            )`,
+		background: `${bottomBorderLayer}, ${gridBackground.value}`,
 	}
 })
 
@@ -211,16 +216,10 @@ useEventListener(trackEl, 'dragover', (e: DragEvent) => {
 <style scoped>
 .track-instance {
 	--_line-color: hsl(0, 0%, 28%);
-	--_minor-line-color: hsl(0, 0%, 13%);
 
-	border-bottom: 1px solid var(--_line-color);
 	position: relative;
 	display: grid;
 	grid-template-columns: 1fr;
-}
-
-.track-instance:last-child {
-	border-bottom: none;
 }
 
 .track {

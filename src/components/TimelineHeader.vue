@@ -4,17 +4,19 @@
 		@dblclick="handleDoubleClick"
 		:style="{ cursor: cursorStyle }"
 	>
-		<div class="timeline-header" ref="timelineHeaderRef">
+		<div
+			class="timeline-header"
+			ref="timelineHeaderRef"
+			:style="[headerGridStyle, { '--bg-color': 'hsl(0, 0%, 12%)' }]"
+		>
 			<div class="timeline-markers">
 				<div
-					v-for="i in TOTAL_BEATS"
-					:key="i"
-					class="timeline-segment"
-					:style="{ width: `${pxPerBeat}px` }"
+					v-for="marker in timelineMarkers"
+					:key="marker.beat"
+					class="timeline-marker-wrap"
+					:style="{ left: `${marker.px}px` }"
 				>
-					<p v-if="i % 4 === 1" class="small dim mono timeline-marker">
-						{{ (i + 3) / 4 }}
-					</p>
+					<p class="small dim mono timeline-marker">{{ marker.label }}</p>
 				</div>
 			</div>
 		</div>
@@ -81,6 +83,42 @@ import { computed, shallowRef, useTemplateRef, watch, type CSSProperties } from 
 import { pxPerBeat, TOTAL_BEATS } from '@/state'
 import { altKeyPressed, controlKeyPressed, shiftKeyPressed } from '@/utils/globalHotKeys'
 import { useMouseInElement, useMousePressed, useWindowFocus, watchThrottled } from '@vueuse/core'
+import { useTimelineGrid } from '@/composables/useTimelineGrid'
+
+const { gridBackground, GRID_MIN_SPACING_PX } = useTimelineGrid()
+
+const headerGridStyle = computed((): CSSProperties => {
+	return {
+		background: gridBackground.value,
+	}
+})
+
+const timelineMarkers = computed(() => {
+	const res: { beat: number; label: string; px: number }[] = []
+
+	const minMarkerSpacingPx = GRID_MIN_SPACING_PX * 4 // todo: fix maginc number
+	const candidates = [1, 4, 8, 16, 32, 64]
+	let step: number = candidates[candidates.length - 1] ?? 32
+	for (const c of candidates) {
+		if (c * pxPerBeat.value >= minMarkerSpacingPx) {
+			step = c
+			break
+		}
+	}
+
+	for (let i = 0; i < TOTAL_BEATS; i += step) {
+		const bar = Math.floor(i / 4) + 1
+		const beatInBar = (i % 4) + 1
+		// beat-level labels only for stepping by single beats
+		const label = step === 1 && i % 4 !== 0 ? `${bar}.${beatInBar}` : `${bar}  `
+		res.push({
+			beat: i,
+			label,
+			px: i * pxPerBeat.value,
+		})
+	}
+	return res
+})
 
 const timelineHeaderEl = useTemplateRef('timelineHeaderRef')
 const { elementX: mouseX } = useMouseInElement(timelineHeaderEl, { handleOutside: true })
@@ -314,23 +352,21 @@ watchThrottled(
 	display: flex;
 	height: 100%;
 	background-color: color-mix(in lch, var(--bg-color), white 15%);
+	position: relative;
 }
 
 .timeline-markers {
-	display: flex;
+	position: relative;
+	width: 100%;
+	height: 100%;
 }
 
-/* base */
-.timeline-segment {
+.timeline-marker-wrap {
+	position: absolute;
+	top: 0;
+	bottom: 0;
 	padding-left: 0.6rem;
-	border-left: 1px solid var(--border-primary);
-}
-
-.timeline-segment:nth-child(8n + 5),
-.timeline-segment:nth-child(8n + 6),
-.timeline-segment:nth-child(8n + 7),
-.timeline-segment:nth-child(8n + 8) {
-	background-color: color-mix(in lch, var(--bg-color), white 8%);
+	pointer-events: none;
 }
 
 .playhead-line {

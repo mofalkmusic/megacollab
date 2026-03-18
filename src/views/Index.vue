@@ -141,11 +141,12 @@
 				<TimelineHeader />
 				<div ref="tracksContainerInner">
 					<TrackInstance
-						v-for="[id, track] in sortedTracks"
+						v-for="([id, track], idx) in sortedTracks"
 						:key="id"
 						:track="track"
 						:scroll-x="scrollX"
 						:timeline-window-width="timelineContainerClientWidth"
+						:is-last="idx === sortedTracks.length - 1"
 					/>
 				</div>
 
@@ -1094,11 +1095,11 @@ useEventListener(window, 'blur', () => {
 	border-right: 1px solid var(--border-primary);
 }
 
-.open-user-menu-btn {
+/* .open-user-menu-btn {
 	border-radius: 50%;
 	aspect-ratio: 1/1;
 	padding: 0;
-}
+} */
 
 .timeline-scroll-container.panning {
 	cursor: grabbing !important;
@@ -1121,7 +1122,7 @@ useEventListener(window, 'blur', () => {
 	grid-template-areas: 'controls controls' 'scollx scolldud' 'timeline scrolly' 'addtrack scrolly' 'empty scrolly' 'globalloader scrolly' 'audiopool audiopool';
 }
 
-.test-btn {
+/* .test-btn {
 	padding: 6px 12px;
 	background: white;
 	color: #333;
@@ -1136,7 +1137,7 @@ useEventListener(window, 'blur', () => {
 
 .test-btn:hover {
 	background: #f0f0f0;
-}
+} */
 
 .timeline-scroll-container {
 	overflow-y: scroll;
@@ -1191,7 +1192,7 @@ useEventListener(window, 'blur', () => {
 	align-items: stretch;
 }
 
-.download-menu {
+/* .download-menu {
 	display: grid;
 	background-color: color-mix(in lch, var(--bg-color), white 10%);
 	border-radius: 0.75rem;
@@ -1224,5 +1225,5 @@ useEventListener(window, 'blur', () => {
 	gap: 0px;
 	text-align: left;
 	line-height: 1.1em;
-}
+} */
 </style>
