@@ -38,6 +38,7 @@
 				<ClipInstance
 					:audiofile="audioFile"
 					:deletable="audioFile.deletable"
+					:parent-track-el="null"
 					:custom-width-px="AUDIO_POOL_WIDTH"
 					:style="{ height: '7rem' }"
 				/>

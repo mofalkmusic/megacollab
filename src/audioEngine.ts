@@ -2,7 +2,7 @@ import { computed, reactive, ref, shallowRef, watch } from 'vue'
 import { beats_to_sec, quantize_beats, sec_to_beats } from '@/utils/mathUtils'
 import { useIntervalFn, useRafFn, watchThrottled, useTimeoutFn } from '@vueuse/core'
 import { clips, TOTAL_BEATS, audioBuffers, bpm } from '@/state'
-import type { Clip, ServerTrack } from '~/schema'
+import type { ClipClient, TrackServer } from '~/schema'
 import { DEFAULT_GAIN } from '~/constants'
 
 const inDev = import.meta.env.MODE === 'development'
@@ -111,7 +111,7 @@ export const loopRangeBeats = computed(() => {
 	return { start, end }
 })
 
-function getClipHash(clip: Clip): string {
+function getClipHash(clip: ClipClient): string {
 	return `${clip.start_beat}:${clip.end_beat}:${clip.offset_seconds}:${clip.audio_file_id}:${clip.track_id}`
 }
 
@@ -150,7 +150,7 @@ function getInterpolatedGain(
 	return maxGain
 }
 
-function applyGainAndFadeChanges(wrapper: ActiveSourceWrapper, clip: Clip) {
+function applyGainAndFadeChanges(wrapper: ActiveSourceWrapper, clip: ClipClient) {
 	const now = audioContext.currentTime
 	const gain = wrapper.gainNode.gain
 
@@ -324,7 +324,7 @@ watch(isLooping, (looping, wasLooping) => {
 	}
 })
 
-export function registerTrack(trackId: ServerTrack['id']) {
+export function registerTrack(trackId: TrackServer['id']) {
 	if (trackGainNodes.has(trackId)) return
 
 	const gainNode = audioContext.createGain()
@@ -349,7 +349,7 @@ export function registerTrack(trackId: ServerTrack['id']) {
 	trackAnalysers.set(trackId, analyser)
 }
 
-export function unregisterTrack(trackId: ServerTrack['id']) {
+export function unregisterTrack(trackId: TrackServer['id']) {
 	const gainNode = trackGainNodes.get(trackId)
 	if (!gainNode) return
 
@@ -368,7 +368,7 @@ export function unregisterTrack(trackId: ServerTrack['id']) {
 
 const floatBuffer = new Float32Array(FFT_SIZE_VOLUMES)
 
-export function getTrackVolume(trackId: ServerTrack['id']): number {
+export function getTrackVolume(trackId: TrackServer['id']): number {
 	const analyser = trackAnalysers.get(trackId)
 	if (!analyser) return 0
 
@@ -482,7 +482,7 @@ const schedulerLoop = useIntervalFn(
 )
 
 function scheduleClipSource(
-	clip: Clip,
+	clip: ClipClient,
 	clipStartSongTime: number,
 	timeShift: number = 0,
 	iteration: number,
@@ -749,7 +749,10 @@ export function reset() {
 	uiRAFLoop.pause()
 }
 
-function binarySearchStartTimesStartIndex(sortedClips: Clip[], searchBeat: Clip['start_beat']) {
+function binarySearchStartTimesStartIndex(
+	sortedClips: ClipClient[],
+	searchBeat: ClipClient['start_beat'],
+) {
 	let left: number = 0
 	let right: number = sortedClips.length - 1
 

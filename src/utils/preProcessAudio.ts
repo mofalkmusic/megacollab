@@ -6,7 +6,7 @@ import {
 	computePeaks,
 } from '@/utils/workerPool'
 import { audioBuffers, audiofiles, clips } from '@/state'
-import type { ServerAudioFile, Clip } from '~/schema'
+import type { ServerAudioFile, ClipClient } from '~/schema'
 import { audioContext } from '@/audioEngine'
 import type { AudioFile, ImageBitmapLODs } from '@/types'
 

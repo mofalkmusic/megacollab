@@ -1,5 +1,5 @@
 import { db } from './database'
-import { type Clip } from '~/schema'
+import { type ClipClient } from '~/schema'
 import { print } from './utils'
 import { type ServerEmitKeys, type ServerEmitPayload, type ClientRequestPayload } from '~/events'
 
@@ -7,7 +7,7 @@ const IN_DEV_MODE = Bun.env['ENV'] === 'development'
 
 type HistoryEventMap = {
 	CLIP_CREATE: {
-		payload: ClientRequestPayload<'get:clip:create'> & { id: Clip['id'] }
+		payload: ClientRequestPayload<'get:clip:create'> & { id: ClipClient['id'] }
 		inverse: ServerEmitPayload<'clip:delete'>
 	}
 	CLIP_DELETE: {
@@ -16,7 +16,7 @@ type HistoryEventMap = {
 	}
 	CLIP_UPDATE: {
 		payload: ClientRequestPayload<'get:clip:update'>
-		inverse: { id: string; oldValues: Partial<Clip> }
+		inverse: Array<{ id: string; oldValues: Partial<ClipClient> }>
 	}
 }
 
@@ -139,50 +139,64 @@ class HistoryManager {
 				}
 
 				case 'CLIP_UPDATE': {
-					const { id, oldValues } = action.data.inverse
-					const { changes } = action.data.payload
+					const inverses = action.data.inverse
+					const payloads = action.data.payload
 
-					let current: Awaited<ReturnType<typeof db.getClip>>
+					let conflict = false
+
+					const updateBatch: { id: string; changes: Partial<ClipClient> }[] = []
+					const clipIdsToUpdate = payloads.map((p) => p.id)
+
+					let currentClips: ClipClient[]
 
 					try {
-						current = await db.getClip(id)
+						currentClips = await db.getClipsByIds(clipIdsToUpdate)
 					} catch {
 						return { success: false, error: 'Failed to retrieve clip status.' }
 					}
 
-					if (current) {
-						let conflict = false
-						const keys = Object.keys(changes) as Array<keyof typeof changes>
+					const currentClipsMap = new Map(currentClips.map((c) => [c.id, c]))
 
+					for (let j = 0; j < payloads.length; j++) {
+						const { id, oldValues } = inverses[j]! // todo: read thru why this is necessaryyyyyyyyy
+						const { changes } = payloads[j]! // todo: read thru why this is necessaryyyyyyyyy
+
+						const current = currentClipsMap.get(id)
+
+						if (!current) {
+							return { success: false, error: 'Clip no longer exists.' }
+						}
+
+						const keys = Object.keys(changes) as Array<keyof typeof changes>
 						for (const key of keys) {
-							// verify current db state matches what we expect
-							// nobody other than current user should have touched clip since last update
 							const changeVal = changes[key]
 							const currentVal = current[key]
-
 							if (currentVal !== changeVal) {
 								conflict = true
 								break
 							}
 						}
 
-						if (conflict) {
-							return {
-								success: false,
-								error: 'Clip has been modified by someone else.',
-							}
-						}
+						if (conflict) break
 
-						try {
-							const updated = await db.updateClip(id, oldValues)
-							socketBroadcast('clip:update', updated)
-							processed = true
-						} catch {
-							return { success: false, error: 'Failed to revert clip update.' }
-						}
-					} else {
-						return { success: false, error: 'Clip no longer exists.' }
+						updateBatch.push({ id, changes: oldValues })
 					}
+
+					if (conflict) {
+						return {
+							success: false,
+							error: 'Clip has been modified by someone else.',
+						}
+					}
+
+					try {
+						const updatedClips = await db.updateClips(updateBatch as any) // oldValues are valid UpdateClip types effectively
+						socketBroadcast('clip:update', updatedClips as any)
+						processed = true
+					} catch {
+						return { success: false, error: 'Failed to revert clip update.' }
+					}
+
 					break
 				}
 			}

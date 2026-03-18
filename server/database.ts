@@ -3,13 +3,13 @@ import { PGlite } from '@electric-sql/pglite'
 import { join } from 'node:path'
 import {
 	type ClientAudioFile,
-	type ClientTrack,
-	type Clip,
+	type TrackClient,
+	type ClipClient,
 	type ServerAudioFile,
-	type ServerClip,
-	type ServerTrack,
-	type UpdateClip,
-	type UpdateTrack,
+	type ClipServer,
+	type TrackServer,
+	type ClipUpdate,
+	type TrackUpdate,
 	type User,
 } from '~/schema'
 import { MAX_TRACKS } from '~/constants'
@@ -85,9 +85,10 @@ export const db = {
 	updateTrack,
 	createClip,
 	getClips,
+	getClipsByIds,
 	getClip,
 	deleteClip,
-	updateClip,
+	updateClips,
 	updateExistingUsername,
 	updateDownloadQuality,
 	makeNewIfNotExistUserSafe,
@@ -130,9 +131,9 @@ async function getAudioFile(id: string): Promise<ClientAudioFile | null> {
 }
 
 async function createTrack(
-	track: Omit<ServerTrack, 'order_index'>,
+	track: Omit<TrackServer, 'order_index'>,
 	orderIndex?: number,
-): Promise<ClientTrack> {
+): Promise<TrackClient> {
 	const { id, creator_user_id, title, belongs_to_user_id, gain } = track
 
 	let finalOrderIndex = orderIndex
@@ -168,7 +169,7 @@ async function createTrack(
 	}
 
 	// regular insert now :D
-	const rows = await queryFn<ClientTrack>(
+	const rows = await queryFn<TrackClient>(
 		`
 			WITH track_count AS (
 				SELECT COUNT(*) AS total FROM ${TRACKS_TABLE}
@@ -194,8 +195,8 @@ async function createTrack(
 	return rows[0]!
 }
 
-async function getTracks(): Promise<ClientTrack[]> {
-	return await queryFn<ClientTrack>(`
+async function getTracks(): Promise<TrackClient[]> {
+	return await queryFn<TrackClient>(`
 			SELECT
 				t.*,
 				u.display_name AS belongs_to_display_name
@@ -204,12 +205,12 @@ async function getTracks(): Promise<ClientTrack[]> {
 		`)
 }
 
-async function getTrack(id: string): Promise<ServerTrack | null> {
-	const rows = await queryFn<ServerTrack>(`SELECT * FROM ${TRACKS_TABLE} WHERE id = $1`, [id])
+async function getTrack(id: string): Promise<TrackServer | null> {
+	const rows = await queryFn<TrackServer>(`SELECT * FROM ${TRACKS_TABLE} WHERE id = $1`, [id])
 	return rows[0] || null
 }
 
-async function updateTrack(id: string, changes: UpdateTrack): Promise<ClientTrack> {
+async function updateTrack(id: string, changes: TrackUpdate): Promise<TrackClient> {
 	const entries = Object.entries(changes)
 
 	if (entries.length === 0) throw new Error('No changes provided')
@@ -232,13 +233,15 @@ async function updateTrack(id: string, changes: UpdateTrack): Promise<ClientTrac
 				ON updated.belongs_to_user_id = users.id
 		`
 
-	const rows = await queryFn<ClientTrack>(sql, [id, ...values])
+	const rows = await queryFn<TrackClient>(sql, [id, ...values])
 
 	if (!rows.length) throw new Error(`Failed to update track ${id}`)
 	return rows[0]!
 }
 
-async function createClip(clip: Omit<Clip, 'created_at' | 'creator_display_name'>): Promise<Clip> {
+async function createClip(
+	clip: Omit<ClipClient, 'created_at' | 'creator_display_name'>,
+): Promise<ClipClient> {
 	const {
 		id,
 		creator_user_id,
@@ -252,7 +255,7 @@ async function createClip(clip: Omit<Clip, 'created_at' | 'creator_display_name'
 		fade_out_sec,
 	} = clip
 
-	const rows = await queryFn<Clip>(
+	const rows = await queryFn<ClipClient>(
 		`
 			WITH inserted AS (
 				INSERT INTO ${CLIPS_TABLE} (id, creator_user_id, track_id, audio_file_id, end_beat, start_beat, gain, offset_seconds, fade_in_sec, fade_out_sec) 
@@ -286,8 +289,8 @@ async function createClip(clip: Omit<Clip, 'created_at' | 'creator_display_name'
 	return result
 }
 
-async function getClips(): Promise<Clip[]> {
-	return await queryFn<Clip>(`
+async function getClips(): Promise<ClipClient[]> {
+	return await queryFn<ClipClient>(`
 			SELECT 
 				c.*,
 				u.display_name AS creator_display_name
@@ -296,8 +299,8 @@ async function getClips(): Promise<Clip[]> {
 		`)
 }
 
-async function getClip(id: string): Promise<Clip | null> {
-	const rows = await queryFn<Clip>(
+async function getClip(id: string): Promise<ClipClient | null> {
+	const rows = await queryFn<ClipClient>(
 		`
 			SELECT 
 				c.*,
@@ -311,38 +314,65 @@ async function getClip(id: string): Promise<Clip | null> {
 	return rows[0] || null
 }
 
-async function updateClip(id: string, changes: UpdateClip): Promise<Clip> {
-	const entries = Object.entries(changes)
+async function getClipsByIds(ids: string[]): Promise<ClipClient[]> {
+	if (ids.length === 0) return []
 
-	const setClauses = entries.map(([key], index) => `${key} = $${index + 2}`)
-
-	const values = entries.map(([, value]) => value)
-
-	const sql = `
-			WITH updated AS (
-				UPDATE ${CLIPS_TABLE}
-				SET ${setClauses.join(', ')}
-				WHERE id = $1
-				RETURNING *
-			)
-			SELECT 
-				updated.*,
-				users.display_name AS creator_display_name
-			FROM updated
-			LEFT JOIN ${USERS_TABLE} AS users
-				ON updated.creator_user_id = users.id
+	const placeholders = ids.map((_, idx) => `$${idx + 1}`).join(', ')
+	const rows = await queryFn<ClipClient>(
 		`
+		SELECT 
+			c.*,
+			u.display_name AS creator_display_name
+		FROM ${CLIPS_TABLE} AS c
+		LEFT JOIN ${USERS_TABLE} AS u ON c.creator_user_id = u.id
+		WHERE c.id IN (${placeholders})
+	`,
+		ids,
+	)
 
-	const rows = await queryFn<Clip>(sql, [id, ...values])
-
-	if (!rows.length) throw new Error(`Failed to update clip ${id}`)
-	const result = rows[0]!
-
-	return result
+	return rows
 }
 
-async function deleteClip(id: string): Promise<Clip> {
-	const rows = await queryFn<Clip>(
+async function updateClips(updates: { id: string; changes: ClipUpdate }[]): Promise<ClipClient[]> {
+	if (updates.length === 0) return []
+
+	const results: ClipClient[] = []
+
+	// Since we are running multiple queries, we could ideally use a transaction.
+	// We'll execute them sequentially for now to get returning * right with display names.
+	for (const { id, changes } of updates) {
+		const entries = Object.entries(changes)
+		if (entries.length === 0) continue
+
+		const setClauses = entries.map(([key], index) => `${key} = $${index + 2}`)
+		const values = entries.map(([, value]) => value)
+
+		const sql = `
+				WITH updated AS (
+					UPDATE ${CLIPS_TABLE}
+					SET ${setClauses.join(', ')}
+					WHERE id = $1
+					RETURNING *
+				)
+				SELECT 
+					updated.*,
+					users.display_name AS creator_display_name
+				FROM updated
+				LEFT JOIN ${USERS_TABLE} AS users
+					ON updated.creator_user_id = users.id
+			`
+
+		const rows = await queryFn<ClipClient>(sql, [id, ...values])
+
+		if (!rows.length) throw new Error(`Failed to update clip ${id}`)
+		results.push(rows[0]!)
+	}
+
+	return results
+}
+
+async function deleteClip(id: string): Promise<ClipClient> {
+	const rows = await queryFn<ClipClient>(
 		`
 			WITH deleted AS (
 				DELETE FROM ${CLIPS_TABLE} WHERE id = $1
@@ -636,8 +666,8 @@ async function getOrCreateDevUser(): Promise<User | null> {
 
 async function deleteAudioFile(
 	id: string,
-): Promise<{ deleted_clips: Clip['id'][]; deleted_file: ServerAudioFile }> {
-	const rows = await queryFn<ServerAudioFile & { deleted_clip_ids: ServerClip['id'][] | null }>(
+): Promise<{ deleted_clips: ClipClient['id'][]; deleted_file: ServerAudioFile }> {
+	const rows = await queryFn<ServerAudioFile & { deleted_clip_ids: ClipServer['id'][] | null }>(
 		`
 			WITH deleted_clips AS (
 				DELETE FROM ${CLIPS_TABLE}
@@ -670,8 +700,8 @@ async function deleteAudioFile(
 
 async function deleteTrack(
 	id: string,
-): Promise<{ deleted_clips: Clip['id'][]; deleted_track: ServerTrack }> {
-	const rows = await queryFn<ServerTrack & { deleted_clip_ids: ServerClip['id'][] | null }>(
+): Promise<{ deleted_clips: ClipClient['id'][]; deleted_track: TrackServer }> {
+	const rows = await queryFn<TrackServer & { deleted_clip_ids: ClipServer['id'][] | null }>(
 		`
 			WITH deleted_clips AS (
 				DELETE FROM ${CLIPS_TABLE}
@@ -704,7 +734,7 @@ async function deleteTrack(
 
 type BanUserResult = {
 	display_name: User['display_name']
-	deleted_clips: Clip['id'][]
+	deleted_clips: ClipClient['id'][]
 	deleted_audiofiles: Pick<ServerAudioFile, 'id' | 'file_name' | 'creator_user_id'>[]
 }
 
@@ -726,11 +756,11 @@ async function banUser(
 	if (!rows.length) throw new Error(`Failed to ban user ${userId}`)
 	const row = rows[0]!
 
-	let deleted_clips: Clip['id'][] = []
+	let deleted_clips: ClipClient['id'][] = []
 	let deleted_audiofiles: Pick<ServerAudioFile, 'id' | 'file_name' | 'creator_user_id'>[] = []
 
 	if (deleteContent) {
-		const clipRows = await queryFn<Pick<Clip, 'id'>>(
+		const clipRows = await queryFn<Pick<ClipClient, 'id'>>(
 			`
 			DELETE FROM ${CLIPS_TABLE} 
 			WHERE creator_user_id = $1

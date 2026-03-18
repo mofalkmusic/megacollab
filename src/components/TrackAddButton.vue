@@ -16,12 +16,12 @@
 import { Plus } from 'lucide-vue-next'
 import { socket } from '@/socket/socket'
 import { tracks, dragFromPoolState, user } from '@/state'
-import type { ClientTrack } from '~/schema'
+import type { TrackClient } from '~/schema'
 import { useConsole } from '@/composables/useConsole'
 
 const { userLog } = useConsole()
 
-const emits = defineEmits<{ (e: 'onTrackAdded', track: ClientTrack): void }>()
+const emits = defineEmits<{ (e: 'onTrackAdded', track: TrackClient): void }>()
 
 const addTrack = async () => {
 	if (user.value?.banned_at) return

@@ -153,6 +153,7 @@
 					v-if="ghostClip && ghostAudioFile && ghostDragState.track_id"
 					:audiofile="ghostAudioFile"
 					:clip="ghostClip"
+					:parent-track-el="null"
 					:style="{
 						position: 'absolute',
 						height: `${pxTrackHeight}px`,
@@ -217,6 +218,7 @@
 		}"
 	>
 		<ClipInstance
+			:parent-track-el="null"
 			:audiofile="ghostAudioFile"
 			:custom-width-px="160"
 			:style="{ width: '100%', height: '100%' }"
@@ -238,7 +240,6 @@ import {
 	shallowRef,
 	useTemplateRef,
 	watch,
-	watchEffect,
 	type CSSProperties,
 } from 'vue'
 import AudioFilePool from '@/components/AudioFilePool.vue'
@@ -265,6 +266,7 @@ import {
 	useIntervalFn,
 	useElementBounding,
 } from '@vueuse/core'
+import { audiofiles, clips, dragFromPoolState, pxTrackHeight, TOTAL_BEATS, user } from '@/state'
 import {
 	currentPlayTimeBeats,
 	currentPlayTimeSeconds,
@@ -281,8 +283,8 @@ import UserCursors from '@/components/UserCursors.vue'
 import TimelineHeader from '@/components/TimelineHeader.vue'
 import TrackControls from '@/components/TrackControls.vue'
 import { px_to_beats, quantize_beats, sec_to_beats } from '@/utils/mathUtils'
-import { audiofiles, clips, dragFromPoolState, pxTrackHeight, TOTAL_BEATS, user } from '@/state'
-import type { Clip } from '~/schema'
+
+import type { ClipClient } from '~/schema'
 import ClipInstance from '@/components/ClipInstance.vue'
 import AddTrack from '@/components/TrackAddButton.vue'
 import {
@@ -651,7 +653,7 @@ function handleCursorMove(event: PointerEvent) {
 	const target = event.target
 	if (!(target instanceof HTMLElement)) return
 
-	const trackEl = target.closest('.track')
+	const trackEl = target.closest('[data-track-id]')
 	if (!(trackEl instanceof HTMLElement)) {
 		latestCursorPayload.value = null
 		return
@@ -671,7 +673,7 @@ function handleCursorMove(event: PointerEvent) {
 	const wrapperRect = tracksWrapperEl.value.getBoundingClientRect()
 	const xInWrapper = event.clientX - wrapperRect.left
 
-	const beat = px_to_beats(xInWrapper)
+	const beat = Math.max(px_to_beats(xInWrapper), 0.0000001)
 
 	latestCursorPayload.value = { beat, trackId, trackYOffset }
 }
@@ -694,7 +696,7 @@ useIntervalFn(() => {
 	}
 
 	const payload = latestCursorPayload.value
-	const hash = `${payload.beat.toFixed(4)}_${payload.trackId}_${payload.trackYOffset.toFixed(4)}`
+	const hash = `${Math.max(0, payload.beat).toFixed(4)}_${payload.trackId}_${payload.trackYOffset.toFixed(4)}`
 
 	if (hash !== lastEmittedPayloadHash.value) {
 		socket.emit('emit:updatepos', payload)
@@ -722,7 +724,7 @@ const ghostAudioFile = computed(() => {
 	return audiofiles.get(dragFromPoolState.value.audioFileId)
 })
 
-const ghostClip = computed<Clip | null>(() => {
+const ghostClip = computed<ClipClient | null>(() => {
 	if (!dragFromPoolState.value || !ghostDragState.value || !ghostAudioFile.value) return null
 	return {
 		id: 'ghost',
@@ -787,9 +789,9 @@ watch(
 
 			// Y / Track Calculation
 			const els = document.elementsFromPoint(e.clientX, e.clientY)
-			const trackEl = els.find((el) => el.classList.contains('track')) as
-				| HTMLElement
-				| undefined
+			const trackEl = els.find(
+				(el) => el instanceof HTMLElement && 'trackId' in el.dataset,
+			) as HTMLElement | undefined
 
 			let trackId: string | null = null
 			let topPx = 0
@@ -831,7 +833,7 @@ watch(
 			if (state.track_id && source && user.value) {
 				// optimistic clip
 				const tempId = `__temp__${nanoid()}`
-				const tempClip: Clip = {
+				const tempClip: ClipClient = {
 					id: tempId,
 					track_id: state.track_id,
 					audio_file_id: source.audioFileId,
@@ -928,10 +930,10 @@ const selectionBoxStyle = computed((): CSSProperties => {
 
 useEventListener(tracksWrapperEl, 'pointerdown', (e) => {
 	// Don't interact if clicking on a clip or other interactive element, unless selecting
-	if (!controlKeyPressed.value && (e.target as HTMLElement).closest('.clip')) return
+	if (!controlKeyPressed.value && (e.target as HTMLElement).closest('.clip')) return // todo: dont like the class name usage here, use a dataset in le future!! for robustness
 
 	// Don't interact if clicking on the timeline header (e.g. for loop controls)
-	if ((e.target as HTMLElement).closest('.timeline-header-wrap')) return
+	if ((e.target as HTMLElement).closest('.timeline-header-wrap')) return // same here todo
 
 	// Clear selection if clicking on empty space without Control key (Left or Right Click)
 	if (!controlKeyPressed.value && (e.button === 0 || e.button === 2)) {
@@ -1018,7 +1020,7 @@ function updateSelection() {
 	// We need clip positions in px relative to wrapper
 	// We can iterate clips and calculate their rects
 
-	const newSelectedIds = new Set<string>()
+	selectedClipIds.clear()
 
 	for (const clip of clips.values()) {
 		// Calculate clip rect
@@ -1055,13 +1057,9 @@ function updateSelection() {
 			boxRect.bottom > clipRect.top
 
 		if (intersects) {
-			newSelectedIds.add(clip.id)
+			selectedClipIds.add(clip.id)
 		}
 	}
-
-	// Update state
-	selectedClipIds.clear()
-	newSelectedIds.forEach((id) => selectedClipIds.add(id))
 }
 
 useEventListener(tracksWrapperEl, 'pointerup', (e) => {

@@ -26,7 +26,7 @@ export default [
 	{
 		ignores: ['**/node_modules/**', '**/dist/**', '**/dist_server/**', '**/coverage/**'],
 	},
-	// FINAL OVERRIDE — applies last, overrides everything above
+	// FINAL OVERRIDE - applies last, overrides everything above
 	{
 		files: ['**/*.{ts,vue}'],
 		rules: {

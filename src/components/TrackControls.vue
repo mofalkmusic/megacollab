@@ -163,7 +163,7 @@ import { vOnClickOutside } from '@vueuse/components'
 import { socket } from '@/socket/socket'
 import { useConsole } from '@/composables/useConsole'
 import { Trash2, Ellipsis, ArrowUp, ArrowDown, Plus } from 'lucide-vue-next'
-import type { Clip } from '~/schema'
+import type { ClipClient } from '~/schema'
 import MenuDividerLine from '@/components/MenuDividerLine.vue'
 import { menuShortcutsActive } from '@/composables/useMenuShortcutLock'
 
@@ -457,7 +457,7 @@ async function deleteTrack(trackId: string) {
 
 	contextMenuTrackId.value = null
 
-	const clipsToDelete: Clip[] = []
+	const clipsToDelete: ClipClient[] = []
 
 	for (const [_, clip] of clips.entries()) {
 		if (clip.track_id === trackId) clipsToDelete.push(clip)

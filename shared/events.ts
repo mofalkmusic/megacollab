@@ -78,7 +78,7 @@ export const EVENTS = Object.freeze({
 			deleted_clips: z.array(ClientClipSchema.shape['id']),
 		}),
 		'clip:create': ClientClipSchema,
-		'clip:update': ClientClipSchema,
+		'clip:update': z.array(ClientClipSchema),
 		'clip:delete': ClientClipSchema.shape['id'],
 		'track:create': ClientTrackSchema,
 		'track:delete': z.object({
@@ -191,11 +191,13 @@ export const EVENTS = Object.freeze({
 			res: ClientClipSchema.pick({ id: true }),
 		}),
 		'get:clip:update': defineRequest({
-			req: z.object({
-				id: ClientClipSchema.shape['id'],
-				changes: updateClipSchema,
-			}),
-			res: ClientClipSchema,
+			req: z.array(
+				z.object({
+					id: ClientClipSchema.shape['id'],
+					changes: updateClipSchema,
+				}),
+			),
+			res: z.array(ClientClipSchema),
 		}),
 		'get:update:username': defineRequest({
 			req: z.object({

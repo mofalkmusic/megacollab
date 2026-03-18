@@ -33,12 +33,13 @@ import { store } from './store'
 import { history } from './history'
 import { nanoid } from 'nanoid'
 import {
-	type ClientTrack,
-	type Clip,
-	type ServerTrack,
+	type TrackClient,
+	type ClipClient,
+	type TrackServer,
 	type ClientAudioFile,
 	type TimelinePos,
 	type User,
+	updateClipSchema,
 } from '~/schema'
 import { EVENTS } from '~/events'
 import { audioMimeTypes, BACKEND_PORT, CURSOR_INACTIVE_TIMEOUT_MS, DEFAULT_GAIN } from '~/constants'
@@ -311,7 +312,7 @@ io.on('connection', async (socket) => {
 				})
 				return
 			}
-			const newTrack: Omit<ServerTrack, 'order_index'> = {
+			const newTrack: Omit<TrackServer, 'order_index'> = {
 				id: nanoid(),
 				created_at: new Date().toISOString(),
 				creator_user_id: user.id,
@@ -320,7 +321,7 @@ io.on('connection', async (socket) => {
 				gain: DEFAULT_GAIN,
 			}
 
-			let track: ClientTrack
+			let track: TrackClient
 
 			try {
 				track = await db.createTrack(newTrack, data?.order_index)
@@ -409,8 +410,8 @@ io.on('connection', async (socket) => {
 			}
 			const { start_beat, end_beat, audio_file_id, track_id, offset_seconds, gain } = data
 
-			const newClip: Omit<Clip, 'created_at'> = {
-				id: nanoid(),
+			const newClip: Omit<ClipClient, 'created_at'> = {
+				id: createNonTempNanoId(),
 				creator_user_id: user.id,
 				creator_display_name: user.display_name,
 				start_beat,
@@ -499,43 +500,54 @@ io.on('connection', async (socket) => {
 		})
 
 		socket.on('get:clip:update', async (data, callback) => {
-			if (user.banned_at) {
-				callback({
-					success: false,
-					error: {
-						status: 'UNAUTHORIZED',
-						message: 'You are banned and cannot update clips.',
-					},
-				})
-				return
-			}
-			const { id, changes } = data
+			const banned = checkBannedStatusUser(user)
+			if (banned) return callback(banned)
+
+			const updates = data
 
 			try {
-				const oldClip = await db.getClip(id)
-				const clip = await db.updateClip(id, changes)
+				// originals for history
+				const updateBatch: typeof updates = []
+
+				const inverses: { id: string; oldValues: Partial<ClipClient> }[] = []
+
+				const clipIdsToUpdate = updates.map((u) => u.id)
+
+				const oldClips = await db.getClipsByIds(clipIdsToUpdate)
+				const oldClipsMap = new Map(oldClips.map((c) => [c.id, c]))
+
+				for (const update of updates) {
+					const oldClip = oldClipsMap.get(update.id)
+					if (oldClip) {
+						updateBatch.push(update)
+
+						const oldValuesRaw = Object.fromEntries(
+							Object.keys(update.changes).map((key) => [
+								key,
+								oldClip[key as keyof typeof oldClip],
+							]),
+						)
+						const oldValues = updateClipSchema.parse(oldValuesRaw)
+						inverses.push({ id: update.id, oldValues })
+					}
+				}
+
+				const updatedClips = await db.updateClips(updateBatch)
 
 				callback({
 					success: true,
-					data: clip,
+					data: updatedClips,
 				})
 
-				socket.broadcast.emit('clip:update', clip)
+				socket.broadcast.emit('clip:update', updatedClips)
 
-				if (oldClip) {
-					const oldValues: Partial<Clip> = {}
-					const keys = Object.keys(changes) as Array<keyof typeof changes>
-
-					for (const key of keys) {
-						oldValues[key] = oldClip[key] as any
-					}
-
+				if (inverses.length > 0) {
 					history.push({
 						type: 'CLIP_UPDATE',
 						userId: user.id,
 						data: {
-							payload: { id, changes },
-							inverse: { id, oldValues },
+							payload: updateBatch,
+							inverse: inverses,
 						},
 					})
 				}
@@ -674,9 +686,10 @@ io.on('connection', async (socket) => {
 				})
 				return
 			}
-			// todo: dont like the as any, maybe i can find a way to type this differently :D
-			// Cast to any required due to TS limitation with correlated generic types in Socket.IO emit
-			const result = await history.undo(user.id, (event, data) => io.emit(event as any, data))
+
+			// Cast dynamically required due to TS limitation with correlated generic types in Socket.IO emit
+			const emitFn = io.emit.bind(io) as (ev: string, data: unknown) => boolean // todo: figure out the typing on this... dont like the data: unknown, its prolly inferable...
+			const result = await history.undo(user.id, (event, data) => emitFn(event, data))
 
 			if (result.success) {
 				callback({ success: true, data: null })
@@ -1104,4 +1117,14 @@ function checkBannedStatusUser(user: User) {
 			message: 'You are banned and cannot perform this action.',
 		},
 	}
+}
+
+function createNonTempNanoId() {
+	const id = nanoid()
+
+	if (id.startsWith('temp_')) {
+		return createNonTempNanoId()
+	}
+
+	return id
 }

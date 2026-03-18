@@ -3,7 +3,7 @@ import { audioBuffers, audiofiles, clips, poolPreviewPlayingAudioId } from '@/st
 import type { AudioFile } from '@/types'
 import { stopPreview } from '@/utils/previewHelper'
 import { deleteAudioFile, deleteBitmaps } from '@/utils/workerPool'
-import type { Clip } from '~/schema'
+import type { ClipClient } from '~/schema'
 
 export default defineSocketHandler({
 	event: 'audiofile:delete',
@@ -12,7 +12,10 @@ export default defineSocketHandler({
 	},
 })
 
-export async function deleteAudio(audio_file_id: AudioFile['id'], deleted_clip_ids: Clip['id'][]) {
+export async function deleteAudio(
+	audio_file_id: AudioFile['id'],
+	deleted_clip_ids: ClipClient['id'][],
+) {
 	for (const clip_id of deleted_clip_ids) {
 		clips.delete(clip_id)
 	}

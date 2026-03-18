@@ -34,3 +34,11 @@ export function beats_to_sec_pure(beats: number, bpmValue: number): number {
 	const seconds_per_beat = 60 / bpmValue
 	return beats * seconds_per_beat
 }
+
+export function db_to_gain(db: number) {
+	return Math.pow(10, db / 20)
+}
+
+export function gain_to_db(gain: number) {
+	return (Math.log(gain) / Math.LN10) * 20
+}

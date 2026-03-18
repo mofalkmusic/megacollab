@@ -7,7 +7,7 @@
 			props.audiofile.file_name,
 			isHovered,
 			isSelected,
-			!!dragSession,
+			isDragging,
 			poolPreviewPlayingAudioId,
 			gainHandleStyle,
 			fadeInWidthPx,
@@ -15,7 +15,10 @@
 		]"
 		ref="clipWrapper"
 		class="outmostClipWrapper clip"
-		:class="{ selected: isSelected, 'is-dragging': !!dragSession }"
+		:class="{
+			selected: isSelected,
+			'is-dragging': isDragging,
+		}"
 		:style="wrapperStyles"
 		@contextmenu.prevent="deleteClip"
 	>
@@ -27,6 +30,7 @@
 		</div>
 
 		<div
+			ref="canvasWrap"
 			class="outerClipCanvasWrap"
 			:style="outerClipCanvasStyles"
 			:class="{ loading: !waveformsDrawn }"
@@ -78,6 +82,18 @@
 			:style="gainHandleStyle"
 		></div>
 
+		<!-- GAIN DISPLAY -->
+		<div
+			v-if="!withinAudioPool && displayState.gain !== DEFAULT_GAIN"
+			v-show="gainDisplayFits"
+			ref="gainDisplay"
+			class="txt mono small gainDisplay no-select"
+			:style="gainHandleStyle"
+			:class="{ selected: isSelected }"
+		>
+			{{ gainDisplayText }}
+		</div>
+
 		<button
 			v-if="withinAudioPool && (isHovered || poolPreviewPlayingAudioId == props.audiofile.id)"
 			class="file-pool-button play-button"
@@ -111,6 +127,7 @@ import {
 import {
 	TOTAL_BEATS,
 	clips,
+	audiofiles,
 	dragFromPoolState,
 	pixelRatio,
 	rightMouseButtonPressedOnTimeline,
@@ -118,9 +135,14 @@ import {
 	selectedClipIds,
 	trackControlsWidth,
 	poolPreviewPlayingAudioId,
+	dragSessionMulti,
+	tracks,
+	type DragSession,
+	trackIdsInOrderByIndex,
+	pxTrackHeight,
 } from '@/state'
 import { altKeyPressed, controlKeyPressed, shiftKeyPressed } from '@/utils/globalHotKeys'
-import type { Clip } from '~/schema'
+import type { ClipClient, ClipUpdate } from '~/schema'
 import {
 	useElementBounding,
 	useEventListener,
@@ -133,6 +155,7 @@ import { formatHex, interpolate, parse, wcagLuminance } from 'culori'
 import {
 	beats_to_px,
 	beats_to_sec,
+	gain_to_db,
 	px_to_beats,
 	quantize_beats,
 	sec_to_beats,
@@ -145,6 +168,73 @@ import { useConsole } from '@/composables/useConsole'
 import { getPreviewProgress, playPreview, stopPreview } from '@/utils/previewHelper'
 import { DEFAULT_GAIN } from '~/constants'
 import { delteClipLocally } from '@/socket/eventHandlers/clip_delete'
+import { updateClips } from '@/socket/eventHandlers/clip_update'
+import type { ClientRequestResponse } from '~/events'
+
+const MIN_GAIN = 0 as const
+const MAX_GAIN = 3 as const
+
+const getCalculatedGain = (opts: {
+	initialGain: number
+	deltaGain: number
+	shouldReset: boolean
+}) => {
+	const { initialGain, deltaGain, shouldReset } = opts
+	if (shouldReset) return DEFAULT_GAIN
+	return Math.max(MIN_GAIN, Math.min(MAX_GAIN, initialGain + deltaGain))
+}
+
+const getCalculatedFade = (
+	initialFade: number,
+	deltaFade: number,
+	otherFade: number,
+	durationSec: number,
+) => {
+	const maxFade = Math.max(0, durationSec - otherFade - FADE_MARGIN_SEC)
+	return Math.max(0, Math.min(maxFade, initialFade + deltaFade))
+}
+
+function getSelectedClipsSnapshot() {
+	const result: ClipClient[] = []
+	for (const id of selectedClipIds) {
+		const c = clips.get(id)
+		if (c) result.push({ ...c })
+	}
+	return result
+}
+
+function calculateSquashedFades(
+	initialIn: number,
+	initialOut: number,
+	newDurationSec: number,
+	prioritySide: 'left' | 'right' | 'both',
+) {
+	let fadeIn = initialIn
+	let fadeOut = initialOut
+	const maxTotal = Math.max(0, newDurationSec - FADE_MARGIN_SEC)
+	if (fadeIn + fadeOut > maxTotal) {
+		if (prioritySide === 'left') {
+			fadeOut = Math.max(0, Math.min(fadeOut, maxTotal - fadeIn))
+			fadeIn = Math.max(0, Math.min(fadeIn, maxTotal - fadeOut))
+		} else if (prioritySide === 'right') {
+			fadeIn = Math.max(0, Math.min(fadeIn, maxTotal - fadeOut))
+			fadeOut = Math.max(0, Math.min(fadeOut, maxTotal - fadeIn))
+		} else {
+			const ratio = maxTotal / (fadeIn + fadeOut)
+			fadeIn *= ratio
+			fadeOut *= ratio
+		}
+	}
+	return { fadeInSec: fadeIn, fadeOutSec: fadeOut }
+}
+
+const MIN_CLIP_LENGTH_BEATS = 0.3 as const
+
+const gainDisplayText = computed(() => {
+	const db = gain_to_db(displayState.value.gain)
+	if (db === -Infinity) return '-∞'
+	return db.toFixed(2)
+})
 
 const { userLog } = useConsole()
 
@@ -154,18 +244,28 @@ const rightHandleEl = useTemplateRef('rightHandle')
 const gainHandleEl = useTemplateRef('gainHandle')
 const fadeInHandleEl = useTemplateRef('fadeInHandle')
 const fadeOutHandleEl = useTemplateRef('fadeOutHandle')
+const gainDisplayEl = useTemplateRef('gainDisplay')
 
 const canvasEl = useTemplateRef('canvas')
-const { width: canvasWidth, height: canvasHeight } = useElementBounding(canvasEl)
+const canvasWrapEl = useTemplateRef('canvasWrap')
+const { width: canvasWidth } = useElementBounding(canvasEl)
+const { height: canvasWrapHeight } = useElementBounding(canvasWrapEl)
+const { width: gainDisplayWidth } = useElementBounding(gainDisplayEl)
 const isHovered = useElementHover(wrapperEl)
+
+const lastKnownGainDisplayWidth = ref(45)
+watch(gainDisplayWidth, (val) => {
+	if (val > 0) lastKnownGainDisplayWidth.value = val
+})
 
 type ClipProps = {
 	audiofile: AudioFile
-	clip?: Clip
+	clip?: ClipClient
 	customWidthPx?: number
 	deletable?: boolean
 	scrollX?: number
 	timelineWindowWidth?: number
+	parentTrackEl: HTMLElement | null
 }
 
 const props = defineProps<ClipProps>()
@@ -242,7 +342,7 @@ async function playAudioFile() {
 
 const CLIP_PREVIEW_GAIN = 1 as const
 
-const initialClipState = computed(() => {
+const unifiedClipState = computed(() => {
 	if (!props.audiofile) throw new Error(`No audio file prop provided`)
 	if (props.clip)
 		return {
@@ -268,20 +368,62 @@ const initialClipState = computed(() => {
 	}
 })
 
-// Unified state that switches to drag preview values when active
-const displayState = computed(() => {
-	if (dragSession.value) {
-		return {
-			start_beat: dragSession.value.previewStartBeat,
-			end_beat: dragSession.value.previewEndBeat,
-			offset_seconds: dragSession.value.previewOffsetSec,
-			gain: dragSession.value.previewGain,
-			fade_in_sec: dragSession.value.previewFadeInSec,
-			fade_out_sec: dragSession.value.previewFadeOutSec,
+// switches to drag preview values when within selection or currently being edited through dragsessionmulti
+const displayState = computed(
+	(): {
+		start_beat: ClipClient['start_beat']
+		end_beat: ClipClient['end_beat']
+		offset_seconds: ClipClient['offset_seconds']
+		gain: ClipClient['gain']
+		fade_in_sec: ClipClient['fade_in_sec']
+		fade_out_sec: ClipClient['fade_out_sec']
+	} => {
+		if (!props.clip) return unifiedClipState.value
+		if (!props.clip.id) return unifiedClipState.value
+
+		if (!dragSessionMulti.value) return unifiedClipState.value
+
+		if (
+			selectedClipIds.has(props.clip.id) ||
+			dragSessionMulti.value.source_clip.id === props.clip.id
+		) {
+			if (dragSessionMulti.value.mode === 'move') {
+				return unifiedClipState.value
+			}
+
+			if (dragSessionMulti.value.mode === 'left-resize') {
+				// updated in real-time in onMove for audio feedback
+				return unifiedClipState.value
+			}
+
+			if (dragSessionMulti.value.mode === 'right-resize') {
+				// updated in real-time in onMove for audio feedback
+				return unifiedClipState.value
+			}
+
+			if (dragSessionMulti.value.mode === 'gain') {
+				// gain is updated in real-time in onMove for audio feedback
+				// just return the unified state which includes the current gain
+				return unifiedClipState.value
+			}
+
+			if (dragSessionMulti.value.mode === 'fade-in') {
+				// updated in real-time in onMove for audio feedback
+				return unifiedClipState.value
+			}
+
+			if (dragSessionMulti.value.mode === 'fade-out') {
+				// updated in real-time in onMove for audio feedback
+				return unifiedClipState.value
+			}
+
+			// apply the deltas from the drag state
+			return unifiedClipState.value
 		}
-	}
-	return initialClipState.value
-})
+
+		return unifiedClipState.value // fallback
+	},
+)
 
 const finalWidthPx = computed(() => {
 	return beats_to_px(displayState.value.end_beat - displayState.value.start_beat)
@@ -297,9 +439,28 @@ const fadeOutWidthPx = computed(() => {
 	return beats_to_px(fadeOutBeats)
 })
 
-const isFadeDragging = computed(
-	() => dragSession.value?.side === 'fade-in' || dragSession.value?.side === 'fade-out',
-)
+const isFadeDragging = computed(() => {
+	if (!dragSessionMulti.value) return false
+
+	if (dragSessionMulti.value.mode !== 'fade-in' && dragSessionMulti.value.mode !== 'fade-out') {
+		return false
+	}
+
+	if (!props.clip) return false
+
+	return selectedClipIds.has(props.clip.id)
+})
+
+const isDragging = computed(() => {
+	if (!dragSessionMulti.value) return false
+	if (!props.clip) return false
+
+	// Returns true if the clip is either the one explicitly grabbed, or part of the tracked selection
+	return (
+		dragSessionMulti.value.source_clip.id === props.clip.id ||
+		selectedClipIds.has(props.clip.id)
+	)
+})
 
 const wrapperStyles = computed((): CSSProperties => {
 	const col = props.audiofile.color
@@ -310,19 +471,25 @@ const wrapperStyles = computed((): CSSProperties => {
 		left: `${beats_to_px(displayState.value.start_beat)}px`,
 	}
 
-	if (dragSession.value && dragSession.value.side === 'move') {
-		const offset = dragSession.value.verticalOffsetPx
-		if (offset !== 0) {
-			base.top = `${offset}px`
+	if (!props.clip) return base
+
+	if (
+		dragSessionMulti.value &&
+		(selectedClipIds.has(props.clip.id) ||
+			dragSessionMulti.value.source_clip.id === props.clip.id)
+	) {
+		if (dragSessionMulti.value.mode === 'move') {
+			const offsetPx = dragSessionMulti.value.delta_tracks * pxTrackHeight
+			base.top = `${offsetPx}px`
 		}
 	}
 
 	return base
 })
 
-const gainHandleStyle = computed((): CSSProperties | undefined => {
+const visibleRange = computed(() => {
 	if (props.scrollX === undefined || props.timelineWindowWidth === undefined) {
-		return undefined
+		return null
 	}
 
 	const clipLeft = beats_to_px(displayState.value.start_beat)
@@ -338,15 +505,30 @@ const gainHandleStyle = computed((): CSSProperties | undefined => {
 	)
 
 	if (visibleLeft < visibleRight) {
-		const centerAbs = (visibleLeft + visibleRight) / 2
-		const relativeLeft = centerAbs - clipLeft
-		return {
-			left: `${relativeLeft}px`,
-			'--relative-left': `${relativeLeft}px`,
-		}
+		return { left: visibleLeft, right: visibleRight, clipLeft }
 	}
 
-	return undefined
+	return null
+})
+
+const gainDisplayFits = computed(() => {
+	const range = visibleRange.value
+	if (!range) return false
+	const availableWidth = range.right - range.left
+	const requiredWidth = lastKnownGainDisplayWidth.value || 45
+	return availableWidth >= requiredWidth + 6 // padding
+})
+
+const gainHandleStyle = computed((): CSSProperties | undefined => {
+	const range = visibleRange.value
+	if (!range) return undefined
+
+	const centerAbs = (range.left + range.right) / 2
+	const relativeLeft = centerAbs - range.clipLeft
+	return {
+		left: `${relativeLeft}px`,
+		'--relative-left': `${relativeLeft}px`,
+	}
 })
 
 const textStyles = computed((): CSSProperties => {
@@ -360,213 +542,299 @@ type DragMode = 'left' | 'right' | 'move' | 'gain' | 'fade-in' | 'fade-out'
 
 const FADE_MARGIN_SEC = 0.1
 
-const dragSession = ref<{
-	side: DragMode
-	startX: number
-	origStartBeat: number
-	origEndBeat: number
-	origOffsetSec: number
-	origGain: number
-	previewStartBeat: number
-	previewEndBeat: number
-	previewOffsetSec: number
-	previewGain: number
-	startY: number
-	currentY: number
-	previewTrackId: string | null
-	verticalOffsetPx: number
-	sourceTrack?: HTMLElement
-	origFadeInSec: number
-	origFadeOutSec: number
-	previewFadeInSec: number
-	previewFadeOutSec: number
-} | null>(null)
+async function commitPendingUpdates(dragSession: DragSession) {
+	const sesh = dragSession
+	if (!sesh) return
 
-const windowFocused = useWindowFocus()
-watch(windowFocused, (focused) => {
-	if (!focused) {
-		dragSession.value = null
-	}
-})
+	const res = await socket
+		.emitWithAck(
+			'get:clip:update',
+			sesh.initial_states.flatMap((stored) => {
+				const clip = clips.get(stored.id)
+				if (!clip) return []
 
-// functionality for timeline clips
+				let changes: ClipUpdate = {}
 
-onMounted(() => {
-	if (withinAudioPool.value) {
-		if (!wrapperEl.value) return
+				if (sesh.mode === 'left-resize') {
+					changes = {
+						start_beat: clip.start_beat,
+						offset_seconds: clip.offset_seconds,
+					}
+				}
 
-		useEventListener(wrapperEl, 'pointerdown', (event) => {
-			if (user.value?.banned_at) return
-			if (event.button === 1) return // wheel-click
+				if (sesh.mode === 'right-resize') {
+					changes = {
+						end_beat: clip.end_beat,
+					}
+				}
 
-			event.preventDefault()
-			const rect = wrapperEl.value!.getBoundingClientRect()
-			const offsetX = event.clientX - rect.left
+				if (sesh.mode === 'fade-in') {
+					changes = {
+						fade_in_sec: clip.fade_in_sec,
+					}
+				}
 
-			dragFromPoolState.value = {
-				audioFileId: props.audiofile.id,
-				offsetPx: offsetX,
-				clientX: event.clientX,
-				clientY: event.clientY,
+				if (sesh.mode === 'fade-out') {
+					changes = { fade_out_sec: clip.fade_out_sec }
+				}
+
+				if (sesh.mode === 'gain') {
+					changes = {
+						gain: sesh.reset_to_default_gain ? DEFAULT_GAIN : clip.gain,
+					}
+				}
+
+				if (sesh.mode === 'move') {
+					const oldTrackId = clip.track_id
+					const oldTrackIndex = trackIdsInOrderByIndex.value.findIndex(
+						(t) => t === oldTrackId,
+					)
+
+					if (oldTrackIndex === -1) return []
+
+					const newTrackId =
+						trackIdsInOrderByIndex.value[oldTrackIndex + sesh.delta_tracks]
+					if (!newTrackId) return []
+
+					changes = {
+						start_beat: clip.start_beat,
+						end_beat: clip.end_beat,
+						fade_in_sec: clip.fade_in_sec,
+						fade_out_sec: clip.fade_out_sec,
+						track_id: newTrackId,
+					}
+				}
+
+				return [
+					{
+						id: clip.id,
+						changes,
+					},
+				] satisfies { id: ClipClient['id']; changes: ClipUpdate }[]
+			}),
+		)
+		.catch((err) => {
+			// todo: perhaps pass error?
+			return {
+				success: false as const,
+				error: {
+					message:
+						'An unexpected error occurred while editing clips. Please refresh and try again',
+				},
 			}
 		})
-		return
+
+	if (res && res.success) {
+		updateClips(res.data)
+	} else {
+		userLog(
+			'SYSTEM',
+			res ? res.error.message : "Couldn't commit clip edits. Refresh and try again.",
+		)
 	}
 
-	if (!leftHandleEl.value || !rightHandleEl.value) return
+	dragSessionMulti.value = null
+}
+
+// all audiopool exclusive listeners
+onMounted(() => {
+	if (!withinAudioPool.value) return
 	if (!wrapperEl.value) return
 
+	useEventListener(wrapperEl, 'pointerdown', (event) => {
+		if (user.value?.banned_at) return
+		if (event.button === 1) return // wheel-click ignored for panning of pool.
+
+		if (!(wrapperEl.value instanceof HTMLElement)) return
+
+		event.preventDefault()
+
+		const rectBounds = wrapperEl.value.getBoundingClientRect()
+
+		dragFromPoolState.value = {
+			audioFileId: props.audiofile.id,
+			offsetPx: event.clientX - rectBounds.left,
+			clientX: event.clientX,
+			clientY: event.clientY,
+		}
+	})
+})
+
+onMounted(() => {
+	if (withinAudioPool.value) return // todo: consider throwing error?
+	if (!wrapperEl.value) return // todo: consider throwing error?
+
+	useEventListener(wrapperEl, 'pointerenter', () => {
+		if (rightMouseButtonPressedOnTimeline.value) {
+			deleteClip()
+		}
+	})
+
+	// move clip
 	useEventListener(
 		wrapperEl,
 		'pointerdown',
 		(event) => {
+			// child elements like handles etc prevent default and stop
+			// propagation such that events that reach this listener
+			// are essentially guaranteed to be simple move click and drags.
 			if (event.defaultPrevented) return
-			if (user.value?.banned_at) return
 
 			if (event.button === 2) {
+				// right click
 				return deleteClip()
 			}
 
-			if (event.button !== 0) return
+			if (event.button !== 0) return // only left click
 			if (controlKeyPressed.value) return // Allow bubble for selection
 
 			event.preventDefault()
 			event.stopPropagation()
 
-			const parentTrack = (event.currentTarget as HTMLElement).closest('.track')
+			const parentTrack = props.parentTrackEl
+			if (!parentTrack) return
 
-			dragSession.value = {
-				side: 'move',
-				startX: event.clientX,
-				origStartBeat: initialClipState.value.start_beat,
-				origEndBeat: initialClipState.value.end_beat,
-				origOffsetSec: initialClipState.value.offset_seconds,
-				origGain: initialClipState.value.gain,
-				previewStartBeat: initialClipState.value.start_beat,
-				previewEndBeat: initialClipState.value.end_beat,
-				previewOffsetSec: initialClipState.value.offset_seconds,
-				previewGain: initialClipState.value.gain,
-				startY: event.clientY,
-				currentY: event.clientY,
-				previewTrackId: props.clip!.track_id,
-				verticalOffsetPx: 0,
-				sourceTrack: parentTrack instanceof HTMLElement ? parentTrack : undefined,
-				origFadeInSec: initialClipState.value.fade_in_sec,
-				origFadeOutSec: initialClipState.value.fade_out_sec,
-				previewFadeInSec: initialClipState.value.fade_in_sec,
-				previewFadeOutSec: initialClipState.value.fade_out_sec,
+			const parentTrackId = parentTrack.dataset.trackId
+			if (!parentTrackId) return
+
+			const sourceTrack = tracks.get(parentTrackId)
+			if (!sourceTrack) return // should always be available in playlist clips
+
+			if (!props.clip) return
+
+			let clipstoTrack = getSelectedClipsSnapshot()
+
+			const pc = props.clip
+
+			if (pc.id && !selectedClipIds.has(pc.id)) {
+				selectedClipIds.clear()
+				clipstoTrack = [{ ...pc }]
 			}
 
-			const el = event.currentTarget as HTMLElement
-			el.setPointerCapture(event.pointerId)
+			dragSessionMulti.value = {
+				mode: 'move',
+				source_clip: props.clip,
+				source_track: sourceTrack,
+				delta_beats: 0,
+				delta_tracks: 0,
+				mouse_start_x: event.clientX,
+				source_track_el: parentTrack,
+				initial_states: clipstoTrack,
+			}
 
-			const onMove = (e: PointerEvent) => {
-				const sesh = dragSession.value
-				if (!sesh || sesh.side !== 'move') return
+			let el: HTMLElement | undefined
+
+			if (event.currentTarget instanceof HTMLElement) {
+				el = event.currentTarget
+				el.setPointerCapture(event.pointerId)
+			}
+
+			function onMove(e: PointerEvent) {
+				if (!dragSessionMulti.value) return console.warn('dragsession missing onMove')
 
 				e.preventDefault()
 
-				// --- HORIZONTAL ---
-				const dxPx = e.clientX - sesh.startX
-				let deltaBeats = px_to_beats(dxPx)
+				if (dragSessionMulti.value.mode !== 'move')
+					return console.warn('dragsession mode changed') // todo: prolly requires listener cleanup? idk maybe track globally omg aaaa scope exploding haha
 
-				if (!altKeyPressed.value) {
-					deltaBeats = quantize_beats(deltaBeats)
-				}
+				const sourceTrack = dragSessionMulti.value.source_track
 
-				const currentDuration = sesh.origEndBeat - sesh.origStartBeat
-				let newStart = sesh.origStartBeat + deltaBeats
+				// horizontal
+				const dxPx = e.clientX - dragSessionMulti.value.mouse_start_x
+				const rawDeltaBeats = altKeyPressed.value
+					? px_to_beats(dxPx)
+					: quantize_beats(px_to_beats(dxPx))
 
-				// Clamp start to 0
-				newStart = Math.max(0, newStart)
+				let minAllowedDeltaBeats = -Infinity
+				let maxAllowedDeltaBeats = Infinity
 
-				let newEnd = newStart + currentDuration
+				dragSessionMulti.value.initial_states.forEach((stored) => {
+					const allowedLeft = -stored.start_beat
+					if (allowedLeft > minAllowedDeltaBeats) minAllowedDeltaBeats = allowedLeft
 
-				// Crop end to TOTAL_BEATS
-				newEnd = Math.min(newEnd, TOTAL_BEATS)
+					const allowedRight = TOTAL_BEATS - MIN_CLIP_LENGTH_BEATS - stored.start_beat
+					if (allowedRight < maxAllowedDeltaBeats) maxAllowedDeltaBeats = allowedRight
+				})
 
-				sesh.previewStartBeat = newStart
-				sesh.previewEndBeat = newEnd
+				const clampedDeltaBeats = Math.max(
+					minAllowedDeltaBeats,
+					Math.min(maxAllowedDeltaBeats, rawDeltaBeats),
+				)
+				dragSessionMulti.value.delta_beats = clampedDeltaBeats
 
-				// Clamp fades so they don't exceed the new clip duration
-				const newDurationSec = beats_to_sec(newEnd - newStart)
-				let fadeIn = sesh.origFadeInSec
-				let fadeOut = sesh.origFadeOutSec
-				const maxTotal = newDurationSec - FADE_MARGIN_SEC
-
-				if (fadeIn + fadeOut > maxTotal) {
-					// Pushing right shrinks duration from the right side, so fade-out shrinks first.
-					fadeOut = Math.max(0, Math.min(fadeOut, maxTotal - fadeIn))
-					fadeIn = Math.max(0, Math.min(fadeIn, maxTotal - fadeOut))
-				}
-
-				sesh.previewFadeInSec = fadeIn
-				sesh.previewFadeOutSec = fadeOut
-
-				// --- VERTICAL ---
+				// vertical
 				const els = document.elementsFromPoint(e.clientX, e.clientY)
-				const trackEl = els.find((el) => el.classList.contains('track')) as
-					| HTMLElement
-					| undefined
+				const targetTrackEl = els.find(
+					(el) => el instanceof HTMLElement && el.dataset.trackId,
+				) as HTMLElement | undefined
 
-				if (trackEl && sesh.sourceTrack) {
-					const targetRect = trackEl.getBoundingClientRect()
-					const sourceRect = sesh.sourceTrack.getBoundingClientRect()
-					// Snap visual to track top difference
-					const snapY = targetRect.top - sourceRect.top
+				if (!targetTrackEl || !dragSessionMulti.value.source_track_el)
+					return console.warn('dragsession missing track elements or datasets')
 
-					sesh.verticalOffsetPx = snapY
-					sesh.previewTrackId = trackEl.dataset.trackId ?? null
-				}
+				const indexOriginTrack = trackIdsInOrderByIndex.value.findIndex(
+					(t) => t === sourceTrack.id,
+				)
+
+				const indexCurrentTrack = trackIdsInOrderByIndex.value.findIndex(
+					(t) => t === targetTrackEl.dataset.trackId,
+				)
+
+				if (indexOriginTrack === -1 || indexCurrentTrack === -1)
+					return console.warn('dragsession track indexing issue, investigate further...')
+
+				const rawDeltaTracks = indexCurrentTrack - indexOriginTrack
+
+				let minAllowedDeltaTracks = -Infinity
+				let maxAllowedDeltaTracks = Infinity
+
+				dragSessionMulti.value.initial_states.forEach((stored) => {
+					const trackIndex = trackIdsInOrderByIndex.value.findIndex(
+						(t) => t === stored.track_id,
+					)
+					if (trackIndex === -1) return
+
+					const allowedUp = -trackIndex
+					if (allowedUp > minAllowedDeltaTracks) minAllowedDeltaTracks = allowedUp
+
+					const allowedDown = trackIdsInOrderByIndex.value.length - 1 - trackIndex
+					if (allowedDown < maxAllowedDeltaTracks) maxAllowedDeltaTracks = allowedDown
+				})
+
+				const clampedDeltaTracks = Math.max(
+					minAllowedDeltaTracks,
+					Math.min(maxAllowedDeltaTracks, rawDeltaTracks),
+				)
+
+				dragSessionMulti.value.delta_tracks = clampedDeltaTracks
+
+				dragSessionMulti.value.initial_states.forEach((stored) => {
+					const clip = clips.get(stored.id)
+					if (!clip) return
+
+					clip.start_beat = stored.start_beat + clampedDeltaBeats
+					clip.end_beat = Math.min(TOTAL_BEATS, stored.end_beat + clampedDeltaBeats)
+
+					const newDurationSec = beats_to_sec(clip.end_beat - clip.start_beat)
+					const { fadeInSec, fadeOutSec } = calculateSquashedFades(
+						stored.fade_in_sec,
+						stored.fade_out_sec,
+						newDurationSec,
+						'right',
+					)
+					clip.fade_in_sec = fadeInSec
+					clip.fade_out_sec = fadeOutSec
+				})
 			}
 
-			const onUp = async (e: PointerEvent) => {
-				el.releasePointerCapture(e.pointerId)
+			async function onUp(e: PointerEvent) {
+				if (el) el.releasePointerCapture(e.pointerId)
+
 				stopMove()
 				stopUp()
 
-				const sesh = dragSession.value
-				if (!sesh || !props.clip) return
+				if (!dragSessionMulti.value) return console.warn('missing dragsession in onUp')
 
-				// Commit changes
-				const clip = clips.get(props.clip.id)
-				if (!clip) return
-
-				const changes: Partial<Clip> = {
-					start_beat: sesh.previewStartBeat,
-					end_beat: sesh.previewEndBeat,
-					fade_in_sec: sesh.previewFadeInSec,
-					fade_out_sec: sesh.previewFadeOutSec,
-				}
-
-				if (sesh.previewTrackId && sesh.previewTrackId !== clip.track_id) {
-					changes.track_id = sesh.previewTrackId
-				}
-
-				if (clip.id.startsWith('__temp__')) {
-					clip.start_beat = sesh.previewStartBeat
-					clip.end_beat = sesh.previewEndBeat
-					clip.fade_in_sec = sesh.previewFadeInSec
-					clip.fade_out_sec = sesh.previewFadeOutSec
-					if (sesh.previewTrackId) clip.track_id = sesh.previewTrackId
-					dragSession.value = null
-					return
-				}
-
-				const res = await socket.emitWithAck('get:clip:update', {
-					id: clip.id,
-					changes,
-				})
-
-				if (res.success) {
-					clip.start_beat = res.data['start_beat'] ?? sesh.previewStartBeat
-					clip.end_beat = res.data['end_beat'] ?? sesh.previewEndBeat
-					clip.fade_in_sec = res.data['fade_in_sec'] ?? sesh.previewFadeInSec
-					clip.fade_out_sec = res.data['fade_out_sec'] ?? sesh.previewFadeOutSec
-					if (res.data['track_id']) clip.track_id = res.data['track_id']
-				}
-
-				dragSession.value = null
+				await commitPendingUpdates(dragSessionMulti.value)
 			}
 
 			const stopMove = useEventListener(window, 'pointermove', onMove)
@@ -575,170 +843,166 @@ onMounted(() => {
 		{ passive: false },
 	)
 
-	// ---- RESIZE HANDLES ----
 	const resizeHandles = [
 		{ side: 'left' as const, el: leftHandleEl },
 		{ side: 'right' as const, el: rightHandleEl },
 	]
 
+	// resize
 	for (const { side, el: handleEl } of resizeHandles) {
 		useEventListener(
 			handleEl,
 			'pointerdown',
 			(event) => {
-				if (user.value?.banned_at) return
 				if (event.button === 2) {
-					return deleteClip()
+					return deleteClip() // right click
 				}
 
-				if (event.button !== 0) return
+				if (event.button !== 0) return // only left click
+
 				event.preventDefault()
 				event.stopPropagation()
 
-				dragSession.value = {
-					side,
-					startX: event.clientX,
-					origStartBeat: initialClipState.value.start_beat,
-					origEndBeat: initialClipState.value.end_beat,
-					origOffsetSec: initialClipState.value.offset_seconds,
-					origGain: initialClipState.value.gain,
-					previewStartBeat: initialClipState.value.start_beat,
-					previewEndBeat: initialClipState.value.end_beat,
-					previewOffsetSec: initialClipState.value.offset_seconds,
-					previewGain: initialClipState.value.gain,
-					startY: event.clientY,
-					currentY: event.clientY,
-					previewTrackId: props.clip!.track_id, // We know clip exists if not withinAudioPool
-					verticalOffsetPx: 0,
-					origFadeInSec: initialClipState.value.fade_in_sec,
-					origFadeOutSec: initialClipState.value.fade_out_sec,
-					previewFadeInSec: initialClipState.value.fade_in_sec,
-					previewFadeOutSec: initialClipState.value.fade_out_sec,
+				if (!props.clip) return
+
+				// todo: do we return on control key pressed for selection bubble?
+
+				let clipstoTrack = getSelectedClipsSnapshot()
+
+				const pc = props.clip
+
+				if (pc.id && !selectedClipIds.has(pc.id)) {
+					selectedClipIds.clear()
+					clipstoTrack = [{ ...pc }]
 				}
 
-				const el = event.currentTarget as HTMLElement
-				el.setPointerCapture(event.pointerId)
+				dragSessionMulti.value =
+					side === 'left'
+						? {
+								mode: 'left-resize',
+								initial_start_beat: props.clip.start_beat,
+								delta_beats_start: 0,
+								mouse_start_x: event.clientX,
+								source_clip: props.clip,
+								initial_states: clipstoTrack,
+							}
+						: {
+								mode: 'right-resize',
+								initial_end_beat: props.clip.end_beat,
+								delta_beats_end: 0,
+								mouse_start_x: event.clientX,
+								source_clip: props.clip,
+								initial_states: clipstoTrack,
+							}
 
-				const onMove = (e: PointerEvent) => {
-					const sesh = dragSession.value
-					if (!sesh || sesh.side !== side) return
+				let el: HTMLElement | undefined
+
+				if (event.currentTarget instanceof HTMLElement) {
+					el = event.currentTarget
+					el.setPointerCapture(event.pointerId)
+				}
+
+				function onMove(e: PointerEvent) {
+					const sesh = dragSessionMulti.value
+					if (!sesh || (sesh.mode !== 'left-resize' && sesh.mode !== 'right-resize'))
+						return
 
 					e.preventDefault()
 
-					const dxPx = e.clientX - sesh.startX
-					let deltaBeats = px_to_beats(dxPx)
+					if (sesh.mode === 'left-resize') {
+						const dxPx = e.clientX - sesh.mouse_start_x
+						const deltaBeats = altKeyPressed.value
+							? px_to_beats(dxPx)
+							: quantize_beats(px_to_beats(dxPx))
 
-					if (!altKeyPressed.value) {
-						deltaBeats = quantize_beats(deltaBeats)
-					}
+						sesh.delta_beats_start = deltaBeats
 
-					const minLength = 0.3
+						sesh.initial_states.forEach((stored) => {
+							const clip = clips.get(stored.id)
+							if (!clip) return
 
-					if (side === 'left') {
-						let newStart = sesh.origStartBeat + deltaBeats
+							let newStart = stored.start_beat + deltaBeats
+							newStart = Math.min(newStart, stored.end_beat - MIN_CLIP_LENGTH_BEATS)
 
-						// timeline
-						newStart = Math.max(0, newStart)
+							let newOffsetSec =
+								stored.offset_seconds + beats_to_sec(newStart - stored.start_beat)
+							if (newOffsetSec < 0) {
+								newOffsetSec = 0
+								newStart = stored.start_beat - sec_to_beats(stored.offset_seconds)
+							}
 
-						if (sesh.origEndBeat - newStart < minLength) {
-							newStart = sesh.origEndBeat - minLength
-						}
+							if (newStart < 0) {
+								newStart = 0
+								newOffsetSec =
+									stored.offset_seconds +
+									beats_to_sec(newStart - stored.start_beat)
+							}
 
-						// Offset follows crop
-						let newOffset =
-							sesh.origOffsetSec + beats_to_sec(newStart - sesh.origStartBeat)
+							clip.start_beat = newStart
+							clip.offset_seconds = newOffsetSec
 
-						// Clamp offset at 0
-						if (newOffset < 0) {
-							newOffset = 0
-							newStart = sesh.origStartBeat - sec_to_beats(sesh.origOffsetSec)
-						}
-
-						sesh.previewStartBeat = newStart
-						sesh.previewOffsetSec = newOffset
-					} else {
-						// right
-						let newEnd = sesh.origEndBeat + deltaBeats
-
-						if (newEnd - sesh.origStartBeat < minLength) {
-							newEnd = sesh.origStartBeat + minLength
-						}
-
-						const maxEndFromFile =
-							sesh.origStartBeat +
-							sec_to_beats(props.audiofile.duration - sesh.origOffsetSec)
-
-						newEnd = Math.min(newEnd, maxEndFromFile)
-
-						// Timeline bound
-						newEnd = Math.min(newEnd, TOTAL_BEATS)
-
-						sesh.previewEndBeat = newEnd
-					}
-
-					// Clamp fades so they don't exceed the new clip duration
-					const newDurationSec = beats_to_sec(sesh.previewEndBeat - sesh.previewStartBeat)
-					let fadeIn = sesh.origFadeInSec
-					let fadeOut = sesh.origFadeOutSec
-					const maxTotal = newDurationSec - FADE_MARGIN_SEC
-
-					if (fadeIn + fadeOut > maxTotal) {
-						if (side === 'left') {
-							// Left side changed -> shrink fade-out first
-							fadeOut = Math.max(0, Math.min(fadeOut, maxTotal - fadeIn))
-							fadeIn = Math.max(0, Math.min(fadeIn, maxTotal - fadeOut))
-						} else {
-							// Right side changed -> shrink fade-in first
-							fadeIn = Math.max(0, Math.min(fadeIn, maxTotal - fadeOut))
-							fadeOut = Math.max(0, Math.min(fadeOut, maxTotal - fadeIn))
-						}
-					}
-
-					sesh.previewFadeInSec = fadeIn
-					sesh.previewFadeOutSec = fadeOut
-				}
-
-				const onUp = async (e: PointerEvent) => {
-					el.releasePointerCapture(e.pointerId)
-					stopMove()
-					stopUp()
-
-					const sesh = dragSession.value
-					if (!sesh || !props.clip || sesh.side !== side) return
-
-					const clip = clips.get(props.clip.id)
-					if (!clip) return
-
-					if (clip.id.startsWith('__temp__')) {
-						clip.start_beat = sesh.previewStartBeat
-						clip.end_beat = sesh.previewEndBeat
-						clip.offset_seconds = sesh.previewOffsetSec
-						clip.fade_in_sec = sesh.previewFadeInSec
-						clip.fade_out_sec = sesh.previewFadeOutSec
-						dragSession.value = null
+							const newDurationSec = beats_to_sec(clip.end_beat - clip.start_beat)
+							const { fadeInSec, fadeOutSec } = calculateSquashedFades(
+								stored.fade_in_sec,
+								stored.fade_out_sec,
+								newDurationSec,
+								'left',
+							)
+							clip.fade_in_sec = fadeInSec
+							clip.fade_out_sec = fadeOutSec
+						})
 						return
 					}
 
-					const res = await socket.emitWithAck('get:clip:update', {
-						id: clip.id,
-						changes: {
-							start_beat: sesh.previewStartBeat,
-							end_beat: sesh.previewEndBeat,
-							offset_seconds: sesh.previewOffsetSec,
-							fade_in_sec: sesh.previewFadeInSec,
-							fade_out_sec: sesh.previewFadeOutSec,
-						},
-					})
+					if (sesh.mode === 'right-resize') {
+						const dxPx = e.clientX - sesh.mouse_start_x
+						const deltaBeats = altKeyPressed.value
+							? px_to_beats(dxPx)
+							: quantize_beats(px_to_beats(dxPx))
 
-					if (res.success) {
-						clip.start_beat = res.data['start_beat'] ?? sesh.previewStartBeat
-						clip.end_beat = res.data['end_beat'] ?? sesh.previewEndBeat
-						clip.offset_seconds = res.data['offset_seconds'] ?? sesh.previewOffsetSec
-						clip.fade_in_sec = res.data['fade_in_sec'] ?? sesh.previewFadeInSec
-						clip.fade_out_sec = res.data['fade_out_sec'] ?? sesh.previewFadeOutSec
+						sesh.delta_beats_end = deltaBeats
+
+						sesh.initial_states.forEach((stored) => {
+							const clip = clips.get(stored.id)
+							if (!clip) return
+
+							let newEnd = stored.end_beat + deltaBeats
+							newEnd = Math.max(newEnd, stored.start_beat + MIN_CLIP_LENGTH_BEATS)
+							newEnd = Math.min(newEnd, TOTAL_BEATS)
+
+							const audioFile = audiofiles.get(clip.audio_file_id)
+							if (audioFile) {
+								const fileMaxEnd =
+									stored.start_beat +
+									sec_to_beats(audioFile.duration - stored.offset_seconds)
+								newEnd = Math.min(newEnd, fileMaxEnd)
+							}
+
+							clip.end_beat = newEnd
+
+							const newDurationSec = beats_to_sec(clip.end_beat - clip.start_beat)
+							const { fadeInSec, fadeOutSec } = calculateSquashedFades(
+								stored.fade_in_sec,
+								stored.fade_out_sec,
+								newDurationSec,
+								'right',
+							)
+							clip.fade_in_sec = fadeInSec
+							clip.fade_out_sec = fadeOutSec
+						})
+						return
 					}
+				}
 
-					dragSession.value = null
+				async function onUp(e: PointerEvent) {
+					if (el) el.releasePointerCapture(e.pointerId)
+
+					stopMove()
+					stopUp()
+
+					if (!dragSessionMulti.value) return console.warn('missing dragsession in onUp')
+
+					await commitPendingUpdates(dragSessionMulti.value)
 				}
 
 				const stopMove = useEventListener(window, 'pointermove', onMove)
@@ -747,154 +1011,6 @@ onMounted(() => {
 			{ passive: false },
 		)
 	}
-
-	useEventListener(
-		gainHandleEl,
-		'pointerdown',
-		(event) => {
-			if (user.value?.banned_at) return
-			if (event.button === 2) {
-				return deleteClip()
-			}
-
-			if (event.button !== 0) return
-
-			if (altKeyPressed.value || controlKeyPressed.value || shiftKeyPressed.value) {
-				event.preventDefault()
-				event.stopPropagation()
-				dragSession.value = null
-
-				const clip = props.clip ? clips.get(props.clip.id) : undefined
-				if (clip) {
-					clip.gain = DEFAULT_GAIN
-
-					if (!clip.id.startsWith('__temp__')) {
-						socket.emitWithAck('get:clip:update', {
-							id: clip.id,
-							changes: { gain: DEFAULT_GAIN },
-						})
-					}
-				}
-				return
-			}
-
-			event.preventDefault()
-			event.stopPropagation()
-
-			dragSession.value = {
-				side: 'gain',
-				startX: event.clientX,
-				origStartBeat: initialClipState.value.start_beat,
-				origEndBeat: initialClipState.value.end_beat,
-				origOffsetSec: initialClipState.value.offset_seconds,
-				origGain: initialClipState.value.gain,
-				previewStartBeat: initialClipState.value.start_beat,
-				previewEndBeat: initialClipState.value.end_beat,
-				previewOffsetSec: initialClipState.value.offset_seconds,
-				previewGain: initialClipState.value.gain,
-				startY: event.clientY,
-				currentY: event.clientY,
-				previewTrackId: props.clip!.track_id,
-				verticalOffsetPx: 0,
-				origFadeInSec: initialClipState.value.fade_in_sec,
-				origFadeOutSec: initialClipState.value.fade_out_sec,
-				previewFadeInSec: initialClipState.value.fade_in_sec,
-				previewFadeOutSec: initialClipState.value.fade_out_sec,
-			}
-
-			const el = event.currentTarget as HTMLElement
-			el.setPointerCapture(event.pointerId)
-
-			const onMove = (e: PointerEvent) => {
-				const sesh = dragSession.value
-				if (!sesh || sesh.side !== 'gain') return
-				e.preventDefault()
-
-				// Calculate gain delta based on vertical movement
-				const deltaY = sesh.startY - e.clientY
-				// Sensitivity: e.g. 100px move = 1.0 gain change
-				const gainSensitivity = 1 / 100
-				let newGain = sesh.origGain + deltaY * gainSensitivity
-
-				// Clamp to reasonable values (e.g. 0 to 4.0)
-				newGain = Math.max(0, Math.min(newGain, 4))
-
-				if (altKeyPressed.value || controlKeyPressed.value || shiftKeyPressed.value) {
-					sesh.previewGain = DEFAULT_GAIN
-				} else {
-					sesh.previewGain = newGain
-				}
-
-				const clip = props.clip ? clips.get(props.clip.id) : undefined
-
-				if (clip) {
-					clip.gain = sesh.previewGain
-				}
-			}
-
-			const onUp = async (e: PointerEvent) => {
-				el.releasePointerCapture(e.pointerId)
-				stopMove()
-				stopUp()
-
-				const sesh = dragSession.value
-				if (!sesh || !props.clip || sesh.side !== 'gain') return
-
-				const clip = clips.get(props.clip.id)
-				if (!clip) return
-
-				if (clip.id.startsWith('__temp__')) {
-					clip.gain = sesh.previewGain
-					dragSession.value = null
-					return
-				}
-
-				const res = await socket.emitWithAck('get:clip:update', {
-					id: clip.id,
-					changes: {
-						gain: sesh.previewGain,
-					},
-				})
-
-				if (res.success) {
-					clip.gain = res.data['gain'] ?? sesh.previewGain
-				} else {
-					clip.gain = sesh.origGain
-				}
-
-				dragSession.value = null
-			}
-
-			const stopMove = useEventListener(window, 'pointermove', onMove)
-			const stopUp = useEventListener(window, 'pointerup', onUp)
-		},
-		{ passive: false },
-	)
-
-	useEventListener(gainHandleEl, 'dblclick', async (event) => {
-		if (user.value?.banned_at || !props.clip) return
-		event.preventDefault()
-		event.stopPropagation()
-
-		const clip = clips.get(props.clip.id)
-		if (!clip) return
-
-		if (clip.id.startsWith('__temp__')) {
-			clip.gain = 1.0
-			return
-		}
-
-		const res = await socket.emitWithAck('get:clip:update', {
-			id: clip.id,
-			changes: {
-				gain: 1.0,
-			},
-		})
-
-		if (res.success) {
-			clip.gain = res.data['gain'] ?? 1.0
-		}
-	})
 
 	const fadeHandles = [
 		{ side: 'fade-in' as const, el: fadeInHandleEl },
@@ -906,109 +1022,89 @@ onMounted(() => {
 			handleEl,
 			'pointerdown',
 			(event) => {
-				if (user.value?.banned_at) return
-				if (event.button !== 0) return
+				if (event.button === 2) {
+					return deleteClip() // right click
+				}
+
+				if (event.button !== 0) return // only left click
+
 				event.preventDefault()
 				event.stopPropagation()
 
-				dragSession.value = {
-					side,
-					startX: event.clientX,
-					origStartBeat: initialClipState.value.start_beat,
-					origEndBeat: initialClipState.value.end_beat,
-					origOffsetSec: initialClipState.value.offset_seconds,
-					origGain: initialClipState.value.gain,
-					previewStartBeat: initialClipState.value.start_beat,
-					previewEndBeat: initialClipState.value.end_beat,
-					previewOffsetSec: initialClipState.value.offset_seconds,
-					previewGain: initialClipState.value.gain,
-					startY: event.clientY,
-					currentY: event.clientY,
-					previewTrackId: props.clip!.track_id,
-					verticalOffsetPx: 0,
-					origFadeInSec: initialClipState.value.fade_in_sec,
-					origFadeOutSec: initialClipState.value.fade_out_sec,
-					previewFadeInSec: initialClipState.value.fade_in_sec,
-					previewFadeOutSec: initialClipState.value.fade_out_sec,
+				if (!props.clip) return
+
+				let clipstoTrack = getSelectedClipsSnapshot()
+
+				const pc = props.clip
+
+				if (pc.id && !selectedClipIds.has(pc.id)) {
+					selectedClipIds.clear()
+					clipstoTrack = [{ ...pc }]
 				}
 
-				const el = event.currentTarget as HTMLElement
-				el.setPointerCapture(event.pointerId)
+				dragSessionMulti.value = {
+					mode: side,
+					mouse_start_x: event.clientX,
+					initial_fade_sec:
+						side === 'fade-in' ? props.clip.fade_in_sec : props.clip.fade_out_sec,
+					delta_fade_sec: 0,
+					source_clip: props.clip,
+					initial_states: clipstoTrack,
+				}
 
-				const onMove = (e: PointerEvent) => {
-					const sesh = dragSession.value
-					if (!sesh || sesh.side !== side) return
+				let el: HTMLElement | undefined
+
+				if (event.currentTarget instanceof HTMLElement) {
+					el = event.currentTarget
+					el.setPointerCapture(event.pointerId)
+				}
+
+				function onMove(e: PointerEvent) {
+					const sesh = dragSessionMulti.value
+					if (!sesh || (sesh.mode !== 'fade-in' && sesh.mode !== 'fade-out')) return
+
 					e.preventDefault()
 
-					const dxPx = e.clientX - sesh.startX
+					const dxPx = e.clientX - sesh.mouse_start_x
 					const deltaSec = beats_to_sec(px_to_beats(dxPx))
 
-					let newFadeIn = sesh.origFadeInSec
-					let newFadeOut = sesh.origFadeOutSec
-					const clipDurationSec = beats_to_sec(sesh.origEndBeat - sesh.origStartBeat)
+					sesh.delta_fade_sec = deltaSec
 
-					if (side === 'fade-in') {
-						newFadeIn = Math.max(0, newFadeIn + deltaSec)
-						newFadeIn = Math.min(
-							newFadeIn,
-							Math.max(0, clipDurationSec - FADE_MARGIN_SEC),
-						)
+					sesh.initial_states.forEach((stored) => {
+						const clip = clips.get(stored.id)
+						if (!clip) return
 
-						if (newFadeIn + newFadeOut + FADE_MARGIN_SEC > clipDurationSec) {
-							newFadeOut = Math.max(0, clipDurationSec - newFadeIn - FADE_MARGIN_SEC)
+						const durationSec = beats_to_sec(clip.end_beat - clip.start_beat)
+
+						if (sesh.mode === 'fade-in') {
+							clip.fade_in_sec = getCalculatedFade(
+								stored.fade_in_sec,
+								deltaSec,
+								clip.fade_out_sec,
+								durationSec,
+							)
+						} else if (sesh.mode === 'fade-out') {
+							clip.fade_out_sec = getCalculatedFade(
+								stored.fade_out_sec,
+								-deltaSec,
+								clip.fade_in_sec,
+								durationSec,
+							)
+						} else {
+							console.warn('dragsession mode changed')
 						}
-					} else {
-						// fade-out
-						newFadeOut = Math.max(0, newFadeOut - deltaSec)
-						newFadeOut = Math.min(
-							newFadeOut,
-							Math.max(0, clipDurationSec - FADE_MARGIN_SEC),
-						)
-
-						if (newFadeIn + newFadeOut + FADE_MARGIN_SEC > clipDurationSec) {
-							newFadeIn = Math.max(0, clipDurationSec - newFadeOut - FADE_MARGIN_SEC)
-						}
-					}
-
-					sesh.previewFadeInSec = newFadeIn
-					sesh.previewFadeOutSec = newFadeOut
+					})
 				}
 
-				const onUp = async (e: PointerEvent) => {
-					el.releasePointerCapture(e.pointerId)
+				async function onUp(e: PointerEvent) {
+					if (el) el.releasePointerCapture(e.pointerId)
+
 					stopMove()
 					stopUp()
 
-					const sesh = dragSession.value
-					if (!sesh || !props.clip || sesh.side !== side) return
+					if (!dragSessionMulti.value) return console.warn('missing dragsession in onUp')
 
-					const clip = clips.get(props.clip.id)
-					if (!clip) return
-
-					if (clip.id.startsWith('__temp__')) {
-						clip.fade_in_sec = sesh.previewFadeInSec
-						clip.fade_out_sec = sesh.previewFadeOutSec
-						dragSession.value = null
-						return
-					}
-
-					const res = await socket.emitWithAck('get:clip:update', {
-						id: clip.id,
-						changes: {
-							fade_in_sec: sesh.previewFadeInSec,
-							fade_out_sec: sesh.previewFadeOutSec,
-						},
-					})
-
-					if (res.success) {
-						clip.fade_in_sec = res.data['fade_in_sec'] ?? sesh.previewFadeInSec
-						clip.fade_out_sec = res.data['fade_out_sec'] ?? sesh.previewFadeOutSec
-					} else {
-						clip.fade_in_sec = sesh.origFadeInSec
-						clip.fade_out_sec = sesh.origFadeOutSec
-					}
-
-					dragSession.value = null
+					await commitPendingUpdates(dragSessionMulti.value)
 				}
 
 				const stopMove = useEventListener(window, 'pointermove', onMove)
@@ -1018,11 +1114,112 @@ onMounted(() => {
 		)
 	}
 
-	useEventListener(wrapperEl, 'pointerenter', () => {
-		if (rightMouseButtonPressedOnTimeline.value) {
-			deleteClip()
-		}
-	})
+	// gain
+	useEventListener(
+		gainHandleEl,
+		'pointerdown',
+		(event) => {
+			if (event.button === 2) {
+				return deleteClip() // right click
+			}
+
+			if (event.button !== 0) return // left click only
+
+			event.preventDefault()
+			event.stopPropagation()
+
+			if (!props.clip) return
+
+			let clipstoTrack = getSelectedClipsSnapshot()
+
+			const pc = props.clip
+
+			if (pc.id && !selectedClipIds.has(pc.id)) {
+				selectedClipIds.clear()
+				clipstoTrack = [{ ...pc }]
+			}
+
+			dragSessionMulti.value = {
+				mode: 'gain',
+				initial_gain: props.clip.gain,
+				mouse_start_x: event.clientX,
+				delta_gain: 0,
+				source_clip: props.clip,
+				mouse_start_y: event.clientY,
+				reset_to_default_gain:
+					altKeyPressed.value || controlKeyPressed.value || shiftKeyPressed.value,
+				initial_states: clipstoTrack,
+			}
+
+			let el: HTMLElement | undefined
+
+			if (event.currentTarget instanceof HTMLElement) {
+				el = event.currentTarget
+				el.setPointerCapture(event.pointerId)
+			}
+
+			function onMove(e: PointerEvent) {
+				if (!dragSessionMulti.value) return console.warn('dragsession missing onMove')
+
+				e.preventDefault()
+
+				if (dragSessionMulti.value.mode !== 'gain')
+					return console.warn('dragsession mode changed')
+
+				const GAIN_SENSITIVITY = 0.005 as const // 1 / 200
+
+				const dyPx = e.clientY - dragSessionMulti.value.mouse_start_y
+				const deltaGain = dyPx * -GAIN_SENSITIVITY
+
+				dragSessionMulti.value.delta_gain = deltaGain
+
+				const shouldReset =
+					altKeyPressed.value || controlKeyPressed.value || shiftKeyPressed.value
+				dragSessionMulti.value.reset_to_default_gain = shouldReset
+
+				dragSessionMulti.value.initial_states.forEach((stored) => {
+					const clip = clips.get(stored.id)
+					if (!clip) return
+
+					clip.gain = getCalculatedGain({
+						initialGain: stored.gain,
+						deltaGain,
+						shouldReset,
+					})
+				})
+			}
+
+			async function onUp(e: PointerEvent) {
+				if (el) el.releasePointerCapture(e.pointerId)
+
+				stopMove()
+				stopUp()
+
+				if (!dragSessionMulti.value) return console.warn('missing dragsession in onUp')
+
+				await commitPendingUpdates(dragSessionMulti.value)
+			}
+
+			const stopMove = useEventListener(window, 'pointermove', onMove)
+			const stopUp = useEventListener(window, 'pointerup', onUp)
+
+			if (dragSessionMulti.value.reset_to_default_gain) {
+				dragSessionMulti.value.initial_states.forEach((stored) => {
+					const clip = clips.get(stored.id)
+					if (!clip) return
+
+					clip.gain = getCalculatedGain({
+						initialGain: stored.gain,
+						deltaGain: DEFAULT_GAIN, // dummy
+						shouldReset: true,
+					})
+				})
+
+				onUp(event)
+			}
+		},
+		{ passive: false },
+	)
 })
 
 const canvasStyles = computed((): CSSProperties => {
@@ -1069,10 +1266,10 @@ async function drawWaveform() {
 
 	if (
 		canvasEl.value.width !== canvasWidth.value * pr ||
-		canvasEl.value.height !== canvasHeight.value * pr
+		canvasEl.value.height !== canvasWrapHeight.value * pr
 	) {
 		canvasEl.value.width = canvasWidth.value * pr
-		canvasEl.value.height = canvasHeight.value * pr
+		canvasEl.value.height = canvasWrapHeight.value * pr
 	}
 
 	const { width, height } = canvasEl.value
@@ -1086,14 +1283,14 @@ async function drawWaveform() {
 	try {
 		ctx.scale(pr, pr)
 
-		// Since we are stretching LODs, we want to disable smoothing to keep it crisp
+		// for stretching LODs - no smoothing to keep it crisp
 		ctx.imageSmoothingEnabled = false
 
 		const bitmap = getWaveform(props.audiofile, canvasWidth.value, props.audiofile.duration)
 
 		if (bitmap) {
-			ctx.clearRect(0, 0, canvasWidth.value, canvasHeight.value)
-			ctx.drawImage(bitmap, 0, 0, canvasWidth.value, canvasHeight.value)
+			ctx.clearRect(0, 0, canvasWidth.value, canvasWrapHeight.value)
+			ctx.drawImage(bitmap, 0, 0, canvasWidth.value, canvasWrapHeight.value)
 
 			ctx.globalCompositeOperation = 'source-in'
 
@@ -1109,7 +1306,7 @@ async function drawWaveform() {
 				const mixed = interpolate([color, '#000000'])(0.2)
 				const finalColor = formatHex(mixed) ?? props.audiofile.color
 				ctx.fillStyle = finalColor
-				ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
+				ctx.fillRect(0, 0, canvasWidth.value, canvasWrapHeight.value)
 			} else {
 				const progress = getPreviewProgress()
 
@@ -1124,7 +1321,7 @@ async function drawWaveform() {
 				grad.addColorStop(1, formatHex(interpolate([color, '#000000'])(0.4)) ?? color)
 
 				ctx.fillStyle = grad
-				ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
+				ctx.fillRect(0, 0, canvasWidth.value, canvasWrapHeight.value)
 			}
 
 			ctx.globalCompositeOperation = 'source-over'
@@ -1138,7 +1335,7 @@ async function drawWaveform() {
 
 watchThrottled(
 	[
-		canvasHeight,
+		canvasWrapHeight,
 		canvasWidth,
 		() => props.audiofile.waveforms,
 		() => props.audiofile.color,
@@ -1154,7 +1351,7 @@ watchThrottled(
 	{ immediate: false, throttle: 200 },
 )
 
-watch(isSelected, () => drawWaveform(), { immediate: false })
+watch(isSelected, () => drawWaveform(), { immediate: false }) // no throttle
 
 function getWaveform(
 	audiofile: AudioFile,
@@ -1260,6 +1457,24 @@ canvas {
 .resizehandle.right {
 	left: unset;
 	right: 0;
+}
+
+.gainDisplay {
+	position: absolute;
+	left: var(--relative-left, 50%);
+	transform: translateX(-50%) translateY(-50%);
+	bottom: 13%;
+	pointer-events: none;
+	user-select: none;
+	background-color: color-mix(in lab, var(--bg-color) 66%, transparent);
+	line-height: 1em;
+	padding: 1px 4px 2px;
+	border-radius: 4px;
+	color: color-mix(in lch, var(--_color), var(--text-color-primary) 30%);
+}
+
+.gainDisplay.selected {
+	color: color-mix(in lch, #ff4444, var(--text-color-primary) 30%);
 }
 
 .gainhandle {

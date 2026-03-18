@@ -1,6 +1,6 @@
 import { defineSocketHandler } from '@/socket/socket'
 import { clips, selectedClipIds } from '@/state'
-import type { Clip } from '~/schema'
+import type { ClipClient } from '~/schema'
 
 export default defineSocketHandler({
 	event: 'clip:delete',
@@ -9,7 +9,7 @@ export default defineSocketHandler({
 	},
 })
 
-export function delteClipLocally(clipId: Clip['id']) {
+export function delteClipLocally(clipId: ClipClient['id']) {
 	selectedClipIds.delete(clipId)
 	clips.delete(clipId)
 }

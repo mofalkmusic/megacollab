@@ -1,10 +1,10 @@
 import { clips, audioBuffers, tracks, bpm } from '@/state'
-import type { Clip, ClientTrack } from '~/schema'
+import type { ClipClient, TrackClient } from '~/schema'
 import { beats_to_sec_pure } from '@/utils/mathUtils'
 
 export type PlaylistSnapshot = {
-	clips: Clip[]
-	tracks: Map<string, ClientTrack>
+	clips: ClipClient[]
+	tracks: Map<string, TrackClient>
 	buffers: Map<string, AudioBuffer>
 	bpm: number
 }

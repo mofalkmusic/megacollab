@@ -14,6 +14,7 @@
 				:audiofile="audiofiles.get(clip.audio_file_id)!"
 				:scroll-x="scrollX"
 				:timeline-window-width="timelineWindowWidth"
+				:parent-track-el="trackEl"
 				:style="{
 					position: 'absolute',
 					height: 'calc(100% - 1px)',
@@ -40,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import type { ServerTrack, Clip } from '~/schema'
+import type { TrackServer, ClipClient } from '~/schema'
 import ClipInstance from '@/components/ClipInstance.vue'
 import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef } from 'vue'
 import { clips, pxPerBeat, audiofiles, pxTrackHeight, TOTAL_BEATS, user } from '@/state'
@@ -56,7 +57,7 @@ import { useGlobalProgress } from '@/composables/useGlobalProgress'
 import { useConsole } from '@/composables/useConsole'
 
 const props = defineProps<{
-	track: ServerTrack
+	track: TrackServer
 	scrollX: number
 	timelineWindowWidth: number
 }>()
@@ -147,7 +148,7 @@ const { isOverDropZone } = useDropZone(trackEl, {
 		let endBeat = startBeat + durationBeats
 		endBeat = Math.min(endBeat, TOTAL_BEATS)
 
-		const tempClip: Clip = {
+		const tempClip: ClipClient = {
 			id: tempId,
 			track_id: props.track.id,
 			audio_file_id: res.id,

@@ -41,15 +41,13 @@ export const ServerClipSchema = z.object({
 	created_at: isodatetime,
 })
 
-export type ServerClip = z.output<typeof ServerClipSchema>
+export type ClipServer = z.output<typeof ServerClipSchema>
 
 export const ClientClipSchema = ServerClipSchema.extend({
 	creator_display_name: z.string(),
 })
 
-export type ClientClip = z.output<typeof ClientClipSchema>
-
-export type Clip = ClientClip
+export type ClipClient = z.output<typeof ClientClipSchema>
 
 export const updateClipSchema = ServerClipSchema.omit({
 	id: true,
@@ -58,7 +56,7 @@ export const updateClipSchema = ServerClipSchema.omit({
 	creator_user_id: true,
 }).partial()
 
-export type UpdateClip = z.output<typeof updateClipSchema>
+export type ClipUpdate = z.output<typeof updateClipSchema>
 
 // TRACKS
 
@@ -72,13 +70,13 @@ export const ServerTrackSchema = z.object({
 	created_at: isodatetime,
 })
 
-export type ServerTrack = z.output<typeof ServerTrackSchema>
+export type TrackServer = z.output<typeof ServerTrackSchema>
 
 export const ClientTrackSchema = ServerTrackSchema.extend({
 	belongs_to_display_name: z.string().nullable(), // from foreign key
 })
 
-export type ClientTrack = z.output<typeof ClientTrackSchema>
+export type TrackClient = z.output<typeof ClientTrackSchema>
 
 export const updateTrackSchema = ServerTrackSchema.omit({
 	id: true,
@@ -86,7 +84,7 @@ export const updateTrackSchema = ServerTrackSchema.omit({
 	creator_user_id: true,
 }).partial()
 
-export type UpdateTrack = z.output<typeof updateTrackSchema>
+export type TrackUpdate = z.output<typeof updateTrackSchema>
 
 // USER regards mostly the Clerk / authentication schemas & types
 

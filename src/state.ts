@@ -1,11 +1,18 @@
-import { computed, reactive, ref, shallowRef, watchEffect } from 'vue'
-import { type Client, type ClientTrack, type Clip, type TimelinePos, type User } from '~/schema'
+import { computed, reactive, ref, shallowRef, watch, watchEffect } from 'vue'
+import {
+	type Client,
+	type TrackClient,
+	type ClipClient,
+	type TimelinePos,
+	type User,
+} from '~/schema'
 import { type DebugEntry } from '@/composables/useDebug'
 import {
 	useDevicePixelRatio,
 	useEventListener,
 	useIntervalFn,
 	useLocalStorage,
+	useWindowFocus,
 	watchDebounced,
 } from '@vueuse/core'
 import type { AudioFile } from '@/types'
@@ -16,10 +23,71 @@ export const user = ref<User | null>(null)
 export const client = ref<Client | null>(null)
 export const showAdminPanel = shallowRef(false)
 
-export const clips = reactive<Map<string, Clip>>(new Map())
-export const selectedClipIds = reactive<Set<Clip['id']>>(new Set())
+export const clips = reactive<Map<string, ClipClient>>(new Map())
+export const selectedClipIds = reactive<Set<string>>(new Set())
 
-export const tracks = reactive<Map<string, ClientTrack>>(new Map())
+type DragSessionBase = {
+	mouse_start_x: number
+	source_clip: ClipClient
+	// source_track_index: number ??
+	// maybe add pointerid?
+	initial_states: Array<ClipClient>
+}
+
+type ResizeDragSession = DragSessionBase &
+	(
+		| {
+				mode: 'left-resize'
+				delta_beats_start: number
+				initial_start_beat: number
+		  }
+		| {
+				mode: 'right-resize'
+				delta_beats_end: number
+				initial_end_beat: number
+		  }
+	)
+
+type MoveDragSession = DragSessionBase & {
+	mode: 'move'
+	source_track_el: HTMLElement | null
+	source_track: TrackClient
+
+	delta_beats: ClipClient['start_beat']
+	delta_tracks: number
+}
+
+type GainDragSession = DragSessionBase & {
+	mode: 'gain'
+	delta_gain: ClipClient['gain']
+	initial_gain: ClipClient['gain']
+	reset_to_default_gain: boolean
+	mouse_start_y: number
+}
+
+type FadeDragSession = DragSessionBase & {
+	mode: 'fade-in' | 'fade-out'
+	delta_fade_sec: number
+	initial_fade_sec: number
+}
+
+export type DragSession = ResizeDragSession | MoveDragSession | GainDragSession | FadeDragSession
+
+export const dragSessionMulti = ref<DragSession | null>(null)
+
+const windowFocused = useWindowFocus()
+
+watch(windowFocused, (focused) => {
+	if (!focused) {
+		dragSessionMulti.value = null
+	}
+})
+
+export const tracks = reactive<Map<string, TrackClient>>(new Map())
+
+export const trackIdsInOrderByIndex = computed((): TrackClient['id'][] => {
+	return [...tracks.values()].sort((a, b) => a.order_index - b.order_index).map((v) => v.id)
+})
 
 export const audiofiles = reactive<Map<string, AudioFile>>(new Map())
 export const audioBuffers = reactive(new Map<string, AudioBuffer>())
