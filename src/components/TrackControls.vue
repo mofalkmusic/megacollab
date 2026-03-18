@@ -94,6 +94,11 @@
 						</p>
 					</div>
 					<MenuDividerLine :distance="0.5" />
+					<button class="default-button menu-btn" @click="startTrackRename()">
+						<Pencil :size="12" style="color: var(--text-color-secondary)" />
+						<p class="small"><span class="action-key-underline">R</span>ename</p>
+					</button>
+					<MenuDividerLine :distance="0.5" />
 					<button
 						class="default-button menu-btn"
 						@mousedown="reorderTrack(id, index, 'up')"
@@ -162,7 +167,7 @@ import { useRafFn, useElementSize, useEventListener } from '@vueuse/core'
 import { vOnClickOutside } from '@vueuse/components'
 import { socket } from '@/socket/socket'
 import { useConsole } from '@/composables/useConsole'
-import { Trash2, Ellipsis, ArrowUp, ArrowDown, Plus } from 'lucide-vue-next'
+import { Trash2, Ellipsis, ArrowUp, ArrowDown, Plus, SquarePen, Pencil } from 'lucide-vue-next'
 import type { ClipClient } from '~/schema'
 import MenuDividerLine from '@/components/MenuDividerLine.vue'
 import { menuShortcutsActive } from '@/composables/useMenuShortcutLock'
@@ -281,6 +286,10 @@ watch(contextMenuTrackId, (trackId, _, onCleanup) => {
 })
 
 onBeforeUnmount(() => (menuShortcutsActive.value = false))
+
+function startTrackRename() {
+	userLog('SYSTEM', 'Sry, doesnt work yet lol')
+}
 
 const dragState = reactive<{
 	draggedTrackId: string | null
@@ -685,6 +694,12 @@ async function addTrackAbove(currentIndex: number) {
 	box-shadow: 0px 0px 1rem 0rem var(--bg-color);
 	background-color: color-mix(in lch, var(--bg-color), white 10%);
 	border: 1px solid var(--border-primary);
+}
+
+.menu-header-outer {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 0.6rem;
 }
 
 .menu-header {
