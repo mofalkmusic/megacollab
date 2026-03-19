@@ -64,7 +64,7 @@ export const ServerTrackSchema = z.object({
 	id: z.string(),
 	creator_user_id: z.string(), // foreign key
 	belongs_to_user_id: z.string().nullable(), // foreign key + null for editable by all
-	title: z.string().nullable(),
+	title: z.string().max(30).nullable(),
 	order_index: z.number(),
 	gain: z.number(),
 	created_at: isodatetime,

@@ -21,8 +21,24 @@
 			@drop.prevent="onDrop($event, index)"
 			@dragend="onDragEnd"
 		>
-			<p v-if="track.title" class="small no-select">{{ track.title }}</p>
-			<p v-else class="small dim track-title no-select">Track {{ index + 1 }}</p>
+			<div
+				class="title-container"
+				@dblclick="startTrackRename(id)"
+				:class="{ renaming: renamingTrackId === id }"
+			>
+				<input
+					v-if="renamingTrackId === id"
+					v-model="renamingTitle"
+					ref="trackTitleInput"
+					class="txt small track-title-input no-select"
+					@keydown.enter="commitRename"
+					@keydown.esc="cancelRename"
+					@blur="commitRename"
+					maxlength="30"
+				/>
+				<p v-else-if="track.title" class="small no-select title-p">{{ track.title }}</p>
+				<p v-else class="small dim track-title no-select title-p">Track {{ index + 1 }}</p>
+			</div>
 
 			<div style="grid-area: vol" class="volumeSlider" @click.stop>
 				<div
@@ -94,7 +110,7 @@
 						</p>
 					</div>
 					<MenuDividerLine :distance="0.5" />
-					<button class="default-button menu-btn" @click="startTrackRename()">
+					<button class="default-button menu-btn" @click="startTrackRename(id)">
 						<Pencil :size="12" style="color: var(--text-color-secondary)" />
 						<p class="small"><span class="action-key-underline">R</span>ename</p>
 					</button>
@@ -269,6 +285,10 @@ watch(contextMenuTrackId, (trackId, _, onCleanup) => {
 			case 'd':
 				deleteTrack(id)
 				break
+			case 'r':
+				startTrackRename(id)
+				closeContextMenu()
+				break
 			default:
 				return // don't prevent default for other keys
 		}
@@ -287,9 +307,76 @@ watch(contextMenuTrackId, (trackId, _, onCleanup) => {
 
 onBeforeUnmount(() => (menuShortcutsActive.value = false))
 
-function startTrackRename() {
-	userLog('SYSTEM', 'Sry, doesnt work yet lol')
+const renamingTrackId = shallowRef<string | null>(null)
+const renamingTitle = shallowRef('')
+const trackTitleInput = useTemplateRef<HTMLElement[]>('trackTitleInput')
+
+async function startTrackRename(trackId: string) {
+	if (renamingTrackId.value) {
+		await commitRename()
+	}
+
+	const track = tracks.get(trackId)
+	if (!track) return
+
+	renamingTrackId.value = trackId
+	renamingTitle.value = track.title ?? ''
+
+	await nextTick()
+	const input = trackTitleInput.value?.[0] as HTMLInputElement | undefined
+	if (input) {
+		input.focus()
+		input.select()
+	}
 }
+
+async function commitRename() {
+	const id = renamingTrackId.value
+	if (!id) return
+
+	const track = tracks.get(id)
+	if (!track) {
+		cancelRename()
+		return
+	}
+
+	const newTitle = renamingTitle.value.trim().slice(0, 30) || null
+	const oldTitle = track.title
+
+	if (newTitle === oldTitle) {
+		cancelRename()
+		return
+	}
+
+	// Optimistic update
+	track.title = newTitle
+	renamingTrackId.value = null
+
+	const res = await socket.emitWithAck('get:track:update', {
+		id,
+		changes: { title: newTitle },
+	})
+
+	if (res.success) return
+
+	// Rollback
+	track.title = oldTitle
+	userLog('SYSTEM', `Failed to rename track: ${res.error.message}`, {
+		textColor: 'red',
+	})
+}
+
+function cancelRename() {
+	renamingTrackId.value = null
+	renamingTitle.value = ''
+}
+
+// Ensure rename UI closes if track is deleted while editing
+watch(tracks, (newTracks) => {
+	if (renamingTrackId.value && !newTracks.has(renamingTrackId.value)) {
+		cancelRename()
+	}
+})
 
 const dragState = reactive<{
 	draggedTrackId: string | null
@@ -614,6 +701,36 @@ async function addTrackAbove(currentIndex: number) {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.title-container {
+	grid-area: title;
+	display: flex;
+	align-items: center;
+	min-width: 0;
+	height: 1.8rem;
+	position: relative;
+	cursor: text;
+}
+
+.title-p {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	width: 100%;
+}
+
+.track-title-input {
+	border: none;
+	background-color: rgba(255, 255, 255, 0.08);
+	padding: 2px 4px;
+	margin-left: -4px; /* offset padding to avoid shifting */
+	width: 100%;
+	color: inherit;
+	font-family: inherit;
+	line-height: inherit;
+	outline: none;
+	border-bottom: 1px solid var(--text-color-secondary);
 }
 
 .track-controls {
