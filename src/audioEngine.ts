@@ -89,6 +89,7 @@ type ActiveSourceWrapper = {
 	gainNode: GainNode
 	hash: string
 	gain: number
+	is_muted: boolean
 	fade_in_sec: number
 	fade_out_sec: number
 	whenToPlay: number
@@ -149,7 +150,6 @@ function getInterpolatedGain(
 
 	return maxGain
 }
-
 function applyGainAndFadeChanges(wrapper: ActiveSourceWrapper, clip: ClipClient) {
 	const now = audioContext.currentTime
 	const gain = wrapper.gainNode.gain
@@ -162,36 +162,39 @@ function applyGainAndFadeChanges(wrapper: ActiveSourceWrapper, clip: ClipClient)
 	const fadeOutStart = whenToPlay + clipDurationSec - clip.fade_out_sec
 	const fadeOutEnd = whenToPlay + clipDurationSec
 
+	const effectiveGain = clip.is_muted ? 0 : clip.gain
+
 	const currentInterpolatedGain = getInterpolatedGain(
 		now,
 		whenToPlay,
 		clipDurationSec,
 		clip.fade_in_sec,
 		clip.fade_out_sec,
-		clip.gain,
+		effectiveGain,
 	)
 
 	gain.setValueAtTime(currentInterpolatedGain, now)
 
 	const isInFadeInRegion = now < fadeInEnd && clip.fade_in_sec > 0
 	if (isInFadeInRegion) {
-		gain.linearRampToValueAtTime(clip.gain, Math.max(0, fadeInEnd))
+		gain.linearRampToValueAtTime(effectiveGain, Math.max(0, fadeInEnd))
 	}
 
 	const hasUpcomingFadeOut = fadeOutEnd > now && clip.fade_out_sec > 0
 	if (hasUpcomingFadeOut) {
 		const startFadeOutAt = Math.max(now + QUICK_FADE_SEC, fadeOutStart)
 		if (now < fadeOutStart) {
-			gain.setValueAtTime(clip.gain, Math.max(0, startFadeOutAt))
+			gain.setValueAtTime(effectiveGain, Math.max(0, startFadeOutAt))
 		}
 		gain.linearRampToValueAtTime(0, Math.max(0, fadeOutEnd))
 	} else if (!isInFadeInRegion && now < fadeOutStart) {
 		// handle sustain if not in fade out yet
-		gain.linearRampToValueAtTime(clip.gain, Math.max(0, now + QUICK_FADE_SEC))
+		gain.linearRampToValueAtTime(effectiveGain, Math.max(0, now + QUICK_FADE_SEC))
 	}
 
 	// keep wrapper in sync ofc :D
 	wrapper.gain = clip.gain
+	wrapper.is_muted = clip.is_muted
 	wrapper.fade_in_sec = clip.fade_in_sec
 	wrapper.fade_out_sec = clip.fade_out_sec
 }
@@ -228,7 +231,7 @@ function reconcileActiveSources() {
 		const fadesChanged =
 			wrapper.fade_in_sec !== clip.fade_in_sec || wrapper.fade_out_sec !== clip.fade_out_sec
 
-		if (gainChanged || fadesChanged) {
+		if (gainChanged || fadesChanged || wrapper.is_muted !== clip.is_muted) {
 			applyGainAndFadeChanges(wrapper, clip)
 		}
 	}
@@ -503,13 +506,15 @@ function scheduleClipSource(
 	const fullClipDurationSec = beats_to_sec(clip.end_beat - clip.start_beat)
 
 	const now = audioContext.currentTime
+	const effectiveGain = clip.is_muted ? 0 : clip.gain
+
 	const startGain = getInterpolatedGain(
 		now,
 		whenToPlay,
 		fullClipDurationSec,
 		clip.fade_in_sec,
 		clip.fade_out_sec,
-		clip.gain,
+		effectiveGain,
 	)
 
 	clipGainNode.gain.setValueAtTime(startGain, Math.max(0, now))
@@ -519,12 +524,12 @@ function scheduleClipSource(
 	const fadeOutEnd = whenToPlay + fullClipDurationSec
 
 	if (clip.fade_in_sec > 0 && fadeInEnd > now) {
-		clipGainNode.gain.linearRampToValueAtTime(clip.gain, Math.max(0, fadeInEnd))
+		clipGainNode.gain.linearRampToValueAtTime(effectiveGain, Math.max(0, fadeInEnd))
 	}
 
 	if (clip.fade_out_sec > 0 && fadeOutEnd > now) {
 		if (now < fadeOutStart) {
-			clipGainNode.gain.setValueAtTime(clip.gain, Math.max(0, fadeOutStart))
+			clipGainNode.gain.setValueAtTime(effectiveGain, Math.max(0, fadeOutStart))
 		}
 		clipGainNode.gain.linearRampToValueAtTime(0, Math.max(0, fadeOutEnd))
 	}
@@ -566,6 +571,7 @@ function scheduleClipSource(
 		gainNode: clipGainNode,
 		hash,
 		gain: clip.gain,
+		is_muted: clip.is_muted,
 		fade_in_sec: clip.fade_in_sec,
 		fade_out_sec: clip.fade_out_sec,
 		whenToPlay,

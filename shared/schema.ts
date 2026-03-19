@@ -36,6 +36,7 @@ export const ServerClipSchema = z.object({
 	end_beat: z.number(),
 	offset_seconds: z.number(),
 	gain: z.number(),
+	is_muted: z.boolean(),
 	fade_in_sec: z.number(),
 	fade_out_sec: z.number(),
 	created_at: isodatetime,

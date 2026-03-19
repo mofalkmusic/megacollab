@@ -12,12 +12,14 @@
 			gainHandleStyle,
 			fadeInWidthPx,
 			fadeOutWidthPx,
+			displayState.is_muted,
 		]"
 		ref="clipWrapper"
 		class="outmostClipWrapper clip"
 		:class="{
 			selected: isSelected,
 			'is-dragging': isDragging,
+			muted: displayState.is_muted,
 		}"
 		:style="wrapperStyles"
 		@contextmenu.prevent="deleteClip"
@@ -352,6 +354,7 @@ const unifiedClipState = computed(() => {
 			gain: props.clip.gain,
 			fade_in_sec: props.clip.fade_in_sec,
 			fade_out_sec: props.clip.fade_out_sec,
+			is_muted: props.clip.is_muted,
 		}
 
 	if (typeof props.customWidthPx !== 'number')
@@ -365,6 +368,7 @@ const unifiedClipState = computed(() => {
 		gain: CLIP_PREVIEW_GAIN,
 		fade_in_sec: 0,
 		fade_out_sec: 0,
+		is_muted: false,
 	}
 })
 
@@ -377,6 +381,7 @@ const displayState = computed(
 		gain: ClipClient['gain']
 		fade_in_sec: ClipClient['fade_in_sec']
 		fade_out_sec: ClipClient['fade_out_sec']
+		is_muted: ClipClient['is_muted']
 	} => {
 		if (!props.clip) return unifiedClipState.value
 		if (!props.clip.id) return unifiedClipState.value
@@ -1299,7 +1304,10 @@ async function drawWaveform() {
 				poolPreviewPlayingAudioId.value == props.audiofile.id &&
 				poolPreviewPlayingAudioId.value
 
-			const color = isSelected.value ? isSelectedWaveformColor : props.audiofile.color
+			const color =
+				isSelected.value && !displayState.value.is_muted
+					? isSelectedWaveformColor
+					: props.audiofile.color
 
 			if (!isCurrentPoolFile) {
 				// Mix with black (0.2 = 20% black)
@@ -1351,7 +1359,9 @@ watchThrottled(
 	{ immediate: false, throttle: 200 },
 )
 
-watch(isSelected, () => drawWaveform(), { immediate: false }) // no throttle
+watch([isSelected, () => displayState.value.is_muted], () => drawWaveform(), {
+	immediate: false,
+})
 
 function getWaveform(
 	audiofile: AudioFile,
@@ -1390,13 +1400,17 @@ function getWaveform(
 	box-shadow: 0 0 0 1px #ff4444;
 }
 
-.outmostClipWrapper.selected .clipHeader {
+.outmostClipWrapper.selected:not(.muted) .clipHeader {
 	background-color: #ff4444 !important;
 	color: white !important;
 }
 
-.outmostClipWrapper.selected .outerClipCanvasWrap {
+.outmostClipWrapper.selected:not(.muted) .outerClipCanvasWrap {
 	background-color: rgba(255, 25, 25, 0.2) !important;
+}
+
+.outmostClipWrapper.muted > * {
+	filter: grayscale(1) brightness(0.4);
 }
 
 .clipHeader {
@@ -1473,7 +1487,7 @@ canvas {
 	color: color-mix(in lch, var(--_color), var(--text-color-primary) 30%);
 }
 
-.gainDisplay.selected {
+.gainDisplay.selected:not(.muted) {
 	color: color-mix(in lch, #ff4444, var(--text-color-primary) 30%);
 }
 

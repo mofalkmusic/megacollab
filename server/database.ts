@@ -253,13 +253,14 @@ async function createClip(
 		offset_seconds,
 		fade_in_sec,
 		fade_out_sec,
+		is_muted,
 	} = clip
 
 	const rows = await queryFn<ClipClient>(
 		`
 			WITH inserted AS (
-				INSERT INTO ${CLIPS_TABLE} (id, creator_user_id, track_id, audio_file_id, end_beat, start_beat, gain, offset_seconds, fade_in_sec, fade_out_sec) 
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+				INSERT INTO ${CLIPS_TABLE} (id, creator_user_id, track_id, audio_file_id, end_beat, start_beat, gain, offset_seconds, fade_in_sec, fade_out_sec, is_muted) 
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 				RETURNING *
 			)
 			SELECT 
@@ -280,6 +281,7 @@ async function createClip(
 			offset_seconds,
 			fade_in_sec,
 			fade_out_sec,
+			is_muted,
 		],
 	)
 

@@ -284,8 +284,8 @@ import UserCursors from '@/components/UserCursors.vue'
 import TimelineHeader from '@/components/TimelineHeader.vue'
 import TrackControls from '@/components/TrackControls.vue'
 import { px_to_beats, quantize_beats, sec_to_beats } from '@/utils/mathUtils'
-
-import type { ClipClient } from '~/schema'
+import type { ClipClient, ClipUpdate } from '~/schema'
+import { updateClips } from '@/socket/eventHandlers/clip_update'
 import ClipInstance from '@/components/ClipInstance.vue'
 import AddTrack from '@/components/TrackAddButton.vue'
 import {
@@ -484,6 +484,50 @@ async function handleDownload() {
 	}
 }
 
+async function toggleMuteSelectedClips() {
+	if (selectedClipIds.size === 0) return
+
+	const selectedClips: ClipClient[] = []
+	for (const id of selectedClipIds) {
+		const c = clips.get(id)
+		if (c) selectedClips.push(c)
+	}
+
+	if (selectedClips.length === 0) return
+
+	const anyUnmuted = selectedClips.some((c) => !c.is_muted)
+	const newIsMuted = anyUnmuted
+
+	// optimistic
+	const initial = new Map<string, boolean>()
+
+	for (const clip of selectedClips) {
+		initial.set(clip.id, clip.is_muted)
+		clip.is_muted = newIsMuted
+	}
+
+	const updates = selectedClips.map((clip) => ({
+		id: clip.id,
+		changes: { is_muted: newIsMuted } satisfies ClipUpdate,
+	}))
+
+	try {
+		const res = await socket.emitWithAck('get:clip:update', updates)
+		if (res.success) {
+			updateClips(res.data)
+		} else {
+			throw new Error(res.error.message)
+		}
+	} catch (err) {
+		userLog('SYSTEM', 'Failed to toggle mute state.')
+
+		for (const clip of selectedClips) {
+			const old = initial.get(clip.id)
+			if (old !== undefined) clip.is_muted = old
+		}
+	}
+}
+
 /*
  * Globally make it so that buttons are not focusable.
  * Handy for spacebar and such accidentally focusing buttons
@@ -514,6 +558,10 @@ useEventListener('keydown', (event) => {
 
 	if (event.code === 'KeyL') {
 		toggleLoop()
+	}
+
+	if (event.code === 'KeyM') {
+		toggleMuteSelectedClips()
 	}
 })
 
@@ -738,6 +786,7 @@ const ghostClip = computed<ClipClient | null>(() => {
 		offset_seconds: 0,
 		fade_in_sec: 0,
 		fade_out_sec: 0,
+		is_muted: false,
 		gain: 1,
 		created_at: new Date().toISOString(),
 		// peaks: ghostAudioFile.value.peaks // Clip doesn't have peaks, AudioFile does.
@@ -845,6 +894,7 @@ watch(
 					offset_seconds: 0,
 					fade_in_sec: 0,
 					fade_out_sec: 0,
+					is_muted: false,
 					gain: 1,
 					created_at: new Date().toISOString(),
 				}
