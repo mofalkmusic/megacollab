@@ -287,7 +287,6 @@ watch(contextMenuTrackId, (trackId, _, onCleanup) => {
 				break
 			case 'r':
 				startTrackRename(id)
-				closeContextMenu()
 				break
 			default:
 				return // don't prevent default for other keys
@@ -312,6 +311,7 @@ const renamingTitle = shallowRef('')
 const trackTitleInput = useTemplateRef<HTMLElement[]>('trackTitleInput')
 
 async function startTrackRename(trackId: string) {
+	closeContextMenu()
 	if (renamingTrackId.value) {
 		await commitRename()
 	}
