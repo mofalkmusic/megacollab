@@ -19,8 +19,29 @@ import { nanoid } from 'nanoid'
 import { DEV_DATABASE_FOLDER } from './constants'
 import z from 'zod'
 
-// todo: update all the hanlders to not return safely when they
-// dont need to and espeically when providing a user error feedback would make sense!
+export class TrackLimitError extends Error {
+	constructor(max: number) {
+		super(`Track limit reached (max ${max})`)
+		this.name = 'TrackLimitError'
+	}
+}
+
+export class NotFoundError extends Error {
+	constructor(entity: string, id: string) {
+		super(`${entity} with id ${id} not found`)
+		this.name = 'NotFoundError'
+	}
+}
+
+export class DatabaseError extends Error {
+	constructor(
+		message: string,
+		public originalError?: unknown,
+	) {
+		super(message)
+		this.name = 'DatabaseError'
+	}
+}
 
 const SessionSchema = z.object({
 	session_id: z.string(),
@@ -91,12 +112,12 @@ export const db = {
 	updateClips,
 	updateExistingUsername,
 	updateDownloadQuality,
-	makeNewIfNotExistUserSafe,
+	makeNewIfNotExistUser,
 	saveSession,
-	getUserFromSessionIdSafe,
+	getUserFromSessionId,
 	getOrCreateDevUser,
 	deleteAudioFile,
-	deleteSessionSafe,
+	deleteSession,
 	deleteTrack,
 	banUser,
 	unbanUser,
@@ -191,7 +212,7 @@ async function createTrack(
 		[id, creator_user_id, title, belongs_to_user_id, gain, MAX_TRACKS, finalOrderIndex],
 	)
 
-	if (!rows.length) throw new Error(`Track limit reached (max ${MAX_TRACKS})`)
+	if (!rows.length) throw new TrackLimitError(MAX_TRACKS)
 	return rows[0]!
 }
 
@@ -235,7 +256,7 @@ async function updateTrack(id: string, changes: TrackUpdate): Promise<TrackClien
 
 	const rows = await queryFn<TrackClient>(sql, [id, ...values])
 
-	if (!rows.length) throw new Error(`Failed to update track ${id}`)
+	if (!rows.length) throw new NotFoundError('track', id)
 	return rows[0]!
 }
 
@@ -365,7 +386,7 @@ async function updateClips(updates: { id: string; changes: ClipUpdate }[]): Prom
 
 		const rows = await queryFn<ClipClient>(sql, [id, ...values])
 
-		if (!rows.length) throw new Error(`Failed to update clip ${id}`)
+		if (!rows.length) throw new NotFoundError('clip', id)
 		results.push(rows[0]!)
 	}
 
@@ -389,19 +410,17 @@ async function deleteClip(id: string): Promise<ClipClient> {
 		[id],
 	)
 
-	if (!rows.length) throw new Error(`Failed to delete clip ${id}`)
+	if (!rows.length) throw new NotFoundError('clip', id)
 	const result = rows[0]!
 
 	return result
 }
 
-async function saveAudioFile(audioFile: ServerAudioFile): Promise<ClientAudioFile | null> {
-	try {
-		const { id, creator_user_id, file_name, public_url, duration, created_at, color } =
-			audioFile
+async function saveAudioFile(audioFile: ServerAudioFile): Promise<ClientAudioFile> {
+	const { id, creator_user_id, file_name, public_url, duration, created_at, color } = audioFile
 
-		const rows = await queryFn<ClientAudioFile>(
-			`
+	const rows = await queryFn<ClientAudioFile>(
+		`
 			WITH inserted AS (
 				INSERT INTO ${AUDIOFILES_TABLE} (id, creator_user_id, file_name, public_url, duration, created_at, color) 
 				VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -414,25 +433,41 @@ async function saveAudioFile(audioFile: ServerAudioFile): Promise<ClientAudioFil
 			LEFT JOIN ${USERS_TABLE} AS users
 				ON inserted.creator_user_id = users.id
 		`,
-			[id, creator_user_id, file_name, public_url, duration, created_at, color],
-		)
+		[id, creator_user_id, file_name, public_url, duration, created_at, color],
+	)
 
-		if (!rows.length) return null
+	if (!rows.length) throw new DatabaseError('Failed to save audio file')
 
-		const result = rows[0]!
-		audioFileCache.set(result.id, result)
-		return result
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return null
-	}
+	const result = rows[0]!
+	audioFileCache.set(result.id, result)
+	return result
 }
 
-async function makeNewIfNotExistUserSafe(
+async function makeNewIfNotExistUser(
 	user: Omit<User, 'created_at' | 'download_quality'>,
-): Promise<User | null> {
-	try {
-		const {
+): Promise<User> {
+	const {
+		id,
+		display_name,
+		provider,
+		provider_id,
+		provider_email,
+		roles,
+		color,
+		banned_at,
+		ban_reason,
+	} = user
+
+	const rows = await queryFn<User>(
+		`
+			INSERT INTO ${USERS_TABLE} (id, display_name, provider, provider_id, provider_email, roles, color, banned_at, ban_reason) 
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			ON CONFLICT (provider, provider_id) DO UPDATE
+				SET
+					provider_email=EXCLUDED.provider_email
+			RETURNING *
+		`,
+		[
 			id,
 			display_name,
 			provider,
@@ -442,38 +477,13 @@ async function makeNewIfNotExistUserSafe(
 			color,
 			banned_at,
 			ban_reason,
-		} = user
+		],
+	)
 
-		const rows = await queryFn<User>(
-			`
-			INSERT INTO ${USERS_TABLE} (id, display_name, provider, provider_id, provider_email, roles, color, banned_at, ban_reason) 
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-			ON CONFLICT (provider, provider_id) DO UPDATE
-				SET
-					provider_email=EXCLUDED.provider_email
-			RETURNING *
-		`,
-			[
-				id,
-				display_name,
-				provider,
-				provider_id,
-				provider_email,
-				roles,
-				color,
-				banned_at,
-				ban_reason,
-			],
-		)
+	if (!rows.length) throw new DatabaseError('Failed to create or update user')
 
-		if (!rows.length) return null
-
-		const result = rows[0]!
-		return result
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return null
-	}
+	const result = rows[0]!
+	return result
 }
 
 async function saveSession(session: Omit<Session, 'created_at'>): Promise<Session> {
@@ -494,44 +504,34 @@ async function saveSession(session: Omit<Session, 'created_at'>): Promise<Sessio
 	return result
 }
 
-async function deleteSessionSafe(session_id: string): Promise<Session | null> {
-	try {
-		const rows = await queryFn<Session>(
-			`
+async function deleteSession(session_id: string): Promise<Session> {
+	const rows = await queryFn<Session>(
+		`
 			DELETE FROM ${SESSIONS_TABLE} WHERE session_id = $1 RETURNING *`,
-			[session_id],
-		)
+		[session_id],
+	)
 
-		if (!rows.length) return null
+	if (!rows.length) throw new NotFoundError('session', session_id)
 
-		const result = rows[0]!
-		return result
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return null
-	}
+	const result = rows[0]!
+	return result
 }
 
-async function getUserFromSessionIdSafe(session_id: string): Promise<User | null> {
-	try {
-		const rows = await queryFn<User>(
-			`
+async function getUserFromSessionId(session_id: string): Promise<User> {
+	const rows = await queryFn<User>(
+		`
 			SELECT u.* 
 			FROM ${SESSIONS_TABLE} AS s
 			JOIN ${USERS_TABLE} AS u ON s.user_id = u.id
 			WHERE s.session_id = $1 AND s.created_at > NOW() - INTERVAL '7 days'
 		`,
-			[session_id],
-		)
+		[session_id],
+	)
 
-		if (!rows.length) return null
+	if (!rows.length) throw new NotFoundError('session', session_id)
 
-		const result = rows[0]!
-		return result
-	} catch (err) {
-		if (IN_DEV_MODE) print.db('error:', err)
-		return null
-	}
+	const result = rows[0]!
+	return result
 }
 
 async function updateExistingUsername(id: string, username: string): Promise<User['display_name']> {
@@ -545,7 +545,7 @@ async function updateExistingUsername(id: string, username: string): Promise<Use
 		[id, username],
 	)
 
-	if (!rows.length) throw new Error('Failed to update username')
+	if (!rows.length) throw new NotFoundError('user', id)
 	const result = rows[0]!
 
 	return result.display_name
@@ -565,7 +565,7 @@ async function updateDownloadQuality(
 		[id, quality],
 	)
 
-	if (!rows.length) throw new Error('Failed to update download quality')
+	if (!rows.length) throw new NotFoundError('user', id)
 	const result = rows[0]!
 
 	return result.download_quality
@@ -634,35 +634,30 @@ async function migrateAndSeedDb() {
 async function getOrCreateDevUser(): Promise<User | null> {
 	if (!IN_DEV_MODE) return null
 
-	try {
-		// Try to find the dev user first
-		const rows = await queryFn<User>(
-			`SELECT * FROM ${USERS_TABLE} WHERE provider_id = $1 AND provider = $2`,
-			['dev-user-id', 'dev'],
-		)
+	// Try to find the dev user first
+	const rows = await queryFn<User>(
+		`SELECT * FROM ${USERS_TABLE} WHERE provider_id = $1 AND provider = $2`,
+		['dev-user-id', 'dev'],
+	)
 
-		if (rows.length > 0) {
-			return rows[0]!
-		}
-
-		// Create if not exists
-		const newUser: Omit<User, 'created_at' | 'download_quality'> = {
-			id: nanoid(),
-			display_name: 'Dev User',
-			provider: 'dev',
-			provider_id: 'dev-user-id',
-			provider_email: 'dev@local.host',
-			roles: ['admin', 'regular'],
-			color: randomSafeHexColor(),
-			banned_at: null,
-			ban_reason: null,
-		}
-
-		return await makeNewIfNotExistUserSafe(newUser)
-	} catch (err) {
-		print.db('error creating dev user:', err)
-		return null
+	if (rows.length > 0) {
+		return rows[0]!
 	}
+
+	// Create if not exists
+	const newUser: Omit<User, 'created_at' | 'download_quality'> = {
+		id: nanoid(),
+		display_name: 'Dev User',
+		provider: 'dev',
+		provider_id: 'dev-user-id',
+		provider_email: 'dev@local.host',
+		roles: ['admin', 'regular'],
+		color: randomSafeHexColor(),
+		banned_at: null,
+		ban_reason: null,
+	}
+
+	return await makeNewIfNotExistUser(newUser)
 }
 
 async function deleteAudioFile(
@@ -688,7 +683,7 @@ async function deleteAudioFile(
 		[id],
 	)
 
-	if (!rows.length) throw new Error(`Failed to delete audio file ${id}`)
+	if (!rows.length) throw new NotFoundError('audio file', id)
 	const row = rows[0]!
 
 	const { deleted_clip_ids, ...fileData } = row
@@ -722,7 +717,7 @@ async function deleteTrack(
 		[id],
 	)
 
-	if (!rows.length) throw new Error(`Failed to delete track ${id}`)
+	if (!rows.length) throw new NotFoundError('track', id)
 	const row = rows[0]!
 
 	const { deleted_clip_ids, ...trackData } = row
@@ -747,14 +742,20 @@ async function banUser(
 	const rows = await queryFn<Pick<User, 'display_name'>>(
 		`
 		UPDATE ${USERS_TABLE}
-		SET banned_at = NOW(), ban_reason = $2
+		SET 
+			banned_at = NOW(), 
+			ban_reason = $2,
+			roles = CASE 
+				WHEN NOT ('banned' = ANY(roles)) THEN array_append(roles, 'banned')
+				ELSE roles
+			END
 		WHERE id = $1
 		RETURNING display_name
 	`,
 		[userId, reason],
 	)
 
-	if (!rows.length) throw new Error(`Failed to ban user ${userId}`)
+	if (!rows.length) throw new NotFoundError('user', userId)
 	const row = rows[0]!
 
 	let deleted_clips: ClipClient['id'][] = []
@@ -792,14 +793,17 @@ async function unbanUser(userId: string): Promise<User['display_name']> {
 	const rows = await queryFn<Pick<User, 'display_name'>>(
 		`
 		UPDATE ${USERS_TABLE}
-		SET banned_at = NULL, ban_reason = NULL
+		SET 
+			banned_at = NULL, 
+			ban_reason = NULL,
+			roles = array_remove(roles, 'banned')
 		WHERE id = $1
 		RETURNING display_name
 	`,
 		[userId],
 	)
 
-	if (!rows.length) throw new Error(`Failed to unban user ${userId}`)
+	if (!rows.length) throw new NotFoundError('user', userId)
 	const row = rows[0]!
 
 	return row.display_name

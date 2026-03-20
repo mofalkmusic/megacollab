@@ -1,11 +1,11 @@
 import { getSignedCookie, setSignedCookie } from 'hono/cookie'
-import { db } from './database'
+import { db, NotFoundError } from './database'
 import type { Socket } from 'socket.io'
 import type { User } from '~/schema'
 import type { Context } from 'hono'
 import z from 'zod'
 import { nanoid } from 'nanoid'
-import { randomSafeHexColor } from './utils'
+import { print, randomSafeHexColor } from './utils'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
 
 const IN_DEV_MODE = Bun.env['ENV'] === 'development'
@@ -43,8 +43,16 @@ export async function resolveConnectionUser(socket: Socket): Promise<User | null
 		)
 
 		if (sessionId) {
-			const user = await db.getUserFromSessionIdSafe(sessionId)
-			if (user) return user
+			try {
+				const user = await db.getUserFromSessionId(sessionId)
+				return user
+			} catch (err) {
+				if (err instanceof NotFoundError) {
+					// session not found or invalid
+				} else {
+					print.db('error resolving user from session:', err)
+				}
+			}
 		}
 	}
 
@@ -127,7 +135,11 @@ export async function getSignOut(c: Context) {
 		sameSite: 'lax',
 	})
 
-	await db.deleteSessionSafe(sessionId)
+	try {
+		await db.deleteSession(sessionId)
+	} catch (err) {
+		if (IN_DEV_MODE) print.db('error deleting session:', err)
+	}
 
 	const params = new URLSearchParams({
 		success: "You've been successfully signed out.",
@@ -309,9 +321,11 @@ export async function handleTwitchOAuthCallback(c: Context) {
 			ban_reason: null,
 		}
 
-		const completeUser = await db.makeNewIfNotExistUserSafe(newUser)
-
-		if (!completeUser) {
+		let completeUser: User
+		try {
+			completeUser = await db.makeNewIfNotExistUser(newUser)
+		} catch (err) {
+			print.db('error creating user:', err)
 			const params = new URLSearchParams({
 				error: 'user_creation_failed',
 				error_description: 'Failed to create user. Please try again.',
@@ -319,9 +333,20 @@ export async function handleTwitchOAuthCallback(c: Context) {
 			return c.redirect(`/login?${params.toString()}`, 302)
 		}
 
+		console.log('completeUser', completeUser)
+
 		const sessionId = nanoid(64)
 
-		await db.saveSession({ session_id: sessionId, user_id: completeUser.id })
+		try {
+			await db.saveSession({ session_id: sessionId, user_id: completeUser.id })
+		} catch (err) {
+			print.db('error saving session:', err)
+			const params = new URLSearchParams({
+				error: 'session_save_failed',
+				error_description: 'Failed to save session. Please try again.',
+			})
+			return c.redirect(`/login?${params.toString()}`, 302)
+		}
 
 		await setSignedCookie(c, COOKIE_NAME, sessionId, COOKIE_SIGNING_SECRET, {
 			httpOnly: true,
@@ -458,9 +483,11 @@ export async function handleDiscordOAuthCallback(c: Context) {
 			ban_reason: null,
 		}
 
-		const completeUser = await db.makeNewIfNotExistUserSafe(newUser)
-
-		if (!completeUser) {
+		let completeUser: User
+		try {
+			completeUser = await db.makeNewIfNotExistUser(newUser)
+		} catch (err) {
+			print.db('error creating user:', err)
 			const params = new URLSearchParams({
 				error: 'user_creation_failed',
 				error_description: 'Failed to create user. Please try again.',
@@ -470,7 +497,16 @@ export async function handleDiscordOAuthCallback(c: Context) {
 
 		const sessionId = nanoid(64)
 
-		await db.saveSession({ session_id: sessionId, user_id: completeUser.id })
+		try {
+			await db.saveSession({ session_id: sessionId, user_id: completeUser.id })
+		} catch (err) {
+			print.db('error saving session:', err)
+			const params = new URLSearchParams({
+				error: 'session_save_failed',
+				error_description: 'Failed to save session. Please try again.',
+			})
+			return c.redirect(`/login?${params.toString()}`, 302)
+		}
 
 		await setSignedCookie(c, COOKIE_NAME, sessionId, COOKIE_SIGNING_SECRET, {
 			httpOnly: true,

@@ -20,7 +20,7 @@ import {
 } from './auth'
 import { Server as SocketIOServer } from 'socket.io'
 import { Server as BunEngine } from '@socket.io/bun-engine'
-import { db } from './database'
+import { db, TrackLimitError, NotFoundError } from './database'
 import {
 	validateIncomingEvents,
 	type ClientToServerEvents,
@@ -110,6 +110,7 @@ io.on('connection', async (socket) => {
 		}
 
 		socket.data.user = user
+		socket.data.userId = user.id
 
 		validateIncomingEvents(socket)
 
@@ -254,17 +255,26 @@ io.on('connection', async (socket) => {
 				color: pending.color,
 			}
 
-			await db.saveAudioFile(audioFile)
+			try {
+				await db.saveAudioFile(audioFile)
 
-			callback({
-				success: true,
-				data: audioFile,
-			})
+				callback({
+					success: true,
+					data: audioFile,
+				})
 
-			socket.broadcast.emit('audiofile:create', audioFile)
+				socket.broadcast.emit('audiofile:create', audioFile)
+			} catch (err) {
+				const message = err instanceof Error ? err.message : 'Failed to save audio file'
+				callback({
+					success: false,
+					error: {
+						status: 'SERVER_ERROR',
+						message: `Database error: ${message}`,
+					},
+				})
+			}
 		})
-
-		// todo: actually add the banned role on ban :D
 
 		socket.on('get:track:delete', async (data, callback) => {
 			const banned = checkBannedStatusUser(user)
@@ -291,12 +301,13 @@ io.on('connection', async (socket) => {
 					deleted_clips,
 				})
 			} catch (err) {
-				const error = err instanceof Error ? err.message : 'Unknown error'
+				const isNotFound = err instanceof NotFoundError
+				const message = err instanceof Error ? err.message : 'Unknown error'
 				callback({
 					success: false,
 					error: {
-						status: 'SERVER_ERROR',
-						message: `Database error: ${error}`,
+						status: isNotFound ? 'BAD_REQUEST' : 'SERVER_ERROR',
+						message: isNotFound ? message : `Database error: ${message}`,
 					},
 				})
 			}
@@ -326,27 +337,25 @@ io.on('connection', async (socket) => {
 
 			try {
 				track = await db.createTrack(newTrack, data?.order_index)
+
+				callback({
+					success: true,
+					data: track,
+				})
+
+				socket.broadcast.emit('track:create', track)
 			} catch (err) {
-				const error = err instanceof Error ? err.message : 'Unknown error'
-				const isLimitError = error.includes('Track limit reached') // todo: create proper error handling & types. for now this is fine...
+				const isLimitError = err instanceof TrackLimitError
+				const message = err instanceof Error ? err.message : String(err)
 
 				callback({
 					success: false,
 					error: {
 						status: isLimitError ? 'BAD_REQUEST' : 'SERVER_ERROR',
-						message: isLimitError ? error : `Database error: ${error}`,
+						message: isLimitError ? message : `Database error: ${message}`,
 					},
 				})
-
-				return
 			}
-
-			callback({
-				success: true,
-				data: track,
-			})
-
-			socket.broadcast.emit('track:create', track)
 		})
 
 		socket.on('get:track:update', async (data, callback) => {
@@ -387,12 +396,13 @@ io.on('connection', async (socket) => {
 
 				socket.broadcast.emit('track:update', track)
 			} catch (err) {
-				const error = err instanceof Error ? err.message : 'Unknown error'
+				const isNotFound = err instanceof NotFoundError
+				const message = err instanceof Error ? err.message : 'Unknown error'
 				callback({
 					success: false,
 					error: {
-						status: 'SERVER_ERROR',
-						message: `Database error: ${error}`,
+						status: isNotFound ? 'BAD_REQUEST' : 'SERVER_ERROR',
+						message: isNotFound ? message : `Database error: ${message}`,
 					},
 				})
 			}
@@ -453,12 +463,12 @@ io.on('connection', async (socket) => {
 					userId: user.id,
 				})
 			} catch (err) {
-				const error = err instanceof Error ? err.message : 'Unknown error'
+				const message = err instanceof Error ? err.message : 'Unknown error'
 				callback({
 					success: false,
 					error: {
 						status: 'SERVER_ERROR',
-						message: `Database error: ${error}`,
+						message: `Database error: ${message}`,
 					},
 				})
 			}
@@ -498,12 +508,13 @@ io.on('connection', async (socket) => {
 					},
 				})
 			} catch (err) {
-				const error = err instanceof Error ? err.message : 'Unknown error'
+				const isNotFound = err instanceof NotFoundError
+				const message = err instanceof Error ? err.message : 'Unknown error'
 				callback({
 					success: false,
 					error: {
-						status: 'SERVER_ERROR',
-						message: `Database error: ${error}`,
+						status: isNotFound ? 'BAD_REQUEST' : 'SERVER_ERROR',
+						message: isNotFound ? message : `Database error: ${message}`,
 					},
 				})
 			}
@@ -562,12 +573,13 @@ io.on('connection', async (socket) => {
 					})
 				}
 			} catch (err) {
-				const error = err instanceof Error ? err.message : 'Unknown error'
+				const isNotFound = err instanceof NotFoundError
+				const message = err instanceof Error ? err.message : 'Unknown error'
 				callback({
 					success: false,
 					error: {
-						status: 'SERVER_ERROR',
-						message: `Database error: ${error}`,
+						status: isNotFound ? 'BAD_REQUEST' : 'SERVER_ERROR',
+						message: isNotFound ? message : `Database error: ${message}`,
 					},
 				})
 			}
@@ -630,12 +642,13 @@ io.on('connection', async (socket) => {
 					new_display_name: updatedUsername,
 				})
 			} catch (err) {
-				const error = err instanceof Error ? err.message : 'Unknown error'
+				const isNotFound = err instanceof NotFoundError
+				const message = err instanceof Error ? err.message : 'Unknown error'
 				callback({
 					success: false,
 					error: {
-						status: 'SERVER_ERROR',
-						message: `Database error: ${error}`,
+						status: isNotFound ? 'BAD_REQUEST' : 'SERVER_ERROR',
+						message: isNotFound ? message : `Database error: ${message}`,
 					},
 				})
 			}
@@ -674,12 +687,13 @@ io.on('connection', async (socket) => {
 
 				user.download_quality = updatedQuality
 			} catch (err) {
-				const error = err instanceof Error ? err.message : 'Unknown error'
+				const isNotFound = err instanceof NotFoundError
+				const message = err instanceof Error ? err.message : 'Unknown error'
 				callback({
 					success: false,
 					error: {
-						status: 'SERVER_ERROR',
-						message: `Database error: ${error}`,
+						status: isNotFound ? 'BAD_REQUEST' : 'SERVER_ERROR',
+						message: isNotFound ? message : `Database error: ${message}`,
 					},
 				})
 			}
@@ -768,12 +782,13 @@ io.on('connection', async (socket) => {
 				)
 				await store.deleteIfExists(key)
 			} catch (err) {
-				const error = err instanceof Error ? err.message : 'Unknown error'
+				const isNotFound = err instanceof NotFoundError
+				const message = err instanceof Error ? err.message : 'Unknown error'
 				callback({
 					success: false,
 					error: {
-						status: 'SERVER_ERROR',
-						message: `Database error: ${error}`,
+						status: isNotFound ? 'BAD_REQUEST' : 'SERVER_ERROR',
+						message: isNotFound ? message : `Database error: ${message}`,
 					},
 				})
 			}
@@ -804,7 +819,6 @@ io.on('connection', async (socket) => {
 				const users = await db.getAllUsers()
 				callback({
 					success: true,
-					// todo: ensure userpositions is cleaned up accordingly
 					data: users.map((u) => ({ ...u, is_active: userPositions.has(u.id) })),
 				})
 			} catch (err) {
@@ -847,6 +861,8 @@ io.on('connection', async (socket) => {
 			try {
 				const result = await db.banUser(userId, reason, deleteContent)
 				callback({ success: true, data: null })
+
+				userPositions.delete(userId)
 
 				socket.broadcast.emit('user:ban_status', {
 					user_id: userId,
@@ -1034,13 +1050,12 @@ app.get('/api/auth/verify', async (c) => {
 		return c.text('Unauthorized', 401)
 	}
 
-	const user = await db.getUserFromSessionIdSafe(sessionId)
-
-	if (!user) {
+	try {
+		await db.getUserFromSessionId(sessionId)
+		return c.text('Authorized', 200)
+	} catch (err) {
 		return c.text('Unauthorized', 401)
 	}
-
-	return c.text('Authorized', 200)
 })
 
 app.get('/api/auth/signout', getSignOut)
