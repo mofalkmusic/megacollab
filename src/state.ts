@@ -153,7 +153,7 @@ watchDebounced(
 )
 
 export const maxPxPerBeat = 120 as const
-export const minPxPerBeat = 8 as const
+export const minPxPerBeat = 4 as const
 export const pxTrackHeight = 70
 export const bpm = 128
 export const AUDIO_POOL_WIDTH = 160 as const

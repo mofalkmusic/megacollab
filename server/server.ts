@@ -1041,6 +1041,12 @@ app.get('/api/auth/twitch/url', getTwitchOAuthUrl)
 app.get('/api/auth/twitch/callback', handleTwitchOAuthCallback)
 
 const DIST_DIR = join(import.meta.dir, '..', 'dist')
+
+app.use('/fonts/*', async (c, next) => {
+	c.header('Cache-Control', 'public, max-age=7884000, immutable') // 1/4 year
+	await next()
+})
+
 app.use('/*', serveStatic({ root: DIST_DIR }))
 
 // - It's not an API route

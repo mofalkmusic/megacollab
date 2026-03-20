@@ -42,8 +42,8 @@ export function useTimelineGrid() {
 			)`
 		})
 
-		// bg shading every 4beats
-		const barPx = 4 * pxPerBeat.value
+		// bg shading
+		const barPx = 16 * pxPerBeat.value
 		layers.push(`repeating-linear-gradient(
 			90deg,
 			var(--bg-color) 0px,

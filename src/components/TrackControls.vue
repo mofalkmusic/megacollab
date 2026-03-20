@@ -710,7 +710,6 @@ async function addTrackAbove(currentIndex: number) {
 	min-width: 0;
 	height: 1.8rem;
 	position: relative;
-	cursor: text;
 }
 
 .title-p {
@@ -722,15 +721,14 @@ async function addTrackAbove(currentIndex: number) {
 
 .track-title-input {
 	border: none;
-	background-color: rgba(255, 255, 255, 0.08);
-	padding: 2px 4px;
-	margin-left: -4px; /* offset padding to avoid shifting */
+	background-color: transparent;
+	padding: 0px 2px;
+	margin-left: -2px;
 	width: 100%;
 	color: inherit;
-	font-family: inherit;
-	line-height: inherit;
 	outline: none;
-	border-bottom: 1px solid var(--text-color-secondary);
+	border: none;
+	/* box-shadow: 0px 0px 0px 1px var(--border-primary); */
 }
 
 .track-controls {

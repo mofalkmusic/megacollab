@@ -11,8 +11,8 @@
 		</div>
 		<div class="debug-inner-container">
 			<div v-for="entry in debugEntries.values()" :key="entry.id" class="debug-entry">
-				<div v-if="entry.label" class="debug-label small">#{{ entry.label }}</div>
-				<pre class="debug-content small">{{ entry.data }}</pre>
+				<div v-if="entry.label" class="txt mono debug-label small">#{{ entry.label }}</div>
+				<pre class="debug-content small" style="color: limegreen">{{ entry.data }}</pre>
 			</div>
 		</div>
 	</div>

@@ -192,7 +192,7 @@
 			:scroll-container="timelineContainerEl"
 		/>
 
-		<div style="grid-area: empty"></div>
+		<div style="grid-area: empty; z-index: -10"></div>
 
 		<GlobalLoadingIndicator style="grid-area: globalloader" />
 
@@ -574,6 +574,9 @@ const timelineContainerEl = useTemplateRef('timelineContainer')
 
 import { useDebug } from '@/composables/useDebug'
 
+let fractionalPxPerBeat: number = pxPerBeat.value
+const ZOOM_SENSITIVITY = 0.0015 as const
+
 useEventListener(
 	timelineContainerEl,
 	'wheel',
@@ -591,24 +594,23 @@ useEventListener(
 
 			useDebug(() => beatUnderCursor, { label: 'hovered_beat' })
 
-			const sensitivity = 0.05 // todo: should be extracted to be reusable instead of hardcoded
-			const unclipped = pxPerBeat.value - e.deltaY * sensitivity
-			const newPxPerBeat = Math.max(minPxPerBeat, Math.min(maxPxPerBeat, unclipped))
+			if (Math.abs(fractionalPxPerBeat - pxPerBeat.value) > 1) {
+				fractionalPxPerBeat = pxPerBeat.value
+			}
+
+			const unclipped = fractionalPxPerBeat * Math.exp(-e.deltaY * ZOOM_SENSITIVITY)
+			fractionalPxPerBeat = Math.max(minPxPerBeat, Math.min(maxPxPerBeat, unclipped))
+
+			const newPxPerBeat = Math.round(fractionalPxPerBeat)
 			pxPerBeat.value = newPxPerBeat
 
-			// comment madness for future editors :D
-
-			// Adjust scroll so the same beat stays under the cursor
-			// Calculate new X offset for this beat in the wrapper
 			const newXInWrapper = beatUnderCursor * newPxPerBeat
-
-			// To keep the beat under the mouse (`e.clientX`), the wrapper needs to be positioned at:
 			const newWrapperLeft = e.clientX - newXInWrapper
 
-			// The difference between where the wrapper SHOULD be and where it IS:
+			// The difference between where the wrapper SHOULD be and where it IS
 			const deltaWrapperLeft = newWrapperLeft - wrapperRect.left
 
-			// scrollLeft decreases wrapper.left, so we subtract the delta
+			// scrollLeft decreases wrapper.left -> subtract the delta
 			container.scrollLeft -= deltaWrapperLeft
 		}
 	},
@@ -1192,6 +1194,7 @@ useEventListener(window, 'blur', () => {
 .timeline-scroll-container {
 	overflow-y: scroll;
 	overflow-x: scroll;
+
 	width: 100%;
 	height: 100%;
 

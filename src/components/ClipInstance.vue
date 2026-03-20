@@ -24,8 +24,8 @@
 		:style="wrapperStyles"
 		@contextmenu.prevent="deleteClip"
 	>
-		<div class="clipHeader" :style="textStyles">
-			<p class="small title no-select">
+		<div class="clipHeader" :style="{ color: activeColors.textColor }">
+			<p class="smaller title no-select">
 				@{{ userClipDisplayComp || '' }} • {{ props.audiofile.file_name }} - 𝆕
 				{{ props.audiofile.creator_display_name }}
 			</p>
@@ -284,9 +284,67 @@ const userClipDisplayComp = computed(() => {
 	}
 })
 
+const activeColors = computed(() => {
+	const isMuted = displayState.value.is_muted
+	const selected = isSelected.value
+
+	const baseColor = props.audiofile.color
+
+	const SELECTED_WAVEFORM = '#f24b4b'
+	const SELECTED_HEADER_BG = '#ff4444'
+	const SELECTED_CANVAS_BG = 'rgba(255, 25, 25, 0.2)'
+	const SELECTED_TEXT = '#ffffff'
+
+	const MUTED_WAVEFORM = 'hsl(0 0% 28%)'
+	const MUTED_HEADER_BG = 'hsl(0 0% 24%)'
+	const MUTED_CANVAS_BG = `color-mix(in lch, ${MUTED_WAVEFORM} 13%, transparent)`
+	const MUTED_TEXT = 'hsl(0 0% 46%)'
+
+	let headerBg = baseColor
+	let waveform = baseColor
+
+	let canvasBg = `color-mix(in lch, ${baseColor} 13%, transparent)`
+
+	let textColor = '#ffffff'
+
+	if (!(selected && !isMuted)) {
+		const textLuminanceBase = parse(headerBg)
+		const L = textLuminanceBase ? wcagLuminance(textLuminanceBase) : 1
+		textColor = L > 0.5 ? '#000000' : '#ffffff'
+	}
+
+	if (selected) {
+		headerBg = SELECTED_HEADER_BG
+		waveform = SELECTED_WAVEFORM
+		canvasBg = SELECTED_CANVAS_BG
+		textColor = SELECTED_TEXT
+	}
+
+	if (isMuted) {
+		headerBg = MUTED_HEADER_BG
+		waveform = MUTED_WAVEFORM
+		canvasBg = MUTED_CANVAS_BG
+		textColor = MUTED_TEXT
+	}
+
+	let gainColor = `color-mix(in lch, ${headerBg}, var(--text-color-primary) 30%)`
+
+	if (selected && !isMuted) {
+		gainColor = `color-mix(in lch, #ff4444, var(--text-color-primary) 30%)`
+	}
+
+	return {
+		headerBg,
+		waveform,
+		canvasBg,
+		textColor,
+		gainColor,
+	}
+})
+
 const outerClipCanvasStyles = computed((): CSSProperties => {
 	const base: CSSProperties = {
-		'--_color': props.audiofile.color,
+		backgroundColor: activeColors.value.canvasBg,
 	}
 
 	// if (withinAudioPool.value) {
@@ -468,11 +526,9 @@ const isDragging = computed(() => {
 })
 
 const wrapperStyles = computed((): CSSProperties => {
-	const col = props.audiofile.color
-
 	const base: CSSProperties = {
 		width: `${finalWidthPx.value}px`,
-		'--_color': col,
+		'--_color': activeColors.value.headerBg,
 		left: `${beats_to_px(displayState.value.start_beat)}px`,
 	}
 
@@ -533,14 +589,8 @@ const gainHandleStyle = computed((): CSSProperties | undefined => {
 	return {
 		left: `${relativeLeft}px`,
 		'--relative-left': `${relativeLeft}px`,
+		color: activeColors.value.gainColor,
 	}
-})
-
-const textStyles = computed((): CSSProperties => {
-	const base = parse(props.audiofile.color)
-	if (!base) return { color: '#000' }
-	const L = wcagLuminance(base)
-	return { color: L > 0.5 ? '#000' : '#fff' }
 })
 
 type DragMode = 'left' | 'right' | 'move' | 'gain' | 'fade-in' | 'fade-out'
@@ -1262,7 +1312,6 @@ const canvasStyles = computed((): CSSProperties => {
 })
 
 const waveformsDrawn = shallowRef<boolean>(false)
-const isSelectedWaveformColor = '#f24b4b' as const
 
 async function drawWaveform() {
 	if (!canvasEl.value || !props.audiofile) return
@@ -1304,10 +1353,7 @@ async function drawWaveform() {
 				poolPreviewPlayingAudioId.value == props.audiofile.id &&
 				poolPreviewPlayingAudioId.value
 
-			const color =
-				isSelected.value && !displayState.value.is_muted
-					? isSelectedWaveformColor
-					: props.audiofile.color
+			const color = activeColors.value.waveform
 
 			if (!isCurrentPoolFile) {
 				// Mix with black (0.2 = 20% black)
@@ -1346,7 +1392,6 @@ watchThrottled(
 		canvasWrapHeight,
 		canvasWidth,
 		() => props.audiofile.waveforms,
-		() => props.audiofile.color,
 		pixelRatio,
 		poolPreviewPlayingAudioId,
 	],
@@ -1359,7 +1404,7 @@ watchThrottled(
 	{ immediate: false, throttle: 200 },
 )
 
-watch([isSelected, () => displayState.value.is_muted], () => drawWaveform(), {
+watch([isSelected, () => activeColors.value.waveform], () => drawWaveform(), {
 	immediate: false,
 })
 
@@ -1400,19 +1445,6 @@ function getWaveform(
 	box-shadow: 0 0 0 1px #ff4444;
 }
 
-.outmostClipWrapper.selected:not(.muted) .clipHeader {
-	background-color: #ff4444 !important;
-	color: white !important;
-}
-
-.outmostClipWrapper.selected:not(.muted) .outerClipCanvasWrap {
-	background-color: rgba(255, 25, 25, 0.2) !important;
-}
-
-.outmostClipWrapper.muted > * {
-	filter: grayscale(1) brightness(0.4);
-}
-
 .clipHeader {
 	grid-area: header;
 	border-top-left-radius: inherit;
@@ -1423,8 +1455,8 @@ function getWaveform(
 
 .title {
 	color: inherit;
-	line-height: 1.2;
-	padding: 0 0.5rem 0.1rem;
+	line-height: 1.2em;
+	padding: 0 0.4rem 1px;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -1484,11 +1516,6 @@ canvas {
 	line-height: 1em;
 	padding: 1px 4px 2px;
 	border-radius: 4px;
-	color: color-mix(in lch, var(--_color), var(--text-color-primary) 30%);
-}
-
-.gainDisplay.selected:not(.muted) {
-	color: color-mix(in lch, #ff4444, var(--text-color-primary) 30%);
 }
 
 .gainhandle {
