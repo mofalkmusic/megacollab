@@ -428,10 +428,10 @@ io.on('connection', async (socket) => {
 					end_beat: d.end_beat,
 					audio_file_id: d.audio_file_id,
 					gain: d.gain ?? DEFAULT_GAIN,
-					is_muted: false,
+					is_muted: d.is_muted ?? false,
 					offset_seconds: d.offset_seconds ?? 0,
-					fade_in_sec: 0,
-					fade_out_sec: 0,
+					fade_in_sec: d.fade_in_sec ?? 0,
+					fade_out_sec: d.fade_out_sec ?? 0,
 					track_id: d.track_id,
 				}),
 			)
@@ -485,26 +485,27 @@ io.on('connection', async (socket) => {
 				})
 				return
 			}
-			const { id } = data
+			const ids = data
 
 			try {
-				const clip = await db.deleteClip(id)
+				const deletedClips = await db.deleteClips(ids)
 
 				callback({
 					success: true,
-					data: {
-						id: clip.id,
-					},
+					data: deletedClips.map((c) => c.id),
 				})
 
-				socket.broadcast.emit('clip:delete', clip.id)
+				socket.broadcast.emit(
+					'clip:delete',
+					deletedClips.map((c) => c.id),
+				)
 
 				history.push({
 					type: 'CLIP_DELETE',
 					userId: user.id,
 					data: {
-						payload: { id: clip.id },
-						inverse: [clip],
+						payload: deletedClips.map((c) => c.id),
+						inverse: deletedClips,
 					},
 				})
 			} catch (err) {
@@ -716,7 +717,7 @@ io.on('connection', async (socket) => {
 			const result = await history.undo(user.id, (event, data) => emitFn(event, data))
 
 			if (result.success) {
-				callback({ success: true, data: null })
+				callback({ success: true, data: result.data || null })
 			} else {
 				callback({
 					success: false,
@@ -873,7 +874,7 @@ io.on('connection', async (socket) => {
 
 				// todo: batching
 				for (const clipId of result.deleted_clips) {
-					io.emit('clip:delete', clipId)
+					io.emit('clip:delete', [clipId])
 				}
 
 				// todo: batching

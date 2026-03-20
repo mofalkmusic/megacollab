@@ -169,9 +169,9 @@ import { deleteAudio } from '@/socket/eventHandlers/audiofile_delete'
 import { useConsole } from '@/composables/useConsole'
 import { getPreviewProgress, playPreview, stopPreview } from '@/utils/previewHelper'
 import { DEFAULT_GAIN } from '~/constants'
-import { delteClipLocally } from '@/socket/eventHandlers/clip_delete'
+import { deleteClipLocally } from '@/socket/eventHandlers/clip_delete'
 import { updateClips } from '@/socket/eventHandlers/clip_update'
-import type { ClientRequestResponse } from '~/events'
+import { nanoid } from 'nanoid'
 
 const MIN_GAIN = 0 as const
 const MAX_GAIN = 3 as const
@@ -358,10 +358,12 @@ const outerClipCanvasStyles = computed((): CSSProperties => {
 async function deleteClip() {
 	if (!props.clip) return
 
-	const res = await socket.emitWithAck('get:clip:delete', { id: props.clip.id })
+	const res = await socket.emitWithAck('get:clip:delete', [props.clip.id])
 
 	if (res.success) {
-		delteClipLocally(res.data.id)
+		for (const id of res.data) {
+			deleteClipLocally(id)
+		}
 	}
 }
 
@@ -691,6 +693,69 @@ async function commitPendingUpdates(dragSession: DragSession) {
 	dragSessionMulti.value = null
 }
 
+// commit shift-drag-duplicated clips as new clip creations
+async function commitDuplicateClips(sesh: DragSession & { mode: 'move' }) {
+	const tempClips = sesh.initial_states
+		.map((stored) => clips.get(stored.id))
+		.filter((c): c is ClipClient => c !== undefined)
+
+	if (tempClips.length === 0) {
+		dragSessionMulti.value = null
+		return
+	}
+
+	const tempIds = tempClips.map((c) => c.id)
+
+	const reqBody = tempClips.map((clip) => {
+		const oldTrackId = clip.track_id
+		const oldTrackIndex = trackIdsInOrderByIndex.value.findIndex((t) => t === oldTrackId)
+		const newTrackId =
+			oldTrackIndex !== -1
+				? (trackIdsInOrderByIndex.value[oldTrackIndex + sesh.delta_tracks] ?? oldTrackId)
+				: oldTrackId
+
+		return {
+			start_beat: clip.start_beat,
+			end_beat: clip.end_beat,
+			audio_file_id: clip.audio_file_id,
+			track_id: newTrackId,
+			offset_seconds: clip.offset_seconds,
+			gain: clip.gain,
+			fade_in_sec: clip.fade_in_sec,
+			fade_out_sec: clip.fade_out_sec,
+			is_muted: clip.is_muted,
+		}
+	})
+
+	try {
+		const res = await socket.emitWithAck('get:clip:create', reqBody)
+		if (res.success) {
+			// swap temp ids for real server ids
+			for (const id of tempIds) {
+				clips.delete(id)
+				selectedClipIds.delete(id)
+			}
+			for (const clip of res.data) {
+				clips.set(clip.id, clip)
+				selectedClipIds.add(clip.id)
+			}
+		} else {
+			throw new Error(res.error.message)
+		}
+	} catch (e) {
+		userLog('SYSTEM', `Duplicate failed: ${e instanceof Error ? e.message : String(e)}`, {
+			textColor: 'red',
+		})
+		// clean up temp clones
+		for (const id of tempIds) {
+			clips.delete(id)
+			selectedClipIds.delete(id)
+		}
+	}
+
+	dragSessionMulti.value = null
+}
+
 // all audiopool exclusive listeners
 onMounted(() => {
 	if (!withinAudioPool.value) return
@@ -757,24 +822,52 @@ onMounted(() => {
 
 			if (!props.clip) return
 
-			let clipstoTrack = getSelectedClipsSnapshot()
+			const currentUser = user.value
+			if (!currentUser) return
+
+			let clipsToTrack = getSelectedClipsSnapshot()
 
 			const pc = props.clip
 
 			if (pc.id && !selectedClipIds.has(pc.id)) {
 				selectedClipIds.clear()
-				clipstoTrack = [{ ...pc }]
+				clipsToTrack = [{ ...pc }]
 			}
+
+			const isDuplicate = shiftKeyPressed.value
+
+			// shift-drag - create temp clones, leave originals untouched
+			if (isDuplicate) {
+				const clones: ClipClient[] = clipsToTrack.map((clip) => ({
+					...clip,
+					id: `__temp__${nanoid()}`,
+					created_at: new Date().toISOString(),
+					creator_user_id: currentUser.id,
+					creator_display_name: currentUser.display_name,
+				}))
+
+				selectedClipIds.clear()
+				for (const clone of clones) {
+					clips.set(clone.id, clone)
+					selectedClipIds.add(clone.id)
+				}
+
+				clipsToTrack = clones.map((c) => ({ ...c }))
+			}
+
+			const firstClone = clipsToTrack[0]
+			if (!firstClone) return
 
 			dragSessionMulti.value = {
 				mode: 'move',
-				source_clip: props.clip,
+				source_clip: isDuplicate ? firstClone : props.clip,
 				source_track: sourceTrack,
 				delta_beats: 0,
 				delta_tracks: 0,
 				mouse_start_x: event.clientX,
 				source_track_el: parentTrack,
-				initial_states: clipstoTrack,
+				initial_states: clipsToTrack,
+				is_duplicate: isDuplicate,
 			}
 
 			let el: HTMLElement | undefined
@@ -889,7 +982,11 @@ onMounted(() => {
 
 				if (!dragSessionMulti.value) return console.warn('missing dragsession in onUp')
 
-				await commitPendingUpdates(dragSessionMulti.value)
+				if (dragSessionMulti.value.mode === 'move' && dragSessionMulti.value.is_duplicate) {
+					await commitDuplicateClips(dragSessionMulti.value)
+				} else {
+					await commitPendingUpdates(dragSessionMulti.value)
+				}
 			}
 
 			const stopMove = useEventListener(window, 'pointermove', onMove)

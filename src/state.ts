@@ -32,8 +32,10 @@ export const clipboardClips = ref<ClipClient[]>([])
 type DragSessionBase = {
 	mouse_start_x: number
 	source_clip: ClipClient
-	// source_track_index: number ??
+
 	// maybe add pointerid?
+
+	/** ALWAYS DEEP CLONE THESE OR YOU'LL HAVE HEADACHES! */
 	initial_states: Array<ClipClient>
 }
 
@@ -58,6 +60,7 @@ type MoveDragSession = DragSessionBase & {
 
 	delta_beats: ClipClient['start_beat']
 	delta_tracks: number
+	is_duplicate: boolean
 }
 
 type GainDragSession = DragSessionBase & {

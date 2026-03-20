@@ -4,12 +4,14 @@ import type { ClipClient } from '~/schema'
 
 export default defineSocketHandler({
 	event: 'clip:delete',
-	handler: (id) => {
-		delteClipLocally(id)
+	handler: (ids) => {
+		for (const id of ids) {
+			deleteClipLocally(id)
+		}
 	},
 })
 
-export function delteClipLocally(clipId: ClipClient['id']) {
+export function deleteClipLocally(clipId: ClipClient['id']) {
 	selectedClipIds.delete(clipId)
 	clips.delete(clipId)
 }

@@ -109,6 +109,7 @@ export const db = {
 	getClipsByIds,
 	getClip,
 	deleteClip,
+	deleteClips,
 	updateClips,
 	updateExistingUsername,
 	updateDownloadQuality,
@@ -414,6 +415,30 @@ async function deleteClip(id: string): Promise<ClipClient> {
 	const result = rows[0]!
 
 	return result
+}
+
+async function deleteClips(ids: string[]): Promise<ClipClient[]> {
+	if (ids.length === 0) return []
+
+	const placeholders = ids.map((_id, index) => `$${index + 1}`).join(', ')
+
+	const rows = await queryFn<ClipClient>(
+		`
+			WITH deleted AS (
+				DELETE FROM ${CLIPS_TABLE} WHERE id IN (${placeholders})
+				RETURNING *
+			)
+			SELECT 
+				deleted.*,
+				users.display_name AS creator_display_name
+			FROM deleted
+			LEFT JOIN ${USERS_TABLE} AS users
+				ON deleted.creator_user_id = users.id
+		`,
+		ids,
+	)
+
+	return rows
 }
 
 async function saveAudioFile(audioFile: ServerAudioFile): Promise<ClientAudioFile> {

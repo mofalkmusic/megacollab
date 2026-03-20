@@ -29,7 +29,7 @@ useEventListener(window, 'keydown', (event: KeyboardEvent) => {
 		altKeyPressed.value = true
 	}
 
-	if (event.key === 'Control') {
+	if (event.key === 'Control' || event.key === 'Meta') {
 		controlKeyPressed.value = true
 	}
 
@@ -51,7 +51,7 @@ useEventListener(window, 'keydown', (event: KeyboardEvent) => {
 		return
 	}
 
-	if (event.key === 'Control') {
+	if (event.key === 'Control' || event.key === 'Meta') {
 		return
 	}
 
@@ -82,7 +82,7 @@ useEventListener(window, 'keyup', (event: KeyboardEvent) => {
 		return
 	}
 
-	if (event.key === 'Control') {
+	if (event.key === 'Control' || event.key === 'Meta') {
 		controlKeyPressed.value = false
 		return
 	}

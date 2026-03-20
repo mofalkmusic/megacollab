@@ -8,7 +8,7 @@ const IN_DEV_MODE = Bun.env['ENV'] === 'development'
 type HistoryEventMap = {
 	CLIP_CREATE: {
 		payload: Array<ClientRequestPayload<'get:clip:create'>[number] & { id: ClipClient['id'] }>
-		inverse: Array<ServerEmitPayload<'clip:delete'>>
+		inverse: ServerEmitPayload<'clip:delete'>
 	}
 	CLIP_DELETE: {
 		payload: ClientRequestPayload<'get:clip:delete'>
@@ -54,7 +54,7 @@ class HistoryManager {
 	async undo(
 		userId: string,
 		socketBroadcast: BroadcastFn,
-	): Promise<{ success: boolean; error?: string }> {
+	): Promise<{ success: boolean; error?: string; data?: any }> {
 		// last action by this user
 		const checkIndices: number[] = []
 
@@ -79,50 +79,50 @@ class HistoryManager {
 		}
 
 		try {
-			let processed = false
-
 			switch (action.type) {
 				case 'CLIP_CREATE': {
 					const payloads = action.data.payload
+					const idsToCheck = payloads.map((p) => p.id)
 
-					let allSuccess = true
-					for (const p of payloads) {
-						let current: Awaited<ReturnType<typeof db.getClip>> | undefined
+					let current: Awaited<ReturnType<typeof db.getClipsByIds>> = []
+					try {
+						current = await db.getClipsByIds(idsToCheck)
+					} catch {
+						return { success: false, error: 'Failed to verify clips.' }
+					}
+
+					let deletedIds: string[] = []
+
+					if (current.length > 0) {
+						const idsToDelete = current.map((c) => c.id)
 						try {
-							current = await db.getClip(p.id)
+							const deleted = await db.deleteClips(idsToDelete)
+							deletedIds = deleted.map((c) => c.id)
+							socketBroadcast('clip:delete', deletedIds)
 						} catch {
-							allSuccess = false
-						}
-
-						if (current) {
-							try {
-								await db.deleteClip(p.id)
-								socketBroadcast('clip:delete', p.id)
-							} catch {
-								allSuccess = false
+							return {
+								success: false,
+								error: 'Failed to fully undo bulk clip creation.',
 							}
 						}
 					}
 
-					if (allSuccess) processed = true
-					else
-						return { success: false, error: 'Failed to fully undo bulk clip creation.' }
-
-					break
+					this.undoStack.splice(index, 1)
+					return { success: true, data: { type: 'CLIP_CREATE', deletedIds } }
 				}
 
 				case 'CLIP_DELETE': {
-					const clipId = action.data.payload.id
+					const clipIds = action.data.payload
 
-					let current: Awaited<ReturnType<typeof db.getClip>>
+					let current: Awaited<ReturnType<typeof db.getClipsByIds>>
 
 					try {
-						current = await db.getClip(clipId)
+						current = await db.getClipsByIds(clipIds)
 					} catch {
 						return { success: false, error: 'Failed to retrieve clip status.' }
 					}
 
-					if (!current) {
+					if (current.length === 0) {
 						const clips = action.data.inverse
 
 						const newClips = clips.map((c) => {
@@ -133,12 +133,22 @@ class HistoryManager {
 						try {
 							const restored = await db.createClips(newClips)
 							socketBroadcast('clip:create', restored)
-							processed = true
+							this.undoStack.splice(index, 1)
+							return {
+								success: true,
+								data: {
+									type: 'CLIP_DELETE',
+									restoredIds: restored.map((c) => c.id),
+								},
+							}
 						} catch {
-							return { success: false, error: 'Failed to restore clip.' }
+							return { success: false, error: 'Failed to restore clips.' }
 						}
 					} else {
-						return { success: false, error: 'Clip already exists (ID collision).' }
+						return {
+							success: false,
+							error: 'One or more clips already exist (ID collision).',
+						}
 					}
 					break
 				}
@@ -197,20 +207,20 @@ class HistoryManager {
 					try {
 						const updatedClips = await db.updateClips(updateBatch as any) // oldValues are valid UpdateClip types effectively
 						socketBroadcast('clip:update', updatedClips as any)
-						processed = true
+						this.undoStack.splice(index, 1)
+						return {
+							success: true,
+							data: {
+								type: 'CLIP_UPDATE',
+								updatedIds: updatedClips.map((c) => c.id),
+							},
+						}
 					} catch {
 						return { success: false, error: 'Failed to revert clip update.' }
 					}
 
 					break
 				}
-			}
-
-			if (processed) {
-				this.undoStack.splice(index, 1)
-				return { success: true }
-			} else {
-				return { success: false, error: 'Unknown state error.' }
 			}
 		} catch (e) {
 			if (IN_DEV_MODE) {

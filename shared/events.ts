@@ -79,7 +79,7 @@ export const EVENTS = Object.freeze({
 		}),
 		'clip:create': z.array(ClientClipSchema),
 		'clip:update': z.array(ClientClipSchema),
-		'clip:delete': ClientClipSchema.shape['id'],
+		'clip:delete': z.array(ClientClipSchema.shape['id']),
 		'track:create': ClientTrackSchema,
 		'track:delete': z.object({
 			track_id: ClientTrackSchema.shape['id'],
@@ -184,13 +184,16 @@ export const EVENTS = Object.freeze({
 					track_id: z.string(),
 					offset_seconds: z.number().optional(),
 					gain: z.number().optional(),
+					fade_in_sec: z.number().optional(),
+					fade_out_sec: z.number().optional(),
+					is_muted: z.boolean().optional(),
 				}),
 			),
 			res: z.array(ClientClipSchema),
 		}),
 		'get:clip:delete': defineRequest({
-			req: ClientClipSchema.pick({ id: true }),
-			res: ClientClipSchema.pick({ id: true }),
+			req: z.array(ClientClipSchema.shape['id']),
+			res: z.array(ClientClipSchema.shape['id']),
 		}),
 		'get:clip:update': defineRequest({
 			req: z.array(
@@ -211,7 +214,14 @@ export const EVENTS = Object.freeze({
 		}),
 		'get:undo': defineRequest({
 			req: z.null(),
-			res: z.null(),
+			res: z
+				.object({
+					type: z.enum(['CLIP_CREATE', 'CLIP_DELETE', 'CLIP_UPDATE']),
+					restoredIds: z.array(z.string()).optional(),
+					deletedIds: z.array(z.string()).optional(),
+					updatedIds: z.array(z.string()).optional(),
+				})
+				.nullable(),
 		}),
 		'get:audiofile:delete': defineRequest({
 			req: ClientAudioFileSchema.pick({ id: true }),

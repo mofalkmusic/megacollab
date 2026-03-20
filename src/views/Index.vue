@@ -277,7 +277,15 @@ import {
 	useElementBounding,
 	watchDebounced,
 } from '@vueuse/core'
-import { audiofiles, clips, dragFromPoolState, pxTrackHeight, TOTAL_BEATS, user } from '@/state'
+import {
+	audiofiles,
+	clips,
+	dragFromPoolState,
+	pxTrackHeight,
+	TOTAL_BEATS,
+	user,
+	clipboardClips,
+} from '@/state'
 import {
 	currentPlayTimeBeats,
 	currentPlayTimeSeconds,
@@ -323,10 +331,12 @@ import { renderPlaylistOffline } from '@/utils/offlineRenderer'
 import { encodeWav, encodeMp3 } from '@/utils/encoders'
 import { useGlobalProgress } from '@/composables/useGlobalProgress'
 import { menuShortcutsActive } from '@/composables/useMenuShortcutLock'
+import { useClipShortcuts } from '@/composables/useClipShortcuts'
 
 const { userLog } = useConsole()
-
 const { averagePing } = usePing()
+
+useClipShortcuts()
 
 function handleZoomChange(e: Event) {
 	if (!(e.target instanceof HTMLInputElement)) {
@@ -434,6 +444,20 @@ async function tryUndo() {
 		const res = await socket.emitWithAck('get:undo', null)
 		if (!res.success) {
 			userLog('UNDO', `Error: ${res.error.message}`, { textColor: 'orange' })
+		} else if (res.data) {
+			selectedClipIds.clear()
+
+			if (res.data.type === 'CLIP_DELETE' && res.data.restoredIds) {
+				for (const id of res.data.restoredIds) {
+					selectedClipIds.add(id)
+				}
+			} else if (res.data.type === 'CLIP_CREATE') {
+				for (const c of clipboardClips.value) {
+					if (clips.has(c.id)) {
+						selectedClipIds.add(c.id)
+					}
+				}
+			}
 		}
 	} catch (e) {
 		userLog('UNDO', 'Unexpected error, please try again.', { textColor: 'red' })
