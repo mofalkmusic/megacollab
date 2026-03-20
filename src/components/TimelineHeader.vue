@@ -2,6 +2,7 @@
 	<div
 		class="no-select timeline-header-wrap"
 		@dblclick="handleDoubleClick"
+		@contextmenu.prevent
 		:style="{ cursor: cursorStyle }"
 	>
 		<div
@@ -52,7 +53,11 @@
 
 	<!-- Sticky Playhead Heads -->
 	<div class="timeline-heads-wrap">
-		<div v-if="!isPressed" class="resting-playhead-head" :style="restingPlayheadStyle" />
+		<div
+			v-if="!isLeftPressed || isRightPressed || startedScrubWithActionKey"
+			class="resting-playhead-head"
+			:style="restingPlayheadStyle"
+		/>
 		<div
 			class="playhead-head"
 			:style="playheadHeadStyle"
@@ -82,7 +87,13 @@ import {
 import { computed, shallowRef, useTemplateRef, watch, type CSSProperties } from 'vue'
 import { pxPerBeat, TOTAL_BEATS } from '@/state'
 import { altKeyPressed, controlKeyPressed, shiftKeyPressed } from '@/utils/globalHotKeys'
-import { useMouseInElement, useMousePressed, useWindowFocus, watchThrottled } from '@vueuse/core'
+import {
+	useEventListener,
+	useMouseInElement,
+	useMousePressed,
+	useWindowFocus,
+	watchThrottled,
+} from '@vueuse/core'
 import { useTimelineGrid } from '@/composables/useTimelineGrid'
 
 const { gridBackground, GRID_MIN_SPACING_PX } = useTimelineGrid()
@@ -122,15 +133,40 @@ const timelineMarkers = computed(() => {
 
 const timelineHeaderEl = useTemplateRef('timelineHeaderRef')
 const { elementX: mouseX } = useMouseInElement(timelineHeaderEl, { handleOutside: true })
-const { pressed: isPressed } = useMousePressed({ target: timelineHeaderEl })
+const { pressed: isLeftPressed } = useMousePressed({ target: timelineHeaderEl })
+const isRightPressed = shallowRef(false)
+
+useEventListener(timelineHeaderEl, 'pointerdown', (e: PointerEvent) => {
+	if (e.button === 2) {
+		isRightPressed.value = true
+		if (e.target instanceof HTMLElement) {
+			e.target.setPointerCapture(e.pointerId)
+		}
+	}
+})
+
+useEventListener(timelineHeaderEl, 'pointerup', (e: PointerEvent) => {
+	if (e.button === 2) {
+		isRightPressed.value = false
+	}
+})
+
+useEventListener(timelineHeaderEl, 'pointercancel', (e: PointerEvent) => {
+	if (e.button === 2) {
+		isRightPressed.value = false
+	}
+})
+
+const isPressed = computed(() => isLeftPressed.value || isRightPressed.value)
 
 const windowFocused = useWindowFocus()
 
 watch(windowFocused, (focused) => {
 	if (!focused) {
-		isPressed.value = false
+		isRightPressed.value = false
 		localPlayheadBeat.value = null
 		startedScrubWithActionKey.value = null
+		startedScrubWithRightClick.value = null
 		activeHandle.value = null
 		loopDragStartBeat.value = null
 		loopDragEndBeat.value = null
@@ -173,6 +209,7 @@ const loopDragStartBeat = shallowRef<number | null>(null)
 const loopDragEndBeat = shallowRef<number | null>(null)
 const activeHandle = shallowRef<'start' | 'end' | null>(null)
 const startedScrubWithActionKey = shallowRef<boolean | null>(null)
+const startedScrubWithRightClick = shallowRef<boolean | null>(null)
 
 const displayLoopRange = computed(() => {
 	if (loopDragStartBeat.value != null && loopDragEndBeat.value != null) {
@@ -215,13 +252,13 @@ watch([isPressed, mouseX], ([pressed, newMouseX]) => {
 
 	// --- RELEASED ---
 	if (!pressed) {
-		if (startedScrubWithActionKey.value) {
+		if (startedScrubWithActionKey.value || startedScrubWithRightClick.value) {
 			// Commit loop
 			const start = loopDragStartBeat.value
 			const end = loopDragEndBeat.value
 			if (start != null && end != null) {
 				if (Math.abs(start - end) > 0.0001) {
-					setLoopInBeats(start, end, { quantize: false })
+					setLoopInBeats(start, end, { quantize: !altKeyPressed.value })
 				} else {
 					clearLoop()
 				}
@@ -232,6 +269,7 @@ watch([isPressed, mouseX], ([pressed, newMouseX]) => {
 
 		localPlayheadBeat.value = null
 		startedScrubWithActionKey.value = null
+		startedScrubWithRightClick.value = null
 		activeHandle.value = null
 		return
 	}
@@ -241,11 +279,18 @@ watch([isPressed, mouseX], ([pressed, newMouseX]) => {
 	const beats = px_to_beats(newMouseX)
 
 	// Initialize drag mode on first press frame
-	if (startedScrubWithActionKey.value == null) {
-		startedScrubWithActionKey.value = isActionKeyPressed.value
+	if (startedScrubWithActionKey.value == null && startedScrubWithRightClick.value == null) {
+		startedScrubWithRightClick.value = isRightPressed.value
+		if (!startedScrubWithRightClick.value) {
+			startedScrubWithActionKey.value = isActionKeyPressed.value
+		}
 
-		// If NOT holding action key, check if we clicked a loop handle
-		if (!startedScrubWithActionKey.value && loopRangeBeats.value) {
+		// If NOT holding action key (and not right clicking), check if we clicked a loop handle
+		if (
+			!startedScrubWithActionKey.value &&
+			!startedScrubWithRightClick.value &&
+			loopRangeBeats.value
+		) {
 			const startPx = beats_to_px(loopRangeBeats.value.start)
 			const endPx = beats_to_px(loopRangeBeats.value.end)
 			const distStart = Math.abs(newMouseX - startPx)
@@ -277,7 +322,7 @@ watch([isPressed, mouseX], ([pressed, newMouseX]) => {
 	}
 
 	// 1. Regular Scrub
-	if (!startedScrubWithActionKey.value) {
+	if (!startedScrubWithActionKey.value && !startedScrubWithRightClick.value) {
 		const beat = altKeyPressed.value ? beats : quantize_beats(beats)
 		localPlayheadBeat.value = Math.max(0, beat)
 		return

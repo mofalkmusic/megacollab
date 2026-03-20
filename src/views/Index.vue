@@ -558,7 +558,6 @@ async function toggleMuteSelectedClips() {
 useEventListener(window, 'focusin', (e) => {
 	if (
 		e.target instanceof HTMLButtonElement ||
-		e.target instanceof HTMLInputElement ||
 		(e.target instanceof HTMLInputElement && e.target.type === 'range')
 	) {
 		e.target.blur()
@@ -1002,7 +1001,7 @@ const selectionBoxStyle = computed((): CSSProperties => {
 		position: 'absolute',
 		backgroundColor: 'hsl(from cyan h s l / 0.1)',
 		border: '2px solid cyan',
-		borderRadius: '0.5rem',
+		borderRadius: '0.4rem',
 		pointerEvents: 'none',
 		zIndex: 80,
 	}
