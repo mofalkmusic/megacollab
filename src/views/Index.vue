@@ -146,7 +146,7 @@
 						v-for="([id, track], idx) in sortedTracks"
 						:key="id"
 						:track="track"
-						:scroll-x="scrollX"
+						:scroll-x="timelineX"
 						:timeline-window-width="timelineContainerClientWidth"
 						:is-last="idx === sortedTracks.length - 1"
 					/>
@@ -257,6 +257,8 @@ import {
 	selectedClipIds,
 	showAdminPanel,
 	DEFAULT_PX_PER_BEAT,
+	storedScrollX,
+	storedScrollY,
 } from '@/state'
 import {
 	altKeyPressed,
@@ -687,13 +689,42 @@ useEventListener(timelineContainerEl, 'pointerdown', (e) => {
 	const stopUp = useEventListener(window, 'pointerup', onUp)
 })
 
-const { x: scrollX, y: scrollY } = useScroll(timelineContainerEl)
+const isRestored = shallowRef(false)
+
+const { x: timelineX, y: timelineY } = useScroll(timelineContainerEl)
+
+watch(timelineX, (val) => {
+	if (!isRestored.value) return
+	storedScrollX.value = val
+})
+
+watch(timelineY, (val) => {
+	if (!isRestored.value) return
+	storedScrollY.value = val
+})
+
+whenever(
+	() => _socketReady.value,
+	async () => {
+		await nextTick()
+		timelineX.value = storedScrollX.value
+		timelineY.value = storedScrollY.value
+
+		await nextTick()
+		await nextTick()
+		await nextTick()
+
+		isRestored.value = true
+	},
+	{ once: true },
+)
+
 const { width: timelineContainerClientWidth } = useElementSize(timelineContainerEl)
 
 async function handleTrackAdded() {
 	await nextTick() // awaiting repaint
 	if (!timelineContainerEl.value) return
-	scrollY.value = timelineContainerEl.value.scrollHeight
+	timelineY.value = timelineContainerEl.value.scrollHeight
 }
 
 const timelineScrollHeight = ref(0)

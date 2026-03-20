@@ -121,34 +121,44 @@ export const TOTAL_BEATS = 16 * 32
 export const DEFAULT_PX_PER_BEAT = 40 as const
 const PX_PER_BEAT_TTL_MS = 1_200_000 as const // 20 minutes
 
-type ZoomState = {
-	value: number
+type PlaylistState = {
+	pxPerBeat: number
+	storedScrollX: number
+	storedScrollY: number
 	timestamp: number
 }
 
-const storedPxPerBeat = useLocalStorage<ZoomState>(
-	'megacollab-playlist-zoom-px-per-beat',
+const storedPlaylistState = useLocalStorage<PlaylistState>(
+	'megacollab-playlist-state',
 	{
-		value: DEFAULT_PX_PER_BEAT,
+		pxPerBeat: DEFAULT_PX_PER_BEAT,
+		storedScrollX: 0,
+		storedScrollY: 0,
 		timestamp: Date.now(),
 	},
 	{ mergeDefaults: true },
 )
 
-if (Date.now() - storedPxPerBeat.value.timestamp > PX_PER_BEAT_TTL_MS) {
-	storedPxPerBeat.value = {
-		value: DEFAULT_PX_PER_BEAT,
+if (Date.now() - storedPlaylistState.value.timestamp > PX_PER_BEAT_TTL_MS) {
+	storedPlaylistState.value = {
+		pxPerBeat: DEFAULT_PX_PER_BEAT,
+		storedScrollX: 0,
+		storedScrollY: 0,
 		timestamp: Date.now(),
 	}
 }
 
-export const pxPerBeat = shallowRef(storedPxPerBeat.value['value'])
+export const pxPerBeat = shallowRef(storedPlaylistState.value.pxPerBeat)
+export const storedScrollX = shallowRef(storedPlaylistState.value.storedScrollX)
+export const storedScrollY = shallowRef(storedPlaylistState.value.storedScrollY)
 
 watchDebounced(
-	pxPerBeat,
-	(newValue) => {
-		storedPxPerBeat.value = {
-			value: newValue,
+	[pxPerBeat, storedScrollX, storedScrollY],
+	([newPxPerBeat, newScrollX, newScrollY]) => {
+		storedPlaylistState.value = {
+			pxPerBeat: newPxPerBeat,
+			storedScrollX: newScrollX,
+			storedScrollY: newScrollY,
 			timestamp: Date.now(),
 		}
 	},
