@@ -115,7 +115,7 @@ export const poolPreviewPlayingAudioId = shallowRef<AudioFile['id'] | null>(null
 
 export const TOTAL_BEATS = 16 * 32
 
-const DEFAULT_PX_PER_BEAT = 40 as const
+export const DEFAULT_PX_PER_BEAT = 40 as const
 const PX_PER_BEAT_TTL_MS = 1_200_000 as const // 20 minutes
 
 type ZoomState = {

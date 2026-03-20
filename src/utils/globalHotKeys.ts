@@ -24,6 +24,19 @@ watch(windowFocused, (focused) => {
 
 useEventListener(window, 'keydown', (event: KeyboardEvent) => {
 	const target = event.target
+
+	if (event.key === 'Alt') {
+		altKeyPressed.value = true
+	}
+
+	if (event.key === 'Control') {
+		controlKeyPressed.value = true
+	}
+
+	if (event.key === 'Shift') {
+		shiftKeyPressed.value = true
+	}
+
 	if (
 		target instanceof HTMLElement &&
 		(target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
@@ -34,18 +47,15 @@ useEventListener(window, 'keydown', (event: KeyboardEvent) => {
 	if (menuShortcutsActive.value) return
 
 	if (event.key === 'Alt') {
-		altKeyPressed.value = true
 		event.preventDefault()
 		return
 	}
 
 	if (event.key === 'Control') {
-		controlKeyPressed.value = true
 		return
 	}
 
 	if (event.key === 'Shift') {
-		shiftKeyPressed.value = true
 		return
 	}
 

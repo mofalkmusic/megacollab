@@ -85,6 +85,7 @@
 					:max="maxPxPerBeat"
 					:value="pxPerBeat"
 					@input="handleZoomChange"
+					@mousedown="resetZoom"
 					style="width: 80px"
 					title="Zoom"
 				/>
@@ -101,6 +102,7 @@
 					step="0.01"
 					v-model.number="masterGainValue"
 					@input="setMasterGain(masterGainValue)"
+					@mousedown="resetMasterVolume"
 					style="width: 80px"
 					title="Master Volume"
 				/>
@@ -254,8 +256,14 @@ import {
 	bpm,
 	selectedClipIds,
 	showAdminPanel,
+	DEFAULT_PX_PER_BEAT,
 } from '@/state'
-import { altKeyPressed, controlKeyPressed, zKeyPressed } from '@/utils/globalHotKeys'
+import {
+	altKeyPressed,
+	controlKeyPressed,
+	shiftKeyPressed,
+	zKeyPressed,
+} from '@/utils/globalHotKeys'
 import TrackInstance from '@/components/TrackInstance.vue'
 import {
 	useEventListener,
@@ -360,6 +368,20 @@ function handleZoomChange(e: Event) {
 	// Calculate the new scrollLeft so that `newXInWrapper` lands exactly at `viewportCenterX`
 	// newScrollLeft + viewportCenterX = wrapperOffsetLeft + newXInWrapper
 	container.scrollLeft = wrapperOffsetLeft + newXInWrapper - viewportCenterX
+}
+
+function resetZoom(event: MouseEvent) {
+	if (event.altKey || event.shiftKey || event.ctrlKey) {
+		event.preventDefault()
+		pxPerBeat.value = DEFAULT_PX_PER_BEAT
+	}
+}
+
+function resetMasterVolume(event: MouseEvent) {
+	if (event.altKey || event.shiftKey || event.ctrlKey) {
+		event.preventDefault()
+		setMasterGain(1)
+	}
 }
 
 const minutesNseconds = computed(() => {
@@ -534,8 +556,13 @@ async function toggleMuteSelectedClips() {
  * controlling playback and such. This just simplifies things!
  */
 useEventListener(window, 'focusin', (e) => {
-	if (!(e.target instanceof HTMLButtonElement)) return
-	if (e.target instanceof HTMLElement) e.target.blur()
+	if (
+		e.target instanceof HTMLButtonElement ||
+		e.target instanceof HTMLInputElement ||
+		(e.target instanceof HTMLInputElement && e.target.type === 'range')
+	) {
+		e.target.blur()
+	}
 })
 
 useEventListener('keydown', (event) => {

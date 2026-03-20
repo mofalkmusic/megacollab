@@ -2,6 +2,7 @@
 /dist
 .env
 ideas.md
+issues.json
 
 dev.database
 dev.audiofiles

@@ -149,6 +149,7 @@ io.on('connection', async (socket) => {
 				return
 			}
 			const { filename, filesize, filetype } = data
+			const truncatedFilename = filename.slice(0, 255)
 
 			if (!audioMimeTypes.includes(filetype)) {
 				callback({
@@ -173,9 +174,9 @@ io.on('connection', async (socket) => {
 			}
 
 			const file_id = nanoid()
-			const cleanFileName = sanitizeLetterUnderscoreOnly(filename)
+			const cleanFileName = sanitizeLetterUnderscoreOnly(truncatedFilename)
 
-			const safeDisplayName = filename.trim() || 'unnamed_file' // not really "safe" but since vue already protects against xss should be enough
+			const safeDisplayName = truncatedFilename.trim() || 'unnamed_file' // not really "safe" but since vue already protects against xss should be enough
 
 			const file_key = generateStorageKey(cleanFileName, user.id, file_id)
 

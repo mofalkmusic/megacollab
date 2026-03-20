@@ -86,7 +86,7 @@
 
 		<!-- GAIN DISPLAY -->
 		<div
-			v-if="!withinAudioPool && displayState.gain !== DEFAULT_GAIN"
+			v-if="!withinAudioPool && displayState.gain !== DEFAULT_GAIN && waveformsDrawn"
 			v-show="gainDisplayFits"
 			ref="gainDisplay"
 			class="txt mono small gainDisplay no-select"
