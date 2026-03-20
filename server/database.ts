@@ -83,7 +83,7 @@ export const db = {
 	getTracks,
 	getTrack,
 	updateTrack,
-	createClip,
+	createClips,
 	getClips,
 	getClipsByIds,
 	getClip,
@@ -239,28 +239,42 @@ async function updateTrack(id: string, changes: TrackUpdate): Promise<TrackClien
 	return rows[0]!
 }
 
-async function createClip(
-	clip: Omit<ClipClient, 'created_at' | 'creator_display_name'>,
-): Promise<ClipClient> {
-	const {
-		id,
-		creator_user_id,
-		track_id,
-		audio_file_id,
-		end_beat,
-		start_beat,
-		gain,
-		offset_seconds,
-		fade_in_sec,
-		fade_out_sec,
-		is_muted,
-	} = clip
+async function createClips(
+	clipsToCreate: Omit<ClipClient, 'created_at' | 'creator_display_name'>[],
+): Promise<ClipClient[]> {
+	if (clipsToCreate.length === 0) return []
+
+	const placeholders: string[] = []
+	const values: any[] = [] // dirty but ok for now...
+
+	for (let i = 0; i < clipsToCreate.length; i++) {
+		const clip = clipsToCreate[i]!
+		const offset = i * 11
+
+		placeholders.push(
+			`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`,
+		)
+
+		values.push(
+			clip.id,
+			clip.creator_user_id,
+			clip.track_id,
+			clip.audio_file_id,
+			clip.end_beat,
+			clip.start_beat,
+			clip.gain,
+			clip.offset_seconds,
+			clip.fade_in_sec,
+			clip.fade_out_sec,
+			clip.is_muted,
+		)
+	}
 
 	const rows = await queryFn<ClipClient>(
 		`
 			WITH inserted AS (
 				INSERT INTO ${CLIPS_TABLE} (id, creator_user_id, track_id, audio_file_id, end_beat, start_beat, gain, offset_seconds, fade_in_sec, fade_out_sec, is_muted) 
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+				VALUES ${placeholders.join(', ')}
 				RETURNING *
 			)
 			SELECT 
@@ -270,25 +284,10 @@ async function createClip(
 			LEFT JOIN ${USERS_TABLE} AS users
 				ON inserted.creator_user_id = users.id
 		`,
-		[
-			id,
-			creator_user_id,
-			track_id,
-			audio_file_id,
-			end_beat,
-			start_beat,
-			gain,
-			offset_seconds,
-			fade_in_sec,
-			fade_out_sec,
-			is_muted,
-		],
+		values,
 	)
 
-	if (!rows.length) throw new Error('Failed to create clip')
-	const result = rows[0]!
-
-	return result
+	return rows
 }
 
 async function getClips(): Promise<ClipClient[]> {

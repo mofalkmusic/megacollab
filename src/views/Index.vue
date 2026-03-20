@@ -940,23 +940,29 @@ watch(
 					if (!currentClip) return // Clip was deleted by user while uploading
 
 					// Commit using the CURRENT position of the optimistic clip
-					const res = await socket.emitWithAck('get:clip:create', {
-						audio_file_id: source.audioFileId,
-						track_id: currentClip.track_id,
-						start_beat: currentClip.start_beat,
-						end_beat: currentClip.end_beat,
-						offset_seconds: currentClip.offset_seconds,
-						gain: currentClip.gain,
-					})
+					const res = await socket.emitWithAck('get:clip:create', [
+						{
+							audio_file_id: source.audioFileId,
+							track_id: currentClip.track_id,
+							start_beat: currentClip.start_beat,
+							end_beat: currentClip.end_beat,
+							offset_seconds: currentClip.offset_seconds,
+							gain: currentClip.gain,
+						},
+					])
 
-					if (res.success) {
-						const clip = res.data
+					if (res.success && res.data[0]) {
+						const clip = res.data[0]
 						clips.delete(tempId) // Remove the temporary optimistic clip
 						clips.set(clip.id, clip)
 					} else {
-						userLog('SYSTEM', `Failed to create clip: ${res.error.message}`, {
-							textColor: 'red',
-						})
+						userLog(
+							'SYSTEM',
+							`Failed to create clip: ${res.error?.message || 'unknown error'}`,
+							{
+								textColor: 'red',
+							},
+						)
 						console.error('failed to create clip:', res.error)
 						clips.delete(tempId)
 					}

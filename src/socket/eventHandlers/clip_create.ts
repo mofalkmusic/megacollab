@@ -4,17 +4,17 @@ import { clips } from '@/state'
 export default defineSocketHandler({
 	event: 'clip:create',
 	handler: (data) => {
-		const existing = clips.get(data.id)
+		for (const clipData of data) {
+			const existing = clips.get(clipData.id)
 
-		if (existing) {
-			clips.set(data.id, {
-				...existing,
-				...data,
-			})
-
-			return
+			if (existing) {
+				clips.set(clipData.id, {
+					...existing,
+					...clipData,
+				})
+			} else {
+				clips.set(clipData.id, clipData)
+			}
 		}
-
-		clips.set(data.id, data)
 	},
 })

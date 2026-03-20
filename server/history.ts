@@ -7,8 +7,8 @@ const IN_DEV_MODE = Bun.env['ENV'] === 'development'
 
 type HistoryEventMap = {
 	CLIP_CREATE: {
-		payload: ClientRequestPayload<'get:clip:create'> & { id: ClipClient['id'] }
-		inverse: ServerEmitPayload<'clip:delete'>
+		payload: Array<ClientRequestPayload<'get:clip:create'>[number] & { id: ClipClient['id'] }>
+		inverse: Array<ServerEmitPayload<'clip:delete'>>
 	}
 	CLIP_DELETE: {
 		payload: ClientRequestPayload<'get:clip:delete'>
@@ -83,30 +83,30 @@ class HistoryManager {
 
 			switch (action.type) {
 				case 'CLIP_CREATE': {
-					const clipId = action.data.payload.id
+					const payloads = action.data.payload
 
-					let current: Awaited<ReturnType<typeof db.getClip>>
-
-					try {
-						current = await db.getClip(clipId)
-					} catch {
-						return { success: false, error: 'Failed to retrieve clip status.' }
-					}
-
-					if (current) {
+					let allSuccess = true
+					for (const p of payloads) {
+						let current: Awaited<ReturnType<typeof db.getClip>> | undefined
 						try {
-							await db.deleteClip(clipId)
-							socketBroadcast('clip:delete', clipId)
-							processed = true
+							current = await db.getClip(p.id)
 						} catch {
-							return { success: false, error: 'Failed to delete clip.' }
+							allSuccess = false
 						}
-					} else {
-						return {
-							success: false,
-							error: 'Clip was already deleted by someone else.',
+
+						if (current) {
+							try {
+								await db.deleteClip(p.id)
+								socketBroadcast('clip:delete', p.id)
+							} catch {
+								allSuccess = false
+							}
 						}
 					}
+
+					if (allSuccess) processed = true
+					else
+						return { success: false, error: 'Failed to fully undo bulk clip creation.' }
 
 					break
 				}
@@ -123,10 +123,15 @@ class HistoryManager {
 					}
 
 					if (!current) {
-						const clip = action.data.inverse
+						const clips = action.data.inverse
+
+						const newClips = clips.map((c) => {
+							const { created_at, creator_display_name, ...rest } = c
+							return rest
+						})
 
 						try {
-							const restored = await db.createClip(clip)
+							const restored = await db.createClips(newClips)
 							socketBroadcast('clip:create', restored)
 							processed = true
 						} catch {

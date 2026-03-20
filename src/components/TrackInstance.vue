@@ -179,18 +179,20 @@ const { isOverDropZone } = useDropZone(trackEl, {
 				const currentClip = clips.get(tempId)
 				if (!currentClip) return // deleted?
 
-				const syncRes = await socket.emitWithAck('get:clip:create', {
-					audio_file_id: res.id,
-					track_id: currentClip.track_id,
-					start_beat: currentClip.start_beat,
-					end_beat: currentClip.end_beat,
-					offset_seconds: currentClip.offset_seconds,
-					gain: currentClip.gain,
-				})
+				const syncRes = await socket.emitWithAck('get:clip:create', [
+					{
+						audio_file_id: res.id,
+						track_id: currentClip.track_id,
+						start_beat: currentClip.start_beat,
+						end_beat: currentClip.end_beat,
+						offset_seconds: currentClip.offset_seconds,
+						gain: currentClip.gain,
+					},
+				])
 
-				if (syncRes.success) {
+				if (syncRes.success && syncRes.data[0]) {
 					clips.delete(tempId)
-					clips.set(syncRes.data.id, syncRes.data)
+					clips.set(syncRes.data[0].id, syncRes.data[0])
 				}
 			} catch (e) {
 				console.error('Upload or sync failed', e)

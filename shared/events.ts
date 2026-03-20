@@ -77,7 +77,7 @@ export const EVENTS = Object.freeze({
 			audio_file: ClientAudioFileSchema.pick({ id: true }),
 			deleted_clips: z.array(ClientClipSchema.shape['id']),
 		}),
-		'clip:create': ClientClipSchema,
+		'clip:create': z.array(ClientClipSchema),
 		'clip:update': z.array(ClientClipSchema),
 		'clip:delete': ClientClipSchema.shape['id'],
 		'track:create': ClientTrackSchema,
@@ -176,15 +176,17 @@ export const EVENTS = Object.freeze({
 			res: ClientTrackSchema,
 		}),
 		'get:clip:create': defineRequest({
-			req: z.object({
-				start_beat: z.number(),
-				end_beat: z.number(),
-				audio_file_id: z.string(),
-				track_id: z.string(),
-				offset_seconds: z.number().optional(),
-				gain: z.number().optional(),
-			}),
-			res: ClientClipSchema,
+			req: z.array(
+				z.object({
+					start_beat: z.number(),
+					end_beat: z.number(),
+					audio_file_id: z.string(),
+					track_id: z.string(),
+					offset_seconds: z.number().optional(),
+					gain: z.number().optional(),
+				}),
+			),
+			res: z.array(ClientClipSchema),
 		}),
 		'get:clip:delete': defineRequest({
 			req: ClientClipSchema.pick({ id: true }),

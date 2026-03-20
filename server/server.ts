@@ -409,38 +409,46 @@ io.on('connection', async (socket) => {
 				})
 				return
 			}
-			const { start_beat, end_beat, audio_file_id, track_id, offset_seconds, gain } = data
 
-			const newClip: Omit<ClipClient, 'created_at'> = {
-				id: createNonTempNanoId(),
-				creator_user_id: user.id,
-				creator_display_name: user.display_name,
-				start_beat,
-				end_beat,
-				audio_file_id,
-				gain: gain ?? DEFAULT_GAIN,
-				is_muted: false,
-				offset_seconds: offset_seconds ?? 0,
-				fade_in_sec: 0,
-				fade_out_sec: 0,
-				track_id,
-			}
+			const newClips: Omit<ClipClient, 'created_at' | 'creator_display_name'>[] = data.map(
+				(d) => ({
+					id: createNonTempNanoId(),
+					creator_user_id: user.id,
+					start_beat: d.start_beat,
+					end_beat: d.end_beat,
+					audio_file_id: d.audio_file_id,
+					gain: d.gain ?? DEFAULT_GAIN,
+					is_muted: false,
+					offset_seconds: d.offset_seconds ?? 0,
+					fade_in_sec: 0,
+					fade_out_sec: 0,
+					track_id: d.track_id,
+				}),
+			)
 
 			try {
-				const clip = await db.createClip(newClip)
+				const clips = await db.createClips(newClips)
 
 				callback({
 					success: true,
-					data: clip,
+					data: clips,
 				})
 
-				socket.broadcast.emit('clip:create', clip)
+				socket.broadcast.emit('clip:create', clips)
 
 				history.push({
 					type: 'CLIP_CREATE',
 					data: {
-						payload: clip,
-						inverse: clip.id,
+						payload: clips.map((c) => ({
+							start_beat: c.start_beat,
+							end_beat: c.end_beat,
+							audio_file_id: c.audio_file_id,
+							track_id: c.track_id,
+							offset_seconds: c.offset_seconds,
+							gain: c.gain,
+							id: c.id,
+						})),
+						inverse: clips.map((c) => c.id),
 					},
 					userId: user.id,
 				})
@@ -486,7 +494,7 @@ io.on('connection', async (socket) => {
 					userId: user.id,
 					data: {
 						payload: { id: clip.id },
-						inverse: clip,
+						inverse: [clip],
 					},
 				})
 			} catch (err) {

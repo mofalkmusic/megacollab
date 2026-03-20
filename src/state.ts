@@ -26,6 +26,9 @@ export const showAdminPanel = shallowRef(false)
 export const clips = reactive<Map<string, ClipClient>>(new Map())
 export const selectedClipIds = reactive<Set<string>>(new Set())
 
+/** Has to receive deepcloned clips, in order for new edits not to mess with ones clipboard... */
+export const clipboardClips = ref<ClipClient[]>([])
+
 type DragSessionBase = {
 	mouse_start_x: number
 	source_clip: ClipClient
