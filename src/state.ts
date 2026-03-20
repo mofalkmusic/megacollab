@@ -121,14 +121,14 @@ export const TOTAL_BEATS = 16 * 32
 export const DEFAULT_PX_PER_BEAT = 40 as const
 const PX_PER_BEAT_TTL_MS = 1_200_000 as const // 20 minutes
 
-type PlaylistState = {
+export type PlaylistState = {
 	pxPerBeat: number
 	storedScrollX: number
 	storedScrollY: number
 	timestamp: number
 }
 
-const storedPlaylistState = useLocalStorage<PlaylistState>(
+export const storedPlaylistState = useLocalStorage<PlaylistState>(
 	'megacollab-playlist-state',
 	{
 		pxPerBeat: DEFAULT_PX_PER_BEAT,
@@ -149,21 +149,6 @@ if (Date.now() - storedPlaylistState.value.timestamp > PX_PER_BEAT_TTL_MS) {
 }
 
 export const pxPerBeat = shallowRef(storedPlaylistState.value.pxPerBeat)
-export const storedScrollX = shallowRef(storedPlaylistState.value.storedScrollX)
-export const storedScrollY = shallowRef(storedPlaylistState.value.storedScrollY)
-
-watchDebounced(
-	[pxPerBeat, storedScrollX, storedScrollY],
-	([newPxPerBeat, newScrollX, newScrollY]) => {
-		storedPlaylistState.value = {
-			pxPerBeat: newPxPerBeat,
-			storedScrollX: newScrollX,
-			storedScrollY: newScrollY,
-			timestamp: Date.now(),
-		}
-	},
-	{ debounce: 300 },
-)
 
 export const maxPxPerBeat = 120 as const
 export const minPxPerBeat = 4 as const

@@ -257,8 +257,7 @@ import {
 	selectedClipIds,
 	showAdminPanel,
 	DEFAULT_PX_PER_BEAT,
-	storedScrollX,
-	storedScrollY,
+	storedPlaylistState,
 } from '@/state'
 import {
 	altKeyPressed,
@@ -695,29 +694,26 @@ const isRestored = shallowRef(false)
 const { x: timelineX, y: timelineY } = useScroll(timelineContainerEl)
 
 watchDebounced(
-	timelineX,
-	(val) => {
+	[timelineX, timelineY, pxPerBeat],
+	([x, y, p]) => {
 		if (!isRestored.value) return
-		storedScrollX.value = val
+		storedPlaylistState.value = {
+			pxPerBeat: p,
+			storedScrollX: x,
+			storedScrollY: y,
+			timestamp: Date.now(),
+		}
 	},
-	{ debounce: 500 },
-)
-
-watchDebounced(
-	timelineY,
-	(val) => {
-		if (!isRestored.value) return
-		storedScrollY.value = val
-	},
-	{ debounce: 500 },
+	{ debounce: 300 },
 )
 
 whenever(
 	() => _socketReady.value,
 	async () => {
 		await nextTick()
-		timelineX.value = storedScrollX.value
-		timelineY.value = storedScrollY.value
+
+		timelineX.value = storedPlaylistState.value.storedScrollX
+		timelineY.value = storedPlaylistState.value.storedScrollY
 
 		await nextTick()
 		await nextTick()
