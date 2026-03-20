@@ -276,6 +276,7 @@ import {
 	useElementSize,
 	useIntervalFn,
 	useElementBounding,
+	watchDebounced,
 } from '@vueuse/core'
 import { audiofiles, clips, dragFromPoolState, pxTrackHeight, TOTAL_BEATS, user } from '@/state'
 import {
@@ -693,15 +694,23 @@ const isRestored = shallowRef(false)
 
 const { x: timelineX, y: timelineY } = useScroll(timelineContainerEl)
 
-watch(timelineX, (val) => {
-	if (!isRestored.value) return
-	storedScrollX.value = val
-})
+watchDebounced(
+	timelineX,
+	(val) => {
+		if (!isRestored.value) return
+		storedScrollX.value = val
+	},
+	{ debounce: 500 },
+)
 
-watch(timelineY, (val) => {
-	if (!isRestored.value) return
-	storedScrollY.value = val
-})
+watchDebounced(
+	timelineY,
+	(val) => {
+		if (!isRestored.value) return
+		storedScrollY.value = val
+	},
+	{ debounce: 500 },
+)
 
 whenever(
 	() => _socketReady.value,
