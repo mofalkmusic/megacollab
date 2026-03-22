@@ -29,7 +29,9 @@ export const selectedClipIds = reactive<Set<string>>(new Set())
 export const chats = reactive<Map<string, ChatClient>>(new Map())
 export const tempChats = reactive<Map<string, ChatClient>>(new Map())
 export const isPlacingChat = shallowRef(false)
-export const dismissedChats = useLocalStorage<string[]>('megacollab-dismissed-chats', []) // todo: cleanup from time to time...
+
+type DismissedChat = { id: string; dismissedAt: number }
+export const dismissedChats = useLocalStorage<DismissedChat[]>('megacollab-dismissed-chats', [])
 
 /** Has to receive deepcloned clips, in order for new edits not to mess with ones clipboard... */
 export const clipboardClips = ref<ClipClient[]>([])
@@ -212,3 +214,22 @@ useIntervalFn(
 	1000,
 	{ immediate: true },
 )
+
+const DISMISSED_CHATS_TTL_MS = 20 * 60 * 1000 // 20 minutes
+const DISMISSED_CHATS_MAX_COUNT = 1000
+
+export function pruneDismissedChats() {
+	const now = Date.now()
+	// filter by ttl
+	let pruned = dismissedChats.value.filter((d) => now - d.dismissedAt < DISMISSED_CHATS_TTL_MS)
+
+	// filter by capacity - keep recent
+	if (pruned.length > DISMISSED_CHATS_MAX_COUNT) {
+		pruned.sort((a, b) => b.dismissedAt - a.dismissedAt)
+		pruned = pruned.slice(0, DISMISSED_CHATS_MAX_COUNT)
+	}
+
+	dismissedChats.value = pruned
+}
+
+useIntervalFn(pruneDismissedChats, 5 * 60 * 1000, { immediate: true })

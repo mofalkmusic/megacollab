@@ -60,7 +60,9 @@ const props = defineProps<{
 	isGhost?: boolean
 }>()
 
-const isDismissed = computed(() => !props.isGhost && dismissedChats.value.includes(props.chat.id))
+const isDismissed = computed(
+	() => !props.isGhost && dismissedChats.value.some((d) => d.id === props.chat.id),
+)
 
 const emit = defineEmits<{
 	(e: 'created', text: string): void
@@ -97,8 +99,8 @@ const computedStyle = computed(() => {
 
 function dismiss() {
 	if (props.isGhost) return
-	if (!dismissedChats.value.includes(props.chat.id)) {
-		dismissedChats.value.push(props.chat.id)
+	if (!dismissedChats.value.some((d) => d.id === props.chat.id)) {
+		dismissedChats.value.push({ id: props.chat.id, dismissedAt: Date.now() })
 	}
 }
 
@@ -187,6 +189,7 @@ function startReply() {
 .chat-txt {
 	color: color-mix(in lch, var(--text-color-primary), var(--color) 20%);
 	word-wrap: break-word;
+	line-height: 130%;
 }
 
 .chat-txt.editing {
