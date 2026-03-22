@@ -142,6 +142,7 @@ import {
 	type DragSession,
 	trackIdsInOrderByIndex,
 	pxTrackHeight,
+	isPlacingChat,
 } from '@/state'
 import { altKeyPressed, controlKeyPressed, shiftKeyPressed } from '@/utils/globalHotKeys'
 import type { ClipClient, ClipUpdate } from '~/schema'
@@ -799,6 +800,7 @@ onMounted(() => {
 			// propagation such that events that reach this listener
 			// are essentially guaranteed to be simple move click and drags.
 			if (event.defaultPrevented) return
+			if (isPlacingChat.value && event.button === 0) return
 
 			if (event.button === 2) {
 				// right click
@@ -1011,6 +1013,7 @@ onMounted(() => {
 				}
 
 				if (event.button !== 0) return // only left click
+				if (isPlacingChat.value) return
 
 				event.preventDefault()
 				event.stopPropagation()
@@ -1177,8 +1180,8 @@ onMounted(() => {
 				if (event.button === 2) {
 					return deleteClip() // right click
 				}
-
 				if (event.button !== 0) return // only left click
+				if (isPlacingChat.value) return
 
 				event.preventDefault()
 				event.stopPropagation()
@@ -1276,6 +1279,7 @@ onMounted(() => {
 			}
 
 			if (event.button !== 0) return // left click only
+			if (isPlacingChat.value) return
 
 			event.preventDefault()
 			event.stopPropagation()

@@ -21,6 +21,23 @@
 				}"
 			/>
 
+			<ChatStickyNote
+				v-for="chat in trackChats"
+				:key="chat.id"
+				:chat="chat"
+				@reply="startReply"
+			/>
+
+			<ChatStickyNote
+				v-for="chat in trackTempChats"
+				:key="chat.id"
+				:chat="chat"
+				@cancel="tempChats.delete(chat.id)"
+				@created="handleTempChatCreated(chat, $event)"
+			/>
+
+			<ChatStickyNote v-if="ghostChatForTrack" :chat="ghostChatForTrack" :is-ghost="true" />
+
 			<!-- visual drop indicator -->
 			<div
 				v-if="isOverDropZone && dropIndicatorX !== null"
@@ -41,10 +58,22 @@
 </template>
 
 <script setup lang="ts">
-import type { TrackServer, ClipClient } from '~/schema'
+import type { TrackServer, ClipClient, ChatClient } from '~/schema'
 import ClipInstance from '@/components/ClipInstance.vue'
+import ChatStickyNote from '@/components/ChatStickyNote.vue'
 import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef } from 'vue'
-import { clips, pxPerBeat, audiofiles, pxTrackHeight, TOTAL_BEATS, user } from '@/state'
+import {
+	clips,
+	pxPerBeat,
+	audiofiles,
+	pxTrackHeight,
+	TOTAL_BEATS,
+	user,
+	chats,
+	tempChats,
+	isPlacingChat,
+	timelineCursorPayload,
+} from '@/state'
 import { altKeyPressed } from '@/utils/globalHotKeys'
 import { mutedTrackIds, registerTrack, soloTrackIds, unregisterTrack } from '@/audioEngine'
 import { useDropZone, useEventListener, useElementBounding } from '@vueuse/core'
@@ -56,6 +85,7 @@ import { nanoid } from 'nanoid'
 import { useGlobalProgress } from '@/composables/useGlobalProgress'
 import { useConsole } from '@/composables/useConsole'
 import { useTimelineGrid } from '@/composables/useTimelineGrid'
+import type { transform } from 'zod'
 
 const props = defineProps<{
 	track: TrackServer
@@ -90,6 +120,83 @@ const trackStyle = computed(() => {
 const trackClips = computed(() => {
 	return [...clips.values()].filter((clip) => clip.track_id === props.track.id)
 })
+
+const trackChats = computed(() => {
+	return [...chats.values()].filter((chat) => chat.track_id === props.track.id)
+})
+
+const trackTempChats = computed(() => {
+	return [...tempChats.values()].filter((chat) => chat.track_id === props.track.id)
+})
+
+const ghostChatForTrack = computed(() => {
+	if (
+		!isPlacingChat.value ||
+		!timelineCursorPayload.value ||
+		timelineCursorPayload.value.trackId !== props.track.id
+	)
+		return null
+	return {
+		id: '__ghost__',
+		beat: timelineCursorPayload.value.beat,
+		track_id: props.track.id,
+		track_y_offset: timelineCursorPayload.value.trackYOffset,
+		text: 'Click to drop a message...',
+		reply_to_id: null,
+		creator_user_id: user.value!.id,
+		creator_display_name: user.value!.display_name,
+		color: user.value!.color || '#ffffff',
+		created_at: new Date().toISOString(),
+	} satisfies ChatClient
+})
+
+async function handleTempChatCreated(tempChat: ChatClient, newText: string) {
+	tempChats.delete(tempChat.id)
+
+	try {
+		const res = await socket.emitWithAck('get:chat:create', {
+			beat: tempChat.beat,
+			track_id: tempChat.track_id,
+			track_y_offset: tempChat.track_y_offset,
+			text: newText.trim().slice(0, 100),
+			reply_to_id: tempChat.reply_to_id,
+		})
+
+		if (res.success) {
+			chats.set(res.data.id, res.data)
+
+			userLog('CHAT', res.data.text, {
+				textColor: res.data.color,
+				display_name: res.data.creator_display_name,
+				user_id: res.data.creator_user_id,
+				reply_to_id: res.data.reply_to_id,
+			})
+		} else {
+			userLog('SYSTEM', 'Failed to send chat: ' + res.error.message, { textColor: 'red' })
+		}
+	} catch (e) {
+		userLog('SYSTEM', 'Network error sending chat', { textColor: 'red' })
+	}
+}
+
+function startReply(replyToChat: ChatClient) {
+	const tempId = `__temp__${nanoid()}`
+
+	const c: ChatClient = {
+		id: tempId,
+		beat: replyToChat.beat,
+		track_id: replyToChat.track_id,
+		track_y_offset: Math.min(1, replyToChat.track_y_offset + 0.6),
+		text: '',
+		reply_to_id: replyToChat.id,
+		creator_user_id: user.value!.id,
+		creator_display_name: user.value!.display_name,
+		color: user.value!.color || '#ffffff',
+		created_at: new Date().toISOString(),
+	} satisfies ChatClient
+
+	tempChats.set(tempId, c)
+}
 
 const trackEl = useTemplateRef('trackElement')
 const dropIndicatorX = shallowRef<number | null>(null)

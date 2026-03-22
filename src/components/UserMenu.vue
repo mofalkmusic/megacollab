@@ -192,7 +192,7 @@ import { useRouter } from 'vue-router'
 import { sanitizeLetterUnderscoreOnly } from '~/utils'
 import { vElementHover } from '@vueuse/components'
 import { isLooping, isPlaying, reset } from '@/audioEngine'
-import { updateDisplayNamesForUser } from '@/socket/eventHandlers/user_username_change'
+import { handleUserUpdate } from '@/socket/eventHandlers/user_update'
 
 const isBugButtonHovered = shallowRef(false)
 function onBugHover(hovered: boolean) {
@@ -252,7 +252,7 @@ async function confirmEditingUsername() {
 		false,
 	)
 
-	const res = await socket.emitWithAck('get:update:username', {
+	const res = await socket.emitWithAck('get:update:user', {
 		username: cleanUsername,
 	})
 
@@ -263,11 +263,13 @@ async function confirmEditingUsername() {
 		return
 	}
 
-	tempUsername.value = res.data.username
+	if (res.data && res.data.username) {
+		tempUsername.value = res.data.username
 
-	if (user.value) {
-		user.value.display_name = res.data.username
-		updateDisplayNamesForUser(user.value.id, res.data.username)
+		if (user.value) {
+			user.value.display_name = res.data.username
+			handleUserUpdate(user.value.id, { display_name: res.data.username })
+		}
 	}
 
 	isEditingUsername.value = false

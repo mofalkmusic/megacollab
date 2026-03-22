@@ -13,6 +13,7 @@ export default defineSocketHandler({
 			otherUserPositions.set(userId, {
 				pos: packet.pos,
 				display_name: packet.display_name,
+				color: packet.color,
 				lastUpdated: packet.updatedAt,
 			})
 

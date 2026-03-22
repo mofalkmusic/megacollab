@@ -20,7 +20,27 @@
 							backgroundColor: msg.options?.backgroundColor,
 						}"
 					>
-						<span class="sender mono small">{{ msg.sender }}: </span>
+						<span
+							v-if="getRepliedChat(msg.options?.reply_to_id)"
+							class="mono dim"
+							style="
+								display: block;
+								font-size: 0.7rem;
+								border-left: 2px solid var(--border-primary);
+								padding-left: 4px;
+								margin-bottom: 2px;
+							"
+						>
+							-> Replying to
+							{{ getRepliedChat(msg.options?.reply_to_id)!.creator_display_name }}:
+							"{{ getRepliedChat(msg.options?.reply_to_id)!.text }}"
+						</span>
+						<span
+							class="sender mono small"
+							:style="msg.sender === 'CHAT' ? { color: msg.options?.textColor } : {}"
+						>
+							{{ msg.sender === 'CHAT' ? msg.options?.display_name : msg.sender }}:
+						</span>
 						<span
 							class="content mono small"
 							:style="{
@@ -56,7 +76,7 @@
 <script setup lang="ts">
 import { useConsole } from '@/composables/useConsole'
 import { computed, nextTick, ref, shallowRef, useTemplateRef, watch } from 'vue'
-import { audioFilePoolHeightPx } from '@/state'
+import { audioFilePoolHeightPx, chats } from '@/state'
 import { useResizeObserver, useScroll } from '@vueuse/core'
 
 // todo: style the button for scroll to bottom properly
@@ -104,6 +124,11 @@ function scrollToBottom() {
 			behavior: 'smooth',
 		})
 	}
+}
+
+function getRepliedChat(replyToId?: string | null) {
+	if (!replyToId) return null
+	return chats.get(replyToId) || null
 }
 
 let wasScrollable = false

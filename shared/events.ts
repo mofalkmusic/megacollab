@@ -9,6 +9,8 @@ import {
 	updateClipSchema,
 	updateTrackSchema,
 	ClientTrackSchema,
+	ClientChatSchema,
+	createChatSchema,
 } from './schema'
 
 export type ServerAckSchape<T> =
@@ -70,6 +72,7 @@ export const EVENTS = Object.freeze({
 			clips: z.array(ClientClipSchema),
 			audiofiles: z.array(ClientAudioFileSchema),
 			tracks: z.array(ClientTrackSchema),
+			chats: z.array(ClientChatSchema),
 		}),
 		'server:error': AppErrorSchema,
 		'audiofile:create': ClientAudioFileSchema,
@@ -91,12 +94,16 @@ export const EVENTS = Object.freeze({
 			z.object({
 				pos: timelinePosSchema,
 				display_name: UserSchema.shape['display_name'],
+				color: z.string(),
 				updatedAt: z.number(),
 			}),
 		),
-		'user:username_change': z.object({
+		'user:update': z.object({
 			user_id: UserSchema.shape['id'],
-			new_display_name: UserSchema.shape['display_name'],
+			changes: z.object({
+				display_name: UserSchema.shape['display_name'].optional(),
+				color: z.string().optional(),
+			}),
 		}),
 
 		'user:ban_status': z.object({
@@ -105,6 +112,7 @@ export const EVENTS = Object.freeze({
 			is_banned: z.boolean(),
 			ban_reason: z.string().nullable(),
 		}),
+		'chat:create': ClientChatSchema,
 	},
 	CLIENT_REQUESTS: {
 		'get:admin:users': defineRequest({
@@ -204,12 +212,14 @@ export const EVENTS = Object.freeze({
 			),
 			res: z.array(ClientClipSchema),
 		}),
-		'get:update:username': defineRequest({
+		'get:update:user': defineRequest({
 			req: z.object({
-				username: z.string(),
+				username: z.string().optional(),
+				color: z.string().optional(),
 			}),
 			res: z.object({
-				username: z.string(),
+				username: z.string().optional(),
+				color: z.string().optional(),
 			}),
 		}),
 		'get:undo': defineRequest({
@@ -240,6 +250,10 @@ export const EVENTS = Object.freeze({
 		'get:update:download_quality': defineRequest({
 			req: UserSchema.shape['download_quality'],
 			res: UserSchema.shape['download_quality'],
+		}),
+		'get:chat:create': defineRequest({
+			req: createChatSchema,
+			res: ClientChatSchema,
 		}),
 	},
 } as const satisfies EventDefinitions)

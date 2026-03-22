@@ -285,6 +285,9 @@ import {
 	TOTAL_BEATS,
 	user,
 	clipboardClips,
+	timelineCursorPayload,
+	isPlacingChat,
+	tempChats,
 } from '@/state'
 import {
 	currentPlayTimeBeats,
@@ -302,7 +305,7 @@ import UserCursors from '@/components/UserCursors.vue'
 import TimelineHeader from '@/components/TimelineHeader.vue'
 import TrackControls from '@/components/TrackControls.vue'
 import { px_to_beats, quantize_beats, sec_to_beats } from '@/utils/mathUtils'
-import type { ClipClient, ClipUpdate } from '~/schema'
+import type { ChatClient, ClipClient, ClipUpdate } from '~/schema'
 import { updateClips } from '@/socket/eventHandlers/clip_update'
 import ClipInstance from '@/components/ClipInstance.vue'
 import AddTrack from '@/components/TrackAddButton.vue'
@@ -426,12 +429,8 @@ const sortedTracks = computed(() => {
 
 // todo
 function sendChat() {
-	userLog('USER', 'sent a message', {
-		textColor: 'orange',
-		isBold: true,
-		display_name: user.value?.display_name || 'unknown',
-		user_id: user.value?.id || '__self__',
-	})
+	isPlacingChat.value = true
+	isUserMenuOpen.value = false
 }
 
 whenever(
@@ -615,6 +614,10 @@ useEventListener('keydown', (event) => {
 	if (event.code === 'KeyM') {
 		toggleMuteSelectedClips()
 	}
+
+	if (event.code === 'KeyT') {
+		sendChat()
+	}
 })
 
 function togglePlayState() {
@@ -672,6 +675,55 @@ useEventListener(
 )
 
 const isPanning = shallowRef(false)
+const tracksWrapperEl = useTemplateRef('tracksWrapper')
+const tracksContainerInnerEl = useTemplateRef('tracksContainerInner')
+
+useEventListener(tracksWrapperEl, 'pointerdown', (e) => {
+	if (isPlacingChat.value && timelineCursorPayload.value && e.button === 0) {
+		isPlacingChat.value = false
+
+		if (!user.value) return
+
+		const tempId = `__temp__${nanoid()}`
+
+		const tempChat: ChatClient = {
+			id: tempId,
+			beat: timelineCursorPayload.value.beat,
+			track_id: timelineCursorPayload.value.trackId,
+			track_y_offset: timelineCursorPayload.value.trackYOffset,
+			text: '',
+			reply_to_id: null,
+			creator_user_id: user.value.id,
+			creator_display_name: user.value.display_name,
+			color: user.value!.color || '#ffffff',
+			created_at: new Date().toISOString(),
+		}
+
+		tempChats.set(tempId, tempChat)
+
+		e.preventDefault()
+		e.stopPropagation()
+	}
+})
+
+function cancelChatPlacement() {
+	if (isPlacingChat.value) {
+		isPlacingChat.value = false
+		timelineCursorPayload.value = null
+	}
+}
+
+useEventListener(window, 'keydown', (e) => {
+	if (e.key === 'Escape') cancelChatPlacement()
+})
+
+useEventListener(window, 'contextmenu', () => {
+	cancelChatPlacement()
+})
+
+useEventListener(window, 'blur', () => {
+	cancelChatPlacement()
+})
 
 useEventListener(timelineContainerEl, 'pointerdown', (e) => {
 	if (e.button !== 1) return // wheel-click only
@@ -771,17 +823,10 @@ function updateDims() {
 	timelineClientWidth.value = el.clientWidth
 }
 
-const tracksWrapperEl = useTemplateRef('tracksWrapper')
-const tracksContainerInnerEl = useTemplateRef('tracksContainerInner')
 useResizeObserver(tracksWrapperEl, updateDims)
 
 // Cursor Logic
 // todo: should be moved to trackinstance for better performance bc it will allow direct access to .track which here i have to get through the target.closest....
-const latestCursorPayload = shallowRef<{
-	beat: number
-	trackId: string
-	trackYOffset: number
-} | null>(null)
 const lastEmittedPayloadHash = ref('')
 
 function handleCursorMove(event: PointerEvent) {
@@ -792,13 +837,13 @@ function handleCursorMove(event: PointerEvent) {
 
 	const trackEl = target.closest('[data-track-id]')
 	if (!(trackEl instanceof HTMLElement)) {
-		latestCursorPayload.value = null
+		timelineCursorPayload.value = null
 		return
 	}
 
 	const trackId = trackEl.dataset.trackId
 	if (!trackId) {
-		latestCursorPayload.value = null
+		timelineCursorPayload.value = null
 		return
 	}
 
@@ -812,19 +857,21 @@ function handleCursorMove(event: PointerEvent) {
 
 	const beat = Math.max(px_to_beats(xInWrapper), 0.0000001)
 
-	latestCursorPayload.value = { beat, trackId, trackYOffset }
+	timelineCursorPayload.value = { beat, trackId, trackYOffset }
 }
 
 function handleCursorLeave() {
-	latestCursorPayload.value = null
+	timelineCursorPayload.value = null
 }
 
 // Register listeners on the wrapper
 useEventListener(tracksWrapperEl, 'pointermove', handleCursorMove)
 useEventListener(tracksWrapperEl, 'pointerleave', handleCursorLeave)
 
+useEventListener(tracksWrapperEl, 'pointerleave', handleCursorLeave)
+
 useIntervalFn(() => {
-	if (!latestCursorPayload.value) {
+	if (!timelineCursorPayload.value) {
 		if (lastEmittedPayloadHash.value !== 'cleared') {
 			socket.emit('emit:clearpos', null)
 			lastEmittedPayloadHash.value = 'cleared'
@@ -832,7 +879,7 @@ useIntervalFn(() => {
 		return
 	}
 
-	const payload = latestCursorPayload.value
+	const payload = timelineCursorPayload.value
 	const hash = `${Math.max(0, payload.beat).toFixed(4)}_${payload.trackId}_${payload.trackYOffset.toFixed(4)}`
 
 	if (hash !== lastEmittedPayloadHash.value) {

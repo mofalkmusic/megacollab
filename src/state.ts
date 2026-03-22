@@ -5,6 +5,7 @@ import {
 	type ClipClient,
 	type TimelinePos,
 	type User,
+	type ChatClient,
 } from '~/schema'
 import { type DebugEntry } from '@/composables/useDebug'
 import {
@@ -13,7 +14,6 @@ import {
 	useIntervalFn,
 	useLocalStorage,
 	useWindowFocus,
-	watchDebounced,
 } from '@vueuse/core'
 import type { AudioFile } from '@/types'
 
@@ -25,6 +25,11 @@ export const showAdminPanel = shallowRef(false)
 
 export const clips = reactive<Map<string, ClipClient>>(new Map())
 export const selectedClipIds = reactive<Set<string>>(new Set())
+
+export const chats = reactive<Map<string, ChatClient>>(new Map())
+export const tempChats = reactive<Map<string, ChatClient>>(new Map())
+export const isPlacingChat = shallowRef(false)
+export const dismissedChats = useLocalStorage<string[]>('megacollab-dismissed-chats', []) // todo: cleanup from time to time...
 
 /** Has to receive deepcloned clips, in order for new edits not to mess with ones clipboard... */
 export const clipboardClips = ref<ClipClient[]>([])
@@ -105,7 +110,7 @@ export const globalProgresses = reactive(
 )
 
 export const otherUserPositions = reactive<
-	Map<string, { pos: TimelinePos; display_name: string; lastUpdated: number }>
+	Map<string, { pos: TimelinePos; display_name: string; color: string; lastUpdated: number }>
 >(new Map())
 
 export const activeUploads = new Map<string, Promise<void>>()
@@ -118,6 +123,12 @@ export const dragFromPoolState = shallowRef<{
 } | null>(null)
 
 export const poolPreviewPlayingAudioId = shallowRef<AudioFile['id'] | null>(null)
+
+export const timelineCursorPayload = shallowRef<{
+	beat: number
+	trackId: string
+	trackYOffset: number
+} | null>(null)
 
 export const TOTAL_BEATS = 16 * 32
 

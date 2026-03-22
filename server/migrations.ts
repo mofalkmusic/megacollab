@@ -4,6 +4,7 @@ import {
 	SESSIONS_TABLE,
 	TRACKS_TABLE,
 	USERS_TABLE,
+	CHATS_TABLE,
 	type QueryHandler,
 } from './database'
 
@@ -128,6 +129,24 @@ export const migrations: Migration[] = [
 			await queryFn(`
 	            ALTER TABLE ${CLIPS_TABLE}
 	            ADD COLUMN IF NOT EXISTS is_muted BOOLEAN NOT NULL DEFAULT FALSE
+	        `)
+		},
+	},
+	{
+		id: 7,
+		name: 'add_chats_table',
+		func: async (queryFn) => {
+			await queryFn(`
+	            CREATE TABLE IF NOT EXISTS ${CHATS_TABLE} (
+	                id TEXT PRIMARY KEY,
+	                creator_user_id TEXT NOT NULL REFERENCES ${USERS_TABLE}(id) ON DELETE CASCADE ON UPDATE CASCADE,
+	                track_id TEXT NOT NULL REFERENCES ${TRACKS_TABLE}(id) ON DELETE CASCADE ON UPDATE CASCADE,
+	                beat DOUBLE PRECISION NOT NULL,
+	                track_y_offset DOUBLE PRECISION NOT NULL,
+	                text TEXT NOT NULL,
+	                reply_to_id TEXT REFERENCES ${CHATS_TABLE}(id) ON DELETE SET NULL ON UPDATE CASCADE,
+	                created_at TIMESTAMPTZ DEFAULT NOW()
+	            )
 	        `)
 		},
 	},

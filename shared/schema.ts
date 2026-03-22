@@ -193,3 +193,31 @@ export class ServiceError extends Error {
 		super(error.message)
 	}
 }
+
+// CHAT
+
+export const ServerChatSchema = z.object({
+	id: z.string(),
+	creator_user_id: z.string(),
+	track_id: z.string(),
+	beat: z.number().positive(),
+	track_y_offset: z.number(),
+	text: z.string().max(100),
+	reply_to_id: z.string().nullable(),
+	created_at: isodatetime,
+})
+
+export type ChatServer = z.output<typeof ServerChatSchema>
+
+export const ClientChatSchema = ServerChatSchema.extend({
+	creator_display_name: z.string(),
+	color: z.string(),
+})
+
+export type ChatClient = z.output<typeof ClientChatSchema>
+
+export const createChatSchema = ServerChatSchema.omit({
+	id: true,
+	created_at: true,
+	creator_user_id: true,
+})

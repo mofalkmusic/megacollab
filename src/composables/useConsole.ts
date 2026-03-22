@@ -24,10 +24,12 @@ export type ConsoleMessageLink = {
 }
 
 export type ConsoleMessageOptions = {
-	textColor?: ConsoleColor
-	backgroundColor?: ConsoleColor
+	textColor?: ConsoleColor | string
+	backgroundColor?: ConsoleColor | string
 	isBold?: boolean
 	links?: ConsoleMessageLink[]
+	reply_to_id?: string | null
+	display_name?: string
 }
 
 export type ConsoleMessageOptionsUser = ConsoleMessageOptions & {
@@ -35,7 +37,7 @@ export type ConsoleMessageOptionsUser = ConsoleMessageOptions & {
 	user_id: User['id']
 }
 
-export type ConsoleSender = 'SYSTEM' | 'USER' | 'UNDO' | 'UPLOAD' | 'DOWNLOAD'
+export type ConsoleSender = 'SYSTEM' | 'USER' | 'UNDO' | 'UPLOAD' | 'DOWNLOAD' | 'CHAT'
 
 export type ConsoleMessage = {
 	id: string
@@ -48,9 +50,13 @@ export type ConsoleMessage = {
 const messages = ref<ConsoleMessage[]>([])
 
 export function useConsole() {
-	function userLog(sender: 'USER', text: string, options: ConsoleMessageOptionsUser): void
 	function userLog(
-		sender: Exclude<ConsoleSender, 'USER'>,
+		sender: 'USER' | 'CHAT',
+		text: string,
+		options: ConsoleMessageOptionsUser,
+	): void
+	function userLog(
+		sender: Exclude<ConsoleSender, 'USER' | 'CHAT'>,
 		text: string,
 		options?: ConsoleMessageOptions,
 	): void

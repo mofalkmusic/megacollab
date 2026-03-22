@@ -54,22 +54,24 @@ await db.migrateAndSeedDb()
 // CURSOR TRACKING
 const userPositions = new Map<
 	string,
-	{ pos: TimelinePos; display_name: string; updatedAt: number }
+	{ pos: TimelinePos; display_name: string; color: string; updatedAt: number }
 >()
 
 // send positions to clients every 100ms
 let lastUpdateHadData = false
 setInterval(() => {
 	const now = Date.now()
-	const payload: Record<string, { pos: TimelinePos; display_name: string; updatedAt: number }> =
-		{}
+	const payload: Record<
+		string,
+		{ pos: TimelinePos; display_name: string; color: string; updatedAt: number }
+	> = {}
 
 	for (const [userId, data] of userPositions.entries()) {
 		if (now - data.updatedAt > CURSOR_INACTIVE_TIMEOUT_MS) {
 			userPositions.delete(userId)
 			continue
 		}
-		payload[userId] = data
+		payload[userId] = data // todo: in the future, sync the color differently, for now this is fine bc not optimizing for bandwidth usage...
 	}
 
 	const hasData = Object.keys(payload).length > 0
@@ -79,6 +81,17 @@ setInterval(() => {
 	io.emit('clients:pos_updates', payload)
 	lastUpdateHadData = hasData
 }, 100)
+
+setInterval(
+	async () => {
+		try {
+			await db.deleteOldChats(1)
+		} catch (e) {
+			print.server('Failed to delete old chats', e)
+		}
+	},
+	60 * 60 * 1000,
+)
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents, {}, SocketData>()
@@ -126,6 +139,7 @@ io.on('connection', async (socket) => {
 			userPositions.set(user.id, {
 				pos,
 				display_name: user.display_name,
+				color: user.color,
 				updatedAt: Date.now(),
 			})
 		})
@@ -586,61 +600,73 @@ io.on('connection', async (socket) => {
 			}
 		})
 
-		socket.on('get:update:username', async (data, callback) => {
+		socket.on('get:update:user', async (data, callback) => {
 			if (user.banned_at) {
 				callback({
 					success: false,
 					error: {
 						status: 'UNAUTHORIZED',
-						message: 'You are banned and cannot change your username.',
+						message: 'You are banned and cannot update your profile.',
 					},
 				})
 				return
 			}
-			const { username } = data
+			const { username, color } = data
 
-			const cleanUsername = sanitizeLetterUnderscoreOnly(username, false)
+			let cleanUsername = username
 
-			if (cleanUsername.length < 3) {
-				callback({
-					success: false,
-					error: {
-						status: 'BAD_REQUEST',
-						message: 'Username must be at least 3 characters long.',
-					},
-				})
-				return
-			}
+			if (cleanUsername !== undefined) {
+				cleanUsername = sanitizeLetterUnderscoreOnly(username ?? '', false)
 
-			if (cleanUsername.length > 32) {
-				callback({
-					success: false,
-					error: {
-						status: 'BAD_REQUEST',
-						message: 'Username must be at most 32 characters long.',
-					},
-				})
-				return
+				if (cleanUsername.length < 3) {
+					callback({
+						success: false,
+						error: {
+							status: 'BAD_REQUEST',
+							message: 'Username must be at least 3 characters long.',
+						},
+					})
+					return
+				}
+
+				if (cleanUsername.length > 32) {
+					callback({
+						success: false,
+						error: {
+							status: 'BAD_REQUEST',
+							message: 'Username must be at most 32 characters long.',
+						},
+					})
+					return
+				}
+
+				cleanUsername = cleanUsername.toLowerCase()
 			}
 
 			try {
-				const updatedUsername = await db.updateExistingUsername(
-					user.id,
-					cleanUsername.toLowerCase(),
-				)
+				const updatedDetails = await db.updateUserDetails(user.id, {
+					username: cleanUsername,
+					color,
+				})
 
 				callback({
 					success: true,
-					data: {
-						username: updatedUsername,
-					},
+					data: updatedDetails,
 				})
 
-				user.display_name = updatedUsername
+				if (updatedDetails.username !== undefined) {
+					user.display_name = updatedDetails.username
+				}
+				if (updatedDetails.color !== undefined) {
+					user.color = updatedDetails.color
+				}
 
-				socket.broadcast.emit('user:username_change', {
+				socket.broadcast.emit('user:update', {
 					user_id: user.id,
-					new_display_name: updatedUsername,
+					changes: {
+						display_name: updatedDetails.username,
+						color: updatedDetails.color,
+					},
 				})
 			} catch (err) {
 				const isNotFound = err instanceof NotFoundError
@@ -801,6 +827,44 @@ io.on('connection', async (socket) => {
 			audiofiles: await db.getAudioFiles(),
 			clips: await db.getClips(),
 			tracks: await db.getTracks(),
+			chats: await db.getRecentChats(),
+		})
+
+		socket.on('get:chat:create', async (data, callback) => {
+			if (user.banned_at) {
+				callback({
+					success: false,
+					error: {
+						status: 'UNAUTHORIZED',
+						message: 'You are banned and cannot send chats.',
+					},
+				})
+				return
+			}
+
+			try {
+				const newChat = await db.createChat({
+					id: nanoid(),
+					...data,
+					creator_user_id: user.id,
+				})
+
+				callback({
+					success: true,
+					data: newChat,
+				})
+
+				socket.broadcast.emit('chat:create', newChat)
+			} catch (err) {
+				const message = err instanceof Error ? err.message : 'Unknown error'
+				callback({
+					success: false,
+					error: {
+						status: 'SERVER_ERROR',
+						message: `Database error: ${message}`,
+					},
+				})
+			}
 		})
 
 		// admin handlers

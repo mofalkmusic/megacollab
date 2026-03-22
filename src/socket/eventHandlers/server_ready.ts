@@ -1,6 +1,6 @@
 import { defineSocketHandler } from '@/socket/socket'
 import { _socketReady } from '@/socket/socket'
-import { audiofiles, clips, tracks, user } from '@/state'
+import { audiofiles, clips, tracks, user, chats } from '@/state'
 import { ingestNewAudioFileMetadata } from '@/utils/preProcessAudio'
 import { pruneAudioCache } from '@/utils/workerPool'
 import { makeAudioFileHash } from '~/utils'
@@ -18,6 +18,7 @@ export default defineSocketHandler({
 		audiofiles: serverAudiofiles,
 		clips: serverClips,
 		tracks: serverTracks,
+		chats: serverChats,
 	}) => {
 		if (lastBuildId !== null && lastBuildId !== buildId) {
 			userLog('SYSTEM', 'New version of the site available. Please refresh the page.', {
@@ -50,6 +51,19 @@ export default defineSocketHandler({
 
 		for (const clip of serverClips) {
 			clips.set(clip.id, clip)
+		}
+
+		chats.clear()
+
+		for (const chat of serverChats) {
+			chats.set(chat.id, chat)
+
+			userLog('CHAT', chat.text, {
+				textColor: chat.color,
+				display_name: chat.creator_display_name,
+				user_id: chat.creator_user_id,
+				reply_to_id: chat.reply_to_id,
+			})
 		}
 
 		try {

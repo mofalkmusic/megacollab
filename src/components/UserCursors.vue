@@ -67,7 +67,7 @@ const cursorsResult = computed(() => {
 
 		const topPx = trackIndex * _trackHeight + pos.trackYOffset * _trackHeight
 
-		const color = stringToColor(userId)
+		const color = data.color
 
 		result.push({
 			id: userId,
@@ -80,18 +80,6 @@ const cursorsResult = computed(() => {
 	}
 	return result
 })
-
-function stringToColor(str: string) {
-	let hash = 0
-	for (let i = 0; i < str.length; i++) {
-		hash = str.charCodeAt(i) + ((hash << 5) - hash)
-	}
-	// Use HSL for nicer, more vibrant colors
-	const hue = Math.abs(hash) % 360
-	const saturation = 65 // High saturation for vibrancy
-	const lightness = 55 // Mid lightness for good contrast
-	return `hsl(${hue}, ${saturation}%, ${lightness}%)`
-}
 </script>
 
 <style scoped>

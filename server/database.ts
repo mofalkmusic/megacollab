@@ -11,6 +11,7 @@ import {
 	type ClipUpdate,
 	type TrackUpdate,
 	type User,
+	type ChatClient,
 } from '~/schema'
 import { MAX_TRACKS } from '~/constants'
 import { migrations } from './migrations'
@@ -93,6 +94,7 @@ export const TRACKS_TABLE = 'megacollab_tracks' as const
 export const CLIPS_TABLE = 'megacollab_clips' as const
 export const MIGRATIONS_TABLE = 'megacollab_migrations' as const
 export const SESSIONS_TABLE = 'megacollab_sessions' as const
+export const CHATS_TABLE = 'megacollab_chats' as const
 
 export const db = {
 	query: queryFn,
@@ -111,7 +113,7 @@ export const db = {
 	deleteClip,
 	deleteClips,
 	updateClips,
-	updateExistingUsername,
+	updateUserDetails,
 	updateDownloadQuality,
 	makeNewIfNotExistUser,
 	saveSession,
@@ -123,6 +125,9 @@ export const db = {
 	banUser,
 	unbanUser,
 	getAllUsers,
+	createChat,
+	getRecentChats,
+	deleteOldChats,
 }
 
 const audioFileCache = new Map<string, ClientAudioFile>()
@@ -559,21 +564,47 @@ async function getUserFromSessionId(session_id: string): Promise<User> {
 	return result
 }
 
-async function updateExistingUsername(id: string, username: string): Promise<User['display_name']> {
-	const rows = await queryFn<Pick<User, 'display_name'>>(
+async function updateUserDetails(
+	id: string,
+	updates: { username?: User['display_name']; color?: User['color'] },
+): Promise<{ username?: User['display_name']; color?: User['color'] }> {
+	const setFields = []
+	const values: unknown[] = [id]
+
+	let i = 2
+
+	if (updates.username) {
+		setFields.push(`display_name = $${i++}`)
+		values.push(updates.username)
+	}
+
+	if (updates.color) {
+		setFields.push(`color = $${i++}`)
+		values.push(updates.color)
+	}
+
+	if (setFields.length === 0) return {}
+
+	const rows = await queryFn<Pick<User, 'display_name' | 'color'>>(
 		`
 			UPDATE ${USERS_TABLE}
-			SET display_name = $2
+			SET ${setFields.join(', ')}
 			WHERE id = $1
-			RETURNING display_name
+			RETURNING display_name, color
 		`,
-		[id, username],
+		values,
 	)
 
 	if (!rows.length) throw new NotFoundError('user', id)
+
 	const result = rows[0]!
 
-	return result.display_name
+	const returning: { username?: User['display_name']; color?: User['color'] } = {}
+
+	if (updates.username) returning.username = result.display_name
+	if (updates.color) returning.color = result.color
+
+	return returning
 }
 
 async function updateDownloadQuality(
@@ -672,7 +703,7 @@ async function getOrCreateDevUser(): Promise<User | null> {
 	// Create if not exists
 	const newUser: Omit<User, 'created_at' | 'download_quality'> = {
 		id: nanoid(),
-		display_name: 'Dev User',
+		display_name: 'dev_user',
 		provider: 'dev',
 		provider_id: 'dev-user-id',
 		provider_email: 'dev@local.host',
@@ -841,4 +872,63 @@ async function getAllUsers(): Promise<User[]> {
 		ORDER BY display_name ASC
 	`)
 	return rows
+}
+
+async function createChat(
+	chat: Omit<ChatClient, 'created_at' | 'creator_display_name' | 'color'>,
+): Promise<ChatClient> {
+	if (!chat.id) chat.id = nanoid()
+
+	const rows = await queryFn<ChatClient>(
+		`
+			WITH inserted AS (
+				INSERT INTO ${CHATS_TABLE} (id, creator_user_id, track_id, beat, track_y_offset, text, reply_to_id) 
+				VALUES ($1, $2, $3, $4, $5, $6, $7)
+				RETURNING *
+			)
+			SELECT 
+				inserted.*,
+				users.display_name AS creator_display_name,
+				users.color AS color
+			FROM inserted
+			LEFT JOIN ${USERS_TABLE} AS users
+				ON inserted.creator_user_id = users.id
+		`,
+		[
+			chat.id,
+			chat.creator_user_id,
+			chat.track_id,
+			chat.beat,
+			chat.track_y_offset,
+			chat.text,
+			chat.reply_to_id,
+		],
+	)
+
+	if (!rows.length) throw new DatabaseError('Failed to create chat')
+	return rows[0]!
+}
+
+async function getRecentChats(minutesStr: number = 5): Promise<ChatClient[]> {
+	return await queryFn<ChatClient>(
+		`
+			SELECT 
+				c.*,
+				u.display_name AS creator_display_name,
+				u.color AS color
+			FROM ${CHATS_TABLE} AS c
+			LEFT JOIN ${USERS_TABLE} AS u ON c.creator_user_id = u.id
+			WHERE c.created_at >= NOW() - INTERVAL '${minutesStr} minutes'
+			ORDER BY c.created_at ASC
+		`,
+	)
+}
+
+async function deleteOldChats(hoursStr: number = 1): Promise<void> {
+	await queryFn(
+		`
+			DELETE FROM ${CHATS_TABLE}
+			WHERE created_at < NOW() - INTERVAL '${hoursStr} hours'
+		`,
+	)
 }

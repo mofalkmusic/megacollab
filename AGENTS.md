@@ -29,6 +29,7 @@ Always use these aliases instead of relative paths when importing across directo
 - Generally avoid `as any` and casting types.
 - Prefer `instanceof HTMLElement` checks over type casting (e.g., `as HTMLElement`) when dealing with DOM elements (especially `event.target`).
 - Prefer readability over conciseness/cleverness unless necessary for the task.
+- Avoid the non-null assertion operator (!.) and prioritize early returns.
 
 ## Zod & Schema Patterns
 
