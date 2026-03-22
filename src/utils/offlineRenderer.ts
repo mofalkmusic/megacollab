@@ -1,12 +1,15 @@
 import { clips, audioBuffers, tracks, bpm } from '@/state'
 import type { ClipClient, TrackClient } from '~/schema'
 import { beats_to_sec_pure } from '@/utils/mathUtils'
+import { mutedTrackIds, soloTrackIds } from '@/audioEngine'
 
 export type PlaylistSnapshot = {
 	clips: ClipClient[]
 	tracks: Map<string, TrackClient>
 	buffers: Map<string, AudioBuffer>
 	bpm: number
+	mutedTrackIds: Set<string>
+	soloTrackIds: Set<string>
 }
 
 /**
@@ -25,6 +28,8 @@ function takeSnapshot(): PlaylistSnapshot {
 		tracks: tracksSnapshot,
 		buffers: buffersSnapshot,
 		bpm,
+		mutedTrackIds: new Set(mutedTrackIds),
+		soloTrackIds: new Set(soloTrackIds),
 	}
 }
 
@@ -62,6 +67,13 @@ export async function renderPlaylistOffline(): Promise<AudioBuffer> {
 	// Build per-track gain nodes → destination
 	const trackGainNodes = new Map<string, GainNode>()
 	for (const [trackId, track] of snapshot.tracks) {
+		const isSoloActive = snapshot.soloTrackIds.size > 0
+		const isMuted = isSoloActive
+			? !snapshot.soloTrackIds.has(trackId)
+			: snapshot.mutedTrackIds.has(trackId)
+
+		if (isMuted) continue
+
 		const gainNode = offlineCtx.createGain()
 		gainNode.gain.value = track.gain
 		gainNode.connect(offlineCtx.destination)
@@ -70,6 +82,8 @@ export async function renderPlaylistOffline(): Promise<AudioBuffer> {
 
 	// Schedule every clip
 	for (const clip of snapshot.clips) {
+		if (clip.is_muted) continue
+
 		const buffer = snapshot.buffers.get(clip.audio_file_id)
 		const trackGainNode = trackGainNodes.get(clip.track_id)
 		if (!buffer || !trackGainNode) continue
@@ -77,13 +91,33 @@ export async function renderPlaylistOffline(): Promise<AudioBuffer> {
 		const source = offlineCtx.createBufferSource()
 		const clipGainNode = offlineCtx.createGain()
 
-		clipGainNode.gain.value = clip.gain
 		source.buffer = buffer
 		source.connect(clipGainNode)
 		clipGainNode.connect(trackGainNode)
 
-		const startTimeSec = beats_to_sec_pure(clip.start_beat, snapshot.bpm)
-		const clipDurationSec = beats_to_sec_pure(clip.end_beat - clip.start_beat, snapshot.bpm)
+		const startTimeSec = Math.max(0, beats_to_sec_pure(clip.start_beat, snapshot.bpm))
+		const clipDurationSec = Math.max(
+			0,
+			beats_to_sec_pure(clip.end_beat - clip.start_beat, snapshot.bpm),
+		)
+
+		const effectiveGain = clip.gain
+		clipGainNode.gain.setValueAtTime(clip.fade_in_sec > 0 ? 0 : effectiveGain, startTimeSec)
+
+		const fadeInEnd = startTimeSec + clip.fade_in_sec
+		const fadeOutStart = startTimeSec + clipDurationSec - clip.fade_out_sec
+		const fadeOutEnd = startTimeSec + clipDurationSec
+
+		if (clip.fade_in_sec > 0) {
+			clipGainNode.gain.linearRampToValueAtTime(effectiveGain, fadeInEnd)
+		}
+
+		if (clip.fade_out_sec > 0) {
+			if (clip.fade_in_sec <= 0 || fadeOutStart > fadeInEnd) {
+				clipGainNode.gain.setValueAtTime(effectiveGain, fadeOutStart)
+			}
+			clipGainNode.gain.linearRampToValueAtTime(0, fadeOutEnd)
+		}
 
 		source.start(startTimeSec, clip.offset_seconds, clipDurationSec)
 	}
