@@ -36,18 +36,18 @@ const router = createRouter({
 	],
 })
 
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (to, from) => {
 	if (inDev) {
-		return next()
+		return true
 	}
 
 	if (isMobile()) {
 		if (to.name !== 'not-supported') {
-			return next({ name: 'not-supported' })
+			return { name: 'not-supported' }
 		}
-		return next()
+		return true
 	} else if (to.name === 'not-supported') {
-		return next({ name: 'home' })
+		return { name: 'home' }
 	}
 
 	const res = await fetch('/api/auth/verify', {
@@ -55,21 +55,17 @@ router.beforeEach(async (to, from, next) => {
 		credentials: 'include',
 	})
 
-	let isAuthenticated: boolean = false
-
-	if (res.ok) {
-		isAuthenticated = true
-	}
+	const isAuthenticated = res.ok
 
 	if ((to.meta.auth === 'auth' || to.meta.auth === 'admin') && !isAuthenticated) {
-		return next({ name: 'login' })
+		return { name: 'login' }
 	}
 
 	if (to.name === 'login' && isAuthenticated) {
-		return next({ name: 'home' })
+		return { name: 'home' }
 	}
 
-	return next()
+	return true
 })
 
 export default router
