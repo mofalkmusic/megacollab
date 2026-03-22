@@ -1,10 +1,10 @@
 {
 	"compilerOptions": {
 		"incremental": true,
-		"baseUrl": ".",
+		// "baseUrl": "/.", tobe depricated in ts7
 		"paths": {
-			"@/*": ["src/*"],
-			"~/*": ["shared/*"]
+			"@/*": ["./src/*"],
+			"~/*": ["./shared/*"]
 		}
 	}
 }
