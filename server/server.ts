@@ -1141,8 +1141,11 @@ app.use('/*', serveStatic({ root: DIST_DIR }))
 // - It's not an API route
 // - It's not a physical file (like /assets/logo.png)
 // So we serve the index.html and let Vue Router handle the URL.
+
+const INDEX_HTML = !IN_DEV_MODE ? await Bun.file(join(DIST_DIR, 'index.html')).text() : ''
+
 app.get('/*', async (c) => {
-	return c.html(await Bun.file(join(DIST_DIR, 'index.html')).text())
+	return c.html(INDEX_HTML)
 })
 
 const { websocket } = engine.handler()
@@ -1171,7 +1174,7 @@ Bun.serve({
 	websocket,
 })
 
-print.server('Dev server started on port', BACKEND_PORT)
+if (!IN_DEV_MODE) print.server(`Server started on https://mega.mofalk.com`)
 
 // UTILITIES
 // UTILITIES
