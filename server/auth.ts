@@ -333,8 +333,6 @@ export async function handleTwitchOAuthCallback(c: Context) {
 			return c.redirect(`/login?${params.toString()}`, 302)
 		}
 
-		console.log('completeUser', completeUser)
-
 		const sessionId = nanoid(64)
 
 		try {
