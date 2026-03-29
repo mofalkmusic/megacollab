@@ -1148,6 +1148,7 @@ app.get('/*', async (c) => {
 const { websocket } = engine.handler()
 
 Bun.serve({
+	hostname: '0.0.0.0',
 	port: Bun.env['PORT'] || BACKEND_PORT,
 	idleTimeout: 30,
 	fetch(req, server) {
