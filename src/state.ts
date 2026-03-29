@@ -117,6 +117,13 @@ export const otherUserPositions = reactive<
 
 export const activeUploads = new Map<string, Promise<void>>()
 
+useEventListener(window, 'beforeunload', (event) => {
+	if (activeUploads.size > 0) {
+		event.preventDefault()
+		event.returnValue = ''
+	}
+})
+
 export const dragFromPoolState = shallowRef<{
 	audioFileId: string
 	offsetPx: number
