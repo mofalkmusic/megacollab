@@ -69,7 +69,8 @@ if (!IN_DEV_MODE) {
 
 	const pool = new Pool({
 		connectionString: databaseUrl,
-		ssl: { rejectUnauthorized: false },
+		// ssl: { rejectUnauthorized: false },
+		ssl: false,
 	})
 
 	queryFn = async (query, params = []) => {
